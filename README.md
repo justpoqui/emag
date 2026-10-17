@@ -41,6 +41,27 @@ for a desktop app.
 Click into the game window to capture the mouse. Progress (stash, credits,
 level) is saved in the browser's localStorage.
 
+## The Sanctuary
+
+Between raids you're in the **Patron's Sanctuary**. The hub screen shows your
+stash and loadout on the left and your raider on the right. Press
+**EXPLORE THE SANCTUARY** to walk around:
+
+| Where | What's there |
+| --- | --- |
+| **Your quarters** | The stash locker (stash & loadout). Your second weapon hangs on the rack. |
+| **Hallway** | Doors to every room, the lift at the east end. |
+| **Trade Hall** | Tobias (gunsmith), Nia (medic) and Pell (buys your loot). Walk up and press E. |
+| **Workshop** | One bench per craft: Weapons, Ammo, Shields, Medical, Explosives, Repair and **Salvage** (dismantle items into materials). |
+| **Checkout** | Pick your drop, with a live view of it: the Dustline at **Golden Hour** (standard), on a **Night Raid** (more Husks, richer loot, headlamp, Husks see less) or in a **Dust Storm** (short sight for everyone, more loot). |
+| **Lift** | Step in and hold E to deploy to the drop you signed out for. |
+
+Tab opens your stash & loadout anywhere; Esc opens the Sanctuary menu.
+
+**Dismantling:** right-click (or hold on a phone) an item for *Dismantle*, or use
+the Salvage bench. Weapons, shields, consumables, valuables and the rarer
+materials break down into basic materials (worn gear gives less).
+
 ## The loop
 
 1. **The Burrow (hub)**: manage your **loadout** and **stash**, buy from
@@ -124,7 +145,7 @@ shooter/
     collision.js   heightfield terrain + AABB grid: movement, line of sight, bullet raycasts
     player.js      movement, stamina, dodge roll, holstering, weapon models
     rig.js         the raider model (knees and elbows) and its animation
-    sanctuary.js   the Patron's Sanctuary room shown behind the menus
+    sanctuary.js   the walkable Patron's Sanctuary (quarters, hallway, Trade Hall, Workshop, Checkout, Lift)
     weapons.js     firing, spread/bloom, recoil, reloads, hit resolution
     enemies.js     Husk models and AI
     inventory.js   slot inventory helpers and the saved profile

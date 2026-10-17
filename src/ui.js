@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import {
-  ITEMS, RARITY, AMMO, CARRY_LIMIT, TRADERS, BUY_MARKUP, RECIPES, BENCH_SECTIONS, PLAYER, RAID_SECONDS, MAX_DURABILITY, REPAIR, isDurable,
+  ITEMS, RARITY, AMMO, CARRY_LIMIT, MAPS, TRADERS, BUY_MARKUP, RECIPES, BENCH_SECTIONS, PLAYER, RAID_SECONDS, MAX_DURABILITY, REPAIR, isDurable, SALVAGE, salvageYield,
 } from './config.js';
 import {
   addToSlots, loadoutWeight, stackWeight, durability, stackValue, countIn, moveStack, freeSlots, loadoutIsEmpty, applyFreeKit, countOwned, removeOwned, saveProfile, resetProfile, makeStack,
@@ -167,6 +167,8 @@ export class UI {
   }
 
   showRaidHud() {
+    this.hideExplore();
+    this.rerender = null;
     this.menus.innerHTML = '';
     this.open = null;
     this.hud.classList.remove('hidden');
@@ -364,6 +366,15 @@ export class UI {
   closeMenus() {
     this.closeSheet();
     this.closeContextMenu();
+    if (this.game.mode === 'explore') {
+      this.open = null;
+      this.rerender = null;
+      this.game.preview = null;
+      this.menus.innerHTML = '';
+      this.hideTooltip();
+      this.game.input.lock();
+      return;
+    }
     this.open = null;
     this.lootTarget = null;
     this.menus.innerHTML = '';
@@ -554,6 +565,14 @@ export class UI {
         },
       });
     }
+    if (SALVAGE[s.id]) {
+      const y = salvageYield(s, 1);
+      items.push({ label: 'Dismantle', note: y ? `Gives ${this.yieldText(y)}` : 'Too worn to give anything', disabled: !y, fn: () => this.dismantle(slot, 1) });
+      if (s.n > 1) {
+        const all = salvageYield(s, s.n);
+        items.push({ label: `Dismantle all ${s.n}`, note: all ? `Gives ${this.yieldText(all)}` : '', disabled: !all, fn: () => this.dismantle(slot, s.n) });
+      }
+    }
     if (isDurable(s.id) && durability(s) < MAX_DURABILITY) {
       const { cost, credits } = this.repairCost(s, MAX_DURABILITY - durability(s));
       const canMats = Object.entries(cost).every(([id, n]) => countOwned(p, id) >= n);
@@ -591,6 +610,65 @@ export class UI {
       });
     }
     return items;
+  }
+
+  yieldText(y) {
+    return Object.entries(y).map(([id, n]) => `${ITEMS[id].name} ×${n}`).join(', ');
+  }
+
+  // Break `count` of the item in a slot down into materials (they go to the stash).
+  dismantle(slot, count) {
+    const p = this.game.profile;
+    const s = slot.get();
+    if (!s) return;
+    count = Math.min(count, s.n);
+    const y = salvageYield(s, count);
+    if (!y) return Audio.playDeny();
+    const probe = p.stash.map((x) => (x ? { ...x } : null));
+    if (slot.where === 'stash' && s.n === count) {
+      const i = p.stash.indexOf(s);
+      if (i >= 0) probe[i] = null;
+    }
+    for (const [id, n] of Object.entries(y)) {
+      if (addToSlots(probe, id, n) > 0) {
+        this.notifyHub('Not enough stash space for the materials.');
+        return Audio.playDeny();
+      }
+    }
+    s.n -= count;
+    if (s.n <= 0) slot.set(null);
+    for (const [id, n] of Object.entries(y)) addToSlots(p.stash, id, n);
+    Audio.playSearch();
+    this.notifyHub(`Dismantled ${ITEMS[s.id].name}${count > 1 ? ` ×${count}` : ''}: ${this.yieldText(y)}.`);
+    this.afterHubChange();
+  }
+
+  renderSalvage(shop) {
+    const p = this.game.profile;
+    shop.appendChild(el('div', 'col-title', 'SALVAGE <small>break items in your stash down into materials · worn gear gives less</small>'));
+    const rows = el('div', 'rows recipes');
+    let any = false;
+    p.stash.forEach((s, i) => {
+      if (!s || !SALVAGE[s.id]) return;
+      any = true;
+      const d = ITEMS[s.id];
+      const slot = { where: 'stash', get: () => p.stash[i], set: (v) => { p.stash[i] = v; } };
+      const one = salvageYield(s, 1);
+      const row = el('div', `row recipe ${one ? 'can' : ''}`);
+      row.innerHTML = `<span class="r-name" style="color:${RARITY[d.rarity].color}">${d.name}${s.n > 1 ? ` ×${s.n}` : ''}${isDurable(s.id) ? `<small>${Math.ceil(durability(s))}/${MAX_DURABILITY}</small>` : ''}</span><span class="costs">${one ? Object.entries(one).map(([id, n]) => `<span class="cost ok">${ITEMS[id].name} ×${n}</span>`).join('') : '<span class="cost no">Too worn</span>'}</span>`;
+      const b1 = el('button', 'btn small', 'Dismantle');
+      b1.disabled = !one;
+      b1.onclick = () => this.dismantle(slot, 1);
+      row.appendChild(b1);
+      if (s.n > 1) {
+        const ball = el('button', 'btn small ghost', `All ${s.n}`);
+        ball.onclick = () => this.dismantle(slot, s.n);
+        row.appendChild(ball);
+      }
+      rows.appendChild(row);
+    });
+    if (!any) rows.appendChild(el('div', 'muted', 'Nothing in your stash can be dismantled. Basic materials can’t be broken down further.'));
+    shop.appendChild(rows);
   }
 
   repairItem(stack, mode) {
@@ -1130,12 +1208,20 @@ export class UI {
 
   // ================= hub =================
   showHub() {
+    this.hideExplore();
     this.hud.classList.add('hidden');
     this.open = null;
-    this.renderHub();
+    this.refresh();
+  }
+
+  // Re-render whatever screen the shop/workbench/stash panels are showing in.
+  refresh() {
+    if (this.rerender) this.rerender();
+    else this.renderHub();
   }
 
   renderHub() {
+    this.rerender = () => this.renderHub();
     const g = this.game;
     const p = g.profile;
     this.hideTooltip();
@@ -1158,8 +1244,8 @@ export class UI {
       </div>
       <div class="hub-body"></div>
       <div class="hub-bottom">
-        <div class="risk">Carrying ⌬ ${this.loadoutValueText()} into the raid · Lose it all if you die</div>
-        <button class="btn deploy">DEPLOY TOPSIDE ▸</button>
+        <div class="risk">Carrying ⌬ ${this.loadoutValueText()} · Deploying to ${g.selectedMap.name}, ${g.selectedMap.when} · Pick your drop at the Checkout</div>
+        <button class="btn deploy">EXPLORE THE SANCTUARY ▸</button>
       </div>`;
     hub.querySelectorAll('.tab').forEach((b) => {
       b.onclick = () => {
@@ -1168,7 +1254,11 @@ export class UI {
         this.renderHub();
       };
     });
-    hub.querySelector('.deploy').onclick = () => this.deploy();
+    hub.querySelector('.deploy').onclick = () => {
+      Audio.initAudio();
+      if (this.game.input.touch) goFullscreen();
+      this.game.enterExplore();
+    };
     hub.querySelector('.home-btn').onclick = () => this.game.goHome();
     const body = hub.querySelector('.hub-body');
     if (this.hubTab === 'loadout') this.renderLoadoutTab(body);
@@ -1200,11 +1290,16 @@ export class UI {
   ask(text, yesLabel, onYes) {
     const box = el('div', 'sheet');
     box.innerHTML = `<div class="ask"><div class="ask-text">${text}</div><div class="row"><button class="btn danger yes">${yesLabel}</button><button class="btn ghost no">Cancel</button></div></div>`;
+    const explore = this.game.mode === 'explore';
+    if (explore) this.game.input.unlock();
     box.querySelector('.yes').onclick = () => {
       box.remove();
       onYes();
     };
-    box.querySelector('.no').onclick = () => box.remove();
+    box.querySelector('.no').onclick = () => {
+      box.remove();
+      if (explore && this.game.mode === 'explore' && !this.open) this.game.input.lock();
+    };
     this.root.appendChild(box);
   }
 
@@ -1345,7 +1440,7 @@ export class UI {
   afterHubChange() {
     Audio.playUI();
     this.save();
-    this.renderHub();
+    this.refresh();
   }
 
   notifyHub(text) {
@@ -1361,11 +1456,11 @@ export class UI {
     const list = el('div', 'trader-list');
     for (const [id, t] of Object.entries(TRADERS)) {
       const b = el('button', `trader ${this.trader === id ? 'on' : ''}`, `<b>${t.name}</b><span>${t.title}</span>`);
-      b.onclick = () => { this.trader = id; this.renderHub(); };
+      b.onclick = () => { this.trader = id; this.refresh(); };
       list.appendChild(b);
     }
     const sellBtn = el('button', `trader ${this.trader === 'sell' ? 'on' : ''}`, '<b>Sell</b><span>Turn loot into creds</span>');
-    sellBtn.onclick = () => { this.trader = 'sell'; this.renderHub(); };
+    sellBtn.onclick = () => { this.trader = 'sell'; this.refresh(); };
     list.appendChild(sellBtn);
     body.appendChild(list);
 
@@ -1511,12 +1606,12 @@ export class UI {
     // section list, with how many recipes you can afford right now
     const list = el('div', 'trader-list');
     for (const sec of BENCH_SECTIONS) {
-      const ready = sec.repair ? repairable.length : inSection(sec).filter(canCraft).length;
+      const ready = sec.repair ? repairable.length : sec.salvage ? 0 : inSection(sec).filter(canCraft).length;
       const b = el('button', `trader ${sec.id === section.id ? 'on' : ''}`, `<b>${sec.name}${ready ? ` <i class="ready">${ready}</i>` : ''}</b><span>${sec.blurb}</span>`);
       b.onclick = () => {
         this.benchSection = sec.id;
         Audio.playUI();
-        this.renderHub();
+        this.refresh();
       };
       list.appendChild(b);
     }
@@ -1525,6 +1620,11 @@ export class UI {
     const shop = el('div', 'shop');
     if (section.repair) {
       this.renderRepair(shop, repairable);
+      body.appendChild(shop);
+      return;
+    }
+    if (section.salvage) {
+      this.renderSalvage(shop);
       body.appendChild(shop);
       return;
     }
@@ -1577,6 +1677,149 @@ export class UI {
         <h3>Controls</h3>
         <p>${controls}</p>
       </div>`;
+  }
+
+  // ================= exploring the Sanctuary =================
+  showExplore() {
+    this.hud.classList.add('hidden');
+    this.open = null;
+    this.rerender = null;
+    this.menus.innerHTML = '';
+    this.hideTooltip();
+    if (!this.exploreHud) {
+      const e = el('div', 'explore-hud hidden');
+      e.innerHTML = `
+        <div class="room-label"><small>PATRON'S SANCTUARY</small><span></span></div>
+        <div class="prompt hidden"><span class="key">${this.game.input.touch ? 'USE' : 'E'}</span><span class="text"></span><div class="bar"><div class="fill"></div></div></div>
+        <div class="explore-help">${this.game.input.touch ? 'Left thumb: move · Right thumb: look · BAG: stash · ❚❚: menu' : 'WASD move · Shift run · E interact · Tab stash & loadout · Esc menu'}</div>`;
+      this.root.appendChild(e);
+      this.exploreHud = e;
+    }
+    this.exploreHud.classList.remove('hidden');
+    document.body.classList.add('exploring');
+  }
+
+  hideExplore() {
+    if (this.exploreHud) this.exploreHud.classList.add('hidden');
+    document.body.classList.remove('exploring');
+  }
+
+  updateExplore(room, target, progress) {
+    const e = this.exploreHud;
+    if (!e) return;
+    txt(e.querySelector('.room-label span'), room);
+    const prompt = e.querySelector('.prompt');
+    const show = !!target && !this.menuOpen();
+    prompt.classList.toggle('hidden', !show);
+    if (show) {
+      txt(prompt.querySelector('.text'), (target.hold ? 'Hold · ' : '') + target.label);
+      const bar = prompt.querySelector('.bar');
+      css(bar, 'display', target.hold ? 'block' : 'none');
+      css(prompt.querySelector('.fill'), 'width', `${Math.min(1, progress) * 100}%`);
+    }
+  }
+
+  // Panels opened by walking up to something in the Sanctuary.
+  openExplorePanel(kind, arg) {
+    const g = this.game;
+    this.closeSheet();
+    this.closeContextMenu();
+    this.hideTooltip();
+    this.open = 'panel';
+    this.rerender = () => this.openExplorePanel(kind, arg);
+    g.input.unlock();
+    this.menus.innerHTML = '';
+    const titles = {
+      stash: 'STASH & LOADOUT',
+      trader: arg === 'sell' ? 'PELL · SCRAP BUYER' : arg ? `${(TRADERS[arg] || {}).name || ''} · ${((TRADERS[arg] || {}).title || '').toUpperCase()}` : 'TRADE HALL',
+      bench: 'WORKSHOP',
+      checkout: 'CHECKOUT',
+    };
+    const panel = el('div', `panel explore-panel ${kind}-panel`);
+    const bar = this.titleBar(titles[kind], 'Esc to close');
+    const wallet = el('span', 'panel-creds', `⌬ ${g.profile.credits.toLocaleString()}`);
+    bar.querySelector('.close').prepend(wallet);
+    panel.appendChild(bar);
+    const body = el('div', 'hub-body');
+    if (kind === 'stash') this.renderLoadoutTab(body);
+    if (kind === 'trader') {
+      this.trader = arg;
+      this.renderTradersTab(body);
+    }
+    if (kind === 'bench') {
+      this.benchSection = arg;
+      this.renderWorkbenchTab(body);
+    }
+    if (kind === 'checkout') this.renderCheckout(body);
+    panel.appendChild(body);
+    this.menus.appendChild(panel);
+  }
+
+  renderCheckout(body) {
+    const g = this.game;
+    body.className = 'hub-body checkout-body';
+    const pick = this.checkoutPick || g.selectedMap;
+    g.preview = pick;
+    const list = el('div', 'map-list');
+    for (const m of MAPS) {
+      const b = el('button', `map-card ${m === pick ? 'on' : ''} ${m === g.selectedMap ? 'selected' : ''}`, `<b>${m.name}</b><span>${m.when}</span><small>${m.tag}</small>`);
+      b.onclick = () => {
+        this.checkoutPick = m;
+        Audio.playUI();
+        this.refresh();
+      };
+      list.appendChild(b);
+    }
+    const pct = (v) => `${v > 1 ? '+' : ''}${Math.round((v - 1) * 100)}%`;
+    const info = el('div', 'map-info');
+    info.innerHTML = `
+      <div class="col-title">${pick.name.toUpperCase()} <small>${pick.when}</small></div>
+      <p>${pick.desc}</p>
+      <div class="chips">
+        <span class="chip">Husks ${pick.husks === 1 ? 'standard' : pct(pick.husks)}</span>
+        <span class="chip">Loot ${pick.loot === 1 ? 'standard' : pct(pick.loot)}</span>
+        <span class="chip">Husk sight ${pick.sight === 1 ? 'normal' : `${Math.round(pick.sight * 100)}%`}</span>
+        ${pick.headlamp ? '<span class="chip">Headlamp</span>' : ''}
+      </div>
+      <p class="muted">The view behind this panel is a live look at the drop. Once it's signed out, ride the lift at the end of the hall.</p>`;
+    const go = el('button', 'btn big', pick === g.selectedMap ? '✓ Signed out for this drop' : 'Sign out for this drop');
+    go.disabled = pick === g.selectedMap;
+    go.onclick = () => {
+      g.selectMap(pick);
+      Audio.playChime();
+      this.notifyHub(`Signed out for ${pick.name}, ${pick.when}. Head to the lift.`);
+      this.refresh();
+    };
+    info.appendChild(go);
+    body.append(list, info);
+  }
+
+  showExplorePause() {
+    this.open = 'pause';
+    this.rerender = null;
+    this.menus.innerHTML = '';
+    const panel = el('div', 'panel pause');
+    panel.innerHTML = `
+      <div class="panel-title">PATRON'S SANCTUARY</div>
+      <div class="panel-body col">
+        <button class="btn big resume">Keep exploring</button>
+        <button class="btn stash">Stash & loadout</button>
+        <div class="settings-slot"></div>
+        <button class="btn ghost leave">Back to the menu</button>
+      </div>`;
+    panel.querySelector('.settings-slot').replaceWith(this.settingsBlock(true));
+    panel.querySelector('.resume').onclick = () => this.closeMenus();
+    panel.querySelector('.stash').onclick = () => this.openExplorePanel('stash');
+    panel.querySelector('.leave').onclick = () => {
+      this.hideExplore();
+      this.game.leaveExplore();
+    };
+    this.menus.appendChild(panel);
+  }
+
+  mapBaseCanvas() {
+    if (!this.mapBase) this.mapBase = this.buildMapBase();
+    return this.mapBase;
   }
 
   // ================= title screen =================
@@ -1742,7 +1985,7 @@ export class UI {
       this.ask('Delete this account’s stash, credits and progress?', 'Wipe save', () => {
         this.game.profile = resetProfile();
         saveProfile(this.game.profile);
-        this.renderHub();
+        this.refresh();
       });
     };
   }

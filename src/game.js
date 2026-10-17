@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import {
-  ITEMS, CARRY_LIMIT, HOLSTER_SPEED_BONUS, SHIELD_WEAR, MAX_DURABILITY, isDurable, LOOT_TABLES, ENEMIES, RAID_SECONDS, EXTRACT_CALL_SECONDS, EXTRACT_OPEN_SECONDS, PLAYER,
+  ITEMS, MAPS, CARRY_LIMIT, HOLSTER_SPEED_BONUS, SHIELD_WEAR, MAX_DURABILITY, isDurable, LOOT_TABLES, ENEMIES, RAID_SECONDS, EXTRACT_CALL_SECONDS, EXTRACT_OPEN_SECONDS, PLAYER,
 } from './config.js';
 import { buildWorld } from './world.js';
 import { Player } from './player.js';
@@ -72,6 +72,7 @@ export class Game {
       pmrem.dispose();
     }
     const hemi = new THREE.HemisphereLight(0xffe2c0, 0x5a5040, 0.7);
+    this.hemi = hemi;
     scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xffd2a0, 2.6);
     sun.castShadow = quality.shadows;
@@ -88,6 +89,15 @@ export class Game {
     scene.add(sun);
     scene.add(sun.target);
     this.sun = sun;
+    // headlamp for night raids
+    this.headlamp = new THREE.SpotLight(0xfff0d8, 0, 45, 0.45, 0.55, 1.4);
+    scene.add(this.headlamp, this.headlamp.target);
+    try {
+      this.selectedMap = MAPS.find((m) => m.id === localStorage.getItem('scrapfall_map')) || MAPS[0];
+    } catch (err) {
+      this.selectedMap = MAPS[0];
+    }
+    this.map = MAPS[0];
     this.sunDir = new THREE.Vector3(-0.55, 0.42, 0.72).normalize();
 
     // ---- world ----
@@ -115,7 +125,7 @@ export class Game {
       // ignore
     }
     renderer.domElement.addEventListener('click', () => {
-      if (this.mode === 'raid' && !this.paused && !this.ui.menuOpen() && !this.input.locked) this.input.lock();
+      if ((this.mode === 'raid' || this.mode === 'explore') && !this.paused && !this.ui.menuOpen() && !this.input.locked) this.input.lock();
     });
     this.ui = new UI(this);
     if (this.savedVolume !== undefined) {
@@ -128,6 +138,7 @@ export class Game {
     }
     this.input.onLockChange = (locked) => {
       if (!locked && this.mode === 'raid' && !this.ui.menuOpen() && this.player.alive) this.setPaused(true);
+      if (!locked && this.mode === 'explore' && !this.ui.menuOpen()) this.ui.showExplorePause();
     };
 
     this.yaw = 0;
@@ -151,15 +162,20 @@ export class Game {
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
-      uniforms: { sunDir: { value: new THREE.Vector3(-0.55, 0.42, 0.72).normalize() } },
+      uniforms: {
+        sunDir: { value: new THREE.Vector3(-0.55, 0.42, 0.72).normalize() },
+        horizonC: { value: new THREE.Color(0.93, 0.74, 0.55) },
+        midC: { value: new THREE.Color(0.7, 0.72, 0.72) },
+        zenithC: { value: new THREE.Color(0.33, 0.5, 0.62) },
+      },
       vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
       fragmentShader: `
-        uniform vec3 sunDir; varying vec3 vDir;
+        uniform vec3 sunDir; uniform vec3 horizonC; uniform vec3 midC; uniform vec3 zenithC; varying vec3 vDir;
         void main(){
           float h = clamp(vDir.y, -0.2, 1.0);
-          vec3 horizon = vec3(0.93, 0.74, 0.55);
-          vec3 mid = vec3(0.70, 0.72, 0.72);
-          vec3 zenith = vec3(0.33, 0.50, 0.62);
+          vec3 horizon = horizonC;
+          vec3 mid = midC;
+          vec3 zenith = zenithC;
           vec3 col = mix(horizon, mid, smoothstep(0.0, 0.25, h));
           col = mix(col, zenith, smoothstep(0.25, 0.9, h));
           float s = max(dot(normalize(vDir), sunDir), 0.0);
@@ -257,6 +273,9 @@ export class Game {
   resetContainers() {
     for (const c of this.containers) {
       c.items = rollTable(LOOT_TABLES[c.type]);
+      // richer conditions roll extra stacks
+      const extra = (this.map ? this.map.loot : 1) - 1;
+      if (extra > 0 && Math.random() < extra) c.items.push(...rollTable(LOOT_TABLES[c.type]).slice(0, 1));
       // gear found topside is used
       for (const it of c.items) if (isDurable(it.id)) it.dur = Math.round(MAX_DURABILITY * (0.35 + Math.random() * 0.55));
       c.searched = false;
@@ -312,11 +331,120 @@ export class Game {
     this.wrecks.push(wreck);
   }
 
+  // ---------- deployment conditions ----------
+  applyMap(map) {
+    this.map = map;
+    const scene = this.scene;
+    scene.fog.color.setHex(map.fog);
+    scene.fog.density = map.fogDensity;
+    scene.background.setHex(map.fog);
+    const u = this.sky.material.uniforms;
+    u.horizonC.value.setRGB(...map.sky[0]);
+    u.midC.value.setRGB(...map.sky[1]);
+    u.zenithC.value.setRGB(...map.sky[2]);
+    this.sunDir.set(...map.sunDir).normalize();
+    u.sunDir.value.copy(this.sunDir);
+    this.sun.color.setHex(map.sun);
+    this.sun.intensity = map.sunI;
+    this.hemi.color.setHex(map.hemi);
+    this.hemi.intensity = map.hemiI;
+    scene.environmentIntensity = map.env;
+    this.renderer.toneMappingExposure = map.exposure;
+    this.headlamp.intensity = map.headlamp ? 55 : 0;
+  }
+
+  selectMap(map) {
+    this.selectedMap = map;
+    try {
+      localStorage.setItem('scrapfall_map', map.id);
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  // ---------- exploring the Sanctuary ----------
+  enterExplore() {
+    this.mode = 'explore';
+    this.paused = false;
+    this.preview = null;
+    this.sanctuary.refresh(this.profile);
+    this.sanctuary.setMapImage(this.ui.mapBaseCanvas());
+    this.sanctuary.enterExplore();
+    this.ui.showExplore();
+    this.input.lock();
+  }
+
+  leaveExplore() {
+    this.sanctuary.leaveExplore();
+    this.preview = null;
+    this.input.unlock();
+    this.enterHub();
+  }
+
+  updateExplore(dt) {
+    const input = this.input;
+    const menu = this.ui.menuOpen();
+    if (this.touch) this.touch.update(!menu, !!this.exploreTarget);
+    if (!menu) {
+      if (input.hit('Tab') || input.hit('KeyI')) this.ui.openExplorePanel('stash');
+    } else if (input.hit('Escape') || (this.ui.open === 'panel' && input.hit('Tab'))) {
+      this.ui.closeMenus();
+    }
+    this.sanctuary.updateExplore(dt, input, !menu, input.sensitivity);
+    // what can we interact with?
+    const it = menu ? null : this.sanctuary.findInteractable();
+    this.exploreTarget = it;
+    const holding = input.down('KeyE');
+    if (it && it.hold) {
+      this.exploreHold = holding ? (this.exploreHold || 0) + dt : 0;
+      if (this.exploreHold >= it.hold) {
+        this.exploreHold = 0;
+        this.exploreInteract(it);
+      }
+    } else {
+      this.exploreHold = 0;
+      if (it && input.hit('KeyE')) this.exploreInteract(it);
+    }
+    this.ui.updateExplore(this.sanctuary.roomName(), it, it && it.hold ? this.exploreHold / it.hold : 0);
+  }
+
+  exploreInteract(it) {
+    Audio.playUI();
+    if (it.kind === 'stash') this.ui.openExplorePanel('stash');
+    if (it.kind === 'trader') this.ui.openExplorePanel('trader', it.trader);
+    if (it.kind === 'bench') this.ui.openExplorePanel('bench', it.section);
+    if (it.kind === 'checkout') this.ui.openExplorePanel('checkout');
+    if (it.kind === 'lift') this.ui.deploy();
+  }
+
+  // The Checkout shows a live view of the selected deployment.
+  renderPreview(dt) {
+    const map = this.preview;
+    if (this.map !== map) this.applyMap(map);
+    const town = this.world.town;
+    this.previewT = (this.previewT || 0) + dt * 0.05;
+    const t = this.previewT;
+    const r = 95;
+    this.camera.position.set(town.x + 30 + Math.cos(t) * r, 34, town.z + 10 + Math.sin(t) * r);
+    this.camera.lookAt(town.x + 20, 4, town.z + 10);
+    if (this.camera.fov !== 55) {
+      this.camera.fov = 55;
+      this.camera.updateProjectionMatrix();
+    }
+    this.hubFocus = new THREE.Vector3(town.x + 20, 0, town.z + 10);
+    this.updateSun();
+    this.renderer.render(this.scene, this.camera);
+  }
+
   // ---------- raid lifecycle ----------
   startRaid() {
     Audio.initAudio();
     this.mode = 'raid';
     this.paused = false;
+    this.preview = null;
+    this.sanctuary.leaveExplore();
+    this.applyMap(this.selectedMap);
+    this.getHuskCtx().sightMul = this.map.sight;
     this.raidTime = RAID_SECONDS;
     this.raidStats = { kills: 0, startValue: loadoutValue(this.profile.loadout), looted: {}, xp: 0, started: performance.now() };
     this.profile.stats.raids++;
@@ -332,7 +460,8 @@ export class Game {
 
     const rng = makeRng(Date.now());
     for (const s of this.world.enemySpawns) {
-      const n = s.count || 1;
+      const base = s.count || 1;
+      const n = Math.max(base, Math.round(base * this.map.husks + (this.map.husks > 1 && rng.chance(this.map.husks - 1) ? 1 : 0)));
       for (let i = 0; i < n; i++) this.spawnEnemyAt(s.type, s.x + rng.range(-s.radius, s.radius) * 0.5, s.z + rng.range(-s.radius, s.radius) * 0.5, null, s);
     }
     this.respawnTimer = 45;
@@ -823,6 +952,10 @@ export class Game {
       this.effects.update(dt);
       this.updateSun();
       this.renderer.render(this.scene, this.camera);
+    } else if (this.mode === 'explore') {
+      if (!this.paused) this.updateExplore(dt);
+      if (this.preview) this.renderPreview(dt);
+      else this.renderer.render(this.sanctuary.scene, this.sanctuary.camera);
     } else {
       // menus show the Patron's Sanctuary with the raider and their gear
       this.sanctuary.refresh(this.mode === 'login' ? null : this.profile);
@@ -1026,5 +1159,9 @@ export class Game {
     this.camera.lookAt(camPos.clone().add(look));
     // hide the model when the camera is jammed into it
     p.model.visible = dist > 0.8 || !p.alive;
+    if (this.headlamp.intensity > 0) {
+      this.headlamp.position.copy(eye).add(new THREE.Vector3(0, 0.15, 0));
+      this.headlamp.target.position.copy(eye).addScaledVector(look, 10);
+    }
   }
 }

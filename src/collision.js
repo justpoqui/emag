@@ -41,7 +41,9 @@ export function terrainHeight(x, z) {
 }
 
 export class Collision {
-  constructor() {
+  // ground(x, z): floor height; the topside terrain unless given (indoors: flat)
+  constructor(ground = terrainHeight) {
+    this.ground = ground;
     this.boxes = [];
     this.grid = new Map();
     this.stamp = 0;
@@ -93,7 +95,7 @@ export class Collision {
 
   // Highest walkable surface under (x,z) that is at most `step` above feetY.
   groundHeight(x, z, feetY, radius = 0.3, step = 0.55) {
-    let ground = terrainHeight(x, z);
+    let ground = this.ground(x, z);
     const r = radius * 0.6;
     const boxes = this.query(x - r, z - r, x + r, z + r, this._tmp || (this._tmp = []));
     for (const b of boxes) {
@@ -199,13 +201,13 @@ export class Collision {
     let t = 0;
     let prevT = 0;
     for (let guard = 0; guard < 512 && t <= best; guard++) {
-      const gap = oy + dy * t - terrainHeight(ox + dx * t, oz + dz * t);
+      const gap = oy + dy * t - this.ground(ox + dx * t, oz + dz * t);
       if (gap < 0) {
         let lo = prevT;
         let hi = t;
         for (let i = 0; i < 7; i++) {
           const mid = (lo + hi) / 2;
-          if (oy + dy * mid < terrainHeight(ox + dx * mid, oz + dz * mid)) hi = mid;
+          if (oy + dy * mid < this.ground(ox + dx * mid, oz + dz * mid)) hi = mid;
           else lo = mid;
         }
         if (hi < best) {

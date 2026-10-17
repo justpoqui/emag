@@ -260,7 +260,50 @@ export const BENCH_SECTIONS = [
   { id: 'medical', name: 'Medical', blurb: 'Heals and shield cells', types: ['heal', 'recharge'] },
   { id: 'explosives', name: 'Explosives', blurb: 'Grenades', types: ['grenade'] },
   { id: 'repair', name: 'Repair', blurb: 'Fix worn weapons and shields', types: [], repair: true },
+  { id: 'salvage', name: 'Salvage', blurb: 'Dismantle items for materials', types: [], salvage: true },
 ];
+
+// What dismantling one of an item gives back. Weapons and shields return
+// less when worn (see salvageYield). Basic materials can't be broken down.
+export const SALVAGE = {
+  mule: { scrap: 4, rubber: 1 },
+  sparrow: { scrap: 5, rubber: 2, plastic: 2 },
+  badger: { scrap: 7, rubber: 3, wires: 1 },
+  hammerhead: { scrap: 6, husk_plating: 2, wires: 2 },
+  boar: { scrap: 7, rubber: 3, husk_plating: 1 },
+  heron: { scrap: 9, husk_plating: 4, husk_circuit: 1 },
+  shield_light: { husk_plating: 1, fabric: 2 },
+  shield_medium: { husk_plating: 2, husk_circuit: 1, battery: 1 },
+  shield_heavy: { husk_plating: 4, husk_circuit: 2 },
+  bandage: { fabric: 1 },
+  med_kit: { fabric: 1, chemicals: 1 },
+  shield_cell: { battery: 1 },
+  frag: { chemicals: 1, scrap: 1 },
+  battery: { chemicals: 1, scrap: 1 },
+  wires: { scrap: 1 },
+  husk_plating: { scrap: 2 },
+  husk_circuit: { wires: 2, plastic: 1 },
+  husk_heart: { husk_circuit: 2, husk_plating: 3, battery: 1 },
+  rusted_gear: { scrap: 2 },
+  old_radio: { wires: 2, plastic: 2, battery: 1 },
+  pocket_watch: { scrap: 1, wires: 1 },
+  film_camera: { plastic: 2, chemicals: 2, wires: 1 },
+  music_box: { scrap: 2, wires: 2, rusted_gear: 1 },
+  golden_relay: { husk_circuit: 3, wires: 3 },
+};
+
+// Materials from dismantling `count` of a stack (worn gear gives less, min half).
+export function salvageYield(stack, count = 1) {
+  const base = SALVAGE[stack.id];
+  if (!base) return null;
+  const wear = stack.dur === undefined ? 1 : 0.5 + 0.5 * Math.max(0, Math.min(100, stack.dur)) / 100;
+  const out = {};
+  for (const [id, n] of Object.entries(base)) {
+    const v = Math.floor(n * count * wear);
+    if (v > 0) out[id] = v;
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 export const RECIPES = [
   { out: 'bandage', n: 2, cost: { fabric: 3 } },
@@ -286,3 +329,30 @@ export const FREE_KIT = {
   shield: { id: 'shield_light', n: 1, charge: 40 },
   bag: [{ id: 'ammo_light', n: 60 }, { id: 'bandage', n: 3 }],
 };
+
+// Where you can deploy. All three are the Dustline under different
+// conditions: lighting, how far Husks see, how many there are, and how rich
+// the loot is.
+export const MAPS = [
+  {
+    id: 'golden', name: 'The Dustline', when: 'Golden Hour', tag: 'Standard',
+    desc: 'Warm, dusty light over the ruined town. Good visibility, standard Husk patrols, standard loot.',
+    fog: 0xd9b48f, fogDensity: 0.0065, sky: [[0.93, 0.74, 0.55], [0.7, 0.72, 0.72], [0.33, 0.5, 0.62]],
+    sun: 0xffd2a0, sunI: 2.6, sunDir: [-0.55, 0.42, 0.72], hemi: 0xffe2c0, hemiI: 0.7, env: 0.7, exposure: 1.05,
+    husks: 1, loot: 1, sight: 1, headlamp: false,
+  },
+  {
+    id: 'night', name: 'The Dustline', when: 'Night Raid', tag: 'More Husks · richer loot',
+    desc: 'Moonlight and a headlamp. Husks see less in the dark, but there are more of them, and the loot runs richer.',
+    fog: 0x141c2a, fogDensity: 0.012, sky: [[0.12, 0.16, 0.25], [0.06, 0.08, 0.14], [0.02, 0.03, 0.07]],
+    sun: 0x9fb4ff, sunI: 0.6, sunDir: [0.35, 0.6, -0.55], hemi: 0x5a6a90, hemiI: 0.35, env: 0.22, exposure: 1.3,
+    husks: 1.35, loot: 1.4, sight: 0.7, headlamp: true,
+  },
+  {
+    id: 'storm', name: 'The Dustline', when: 'Dust Storm', tag: 'Low visibility · more loot',
+    desc: 'A wall of grit cuts sight to a few dozen metres for you and the Husks alike. Fights happen up close.',
+    fog: 0xb98a5a, fogDensity: 0.026, sky: [[0.75, 0.55, 0.38], [0.68, 0.52, 0.38], [0.55, 0.42, 0.32]],
+    sun: 0xffc890, sunI: 1.2, sunDir: [-0.3, 0.5, 0.6], hemi: 0xffd8b0, hemiI: 0.85, env: 0.5, exposure: 1.0,
+    husks: 1, loot: 1.2, sight: 0.5, headlamp: false,
+  },
+];

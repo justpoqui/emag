@@ -461,7 +461,7 @@ body.touch .use-bar { bottom: 140px; }
 .tile.is-broken .glyph, .tile.is-broken .name { opacity: 0.5; }
 .tile.is-broken::after { content: 'BROKEN'; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-family: var(--font); font-weight: 800; font-size: 11px; letter-spacing: 0.08em; color: var(--red); }
 .tt-dur { font-family: var(--font); font-size: 15px; color: var(--teal); }
-.recipe.repair .r-name small { display: block; font-size: 12px; font-weight: 500; color: var(--cream-dim); letter-spacing: 0.04em; }
+.recipe .r-name small, .recipe.repair .r-name small { display: block; font-size: 12px; font-weight: 500; color: var(--cream-dim); letter-spacing: 0.04em; }
 .dur-wide { position: relative; width: 130px; height: 20px; background: rgba(0, 0, 0, 0.35); flex: none; }
 .dur-wide i { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(47, 191, 160, 0.55); }
 .dur-wide.low i { background: rgba(242, 193, 78, 0.6); }
@@ -551,3 +551,43 @@ body.touch .use-bar { bottom: 140px; }
 .weight.over span { color: var(--red); }
 .tt-weight { font-size: 13px; color: var(--cream-dim); }
 .t-right .melee { right: 160px; bottom: 98px; }
+
+/* hub: stash and loadout on the left so the raider shows on the right */
+.hub .loadout-tab { flex-direction: column; width: min(700px, 56vw); overflow-y: auto; align-items: stretch; gap: 14px; }
+.hub .loadout-tab .hub-col { align-self: stretch; }
+.hub .loadout-tab .grid.stash { max-height: none; }
+
+/* exploring the Sanctuary */
+.explore-hud { position: absolute; inset: 0; pointer-events: none; font-family: var(--font); }
+.room-label { position: absolute; top: calc(14px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); text-align: center; background: rgba(20, 18, 16, 0.6); padding: 6px 18px; border-bottom: 2px solid var(--orange); }
+.room-label small { display: block; font-size: 11px; letter-spacing: 0.3em; color: var(--cream-dim); }
+.room-label span { font-size: 24px; font-weight: 800; letter-spacing: 0.1em; }
+.explore-hud .prompt { top: auto; bottom: 90px; }
+.explore-help { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); font-size: 14px; color: rgba(244, 234, 216, 0.6); white-space: nowrap; }
+.explore-panel { width: min(1180px, 96vw); }
+.explore-panel .panel-creds { font-family: var(--font); font-weight: 800; font-size: 20px; color: var(--yellow); letter-spacing: 0.04em; margin-right: 12px; }
+.explore-panel .hub-body { padding: 14px 18px; max-height: calc(90vh - 70px); overflow: auto; }
+body.exploring #touch .t-right [data-act=fire], body.exploring #touch .t-right [data-act=aim], body.exploring #touch .t-right [data-key=KeyR],
+body.exploring #touch .t-right .melee, body.exploring #touch .t-right [data-key=KeyV], body.exploring #touch .t-items, body.exploring #touch [data-act=map] { display: none; }
+
+/* checkout: panel on the left, live preview of the drop behind it */
+.menus:has(.checkout-panel) { justify-content: flex-start; padding-left: calc(24px + env(safe-area-inset-left)); }
+.checkout-panel { width: min(520px, 92vw); background: rgba(28, 26, 23, 0.9); }
+.checkout-body { flex-direction: column; gap: 14px; }
+.map-list { display: flex; flex-direction: column; gap: 6px; }
+.map-card { text-align: left; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-left: 4px solid transparent; color: var(--cream); padding: 10px 14px; cursor: pointer; font-family: var(--font); display: grid; grid-template-columns: 1fr auto; gap: 0 10px; }
+.map-card b { font-size: 20px; }
+.map-card span { font-size: 18px; color: var(--yellow); justify-self: end; }
+.map-card small { grid-column: 1 / -1; font-size: 13px; color: var(--cream-dim); letter-spacing: 0.04em; }
+.map-card.on { border-left-color: var(--orange); background: rgba(244, 234, 216, 0.1); }
+.map-card.selected::after { content: 'SIGNED OUT'; grid-column: 1 / -1; font-size: 11px; letter-spacing: 0.2em; color: var(--teal); }
+.map-info p { margin: 6px 0; line-height: 1.45; color: #e6dccb; }
+.map-info .chips { justify-content: flex-start; margin: 8px 0; }
+@media (max-height: 520px), (max-width: 760px) {
+  .hub .loadout-tab { width: min(560px, 62vw); }
+  .room-label span { font-size: 17px; }
+  .explore-panel .hub-body { padding: 8px 10px; }
+  .map-card { padding: 6px 10px; }
+  .map-card b, .map-card span { font-size: 15px; }
+  .checkout-body { gap: 8px; }
+}

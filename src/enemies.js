@@ -228,7 +228,7 @@ export class Husk {
     if (this.seeTimer <= 0) {
       this.seeTimer = 0.25;
       this.canSee = false;
-      if (p.alive && dist < this.def.sight * (p.crouch ? 0.6 : 1)) {
+      if (p.alive && dist < this.def.sight * (ctx.sightMul || 1) * (p.crouch ? 0.6 : 1)) {
         const eye = this.center.clone();
         if (ctx.col.lineOfSight(eye, playerPos)) {
           this.canSee = true;
