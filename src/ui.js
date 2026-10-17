@@ -902,14 +902,26 @@ export class UI {
     return total.toLocaleString();
   }
 
-  deploy() {
+  // In-page yes/no dialog (browser confirm() is blocked in some embeds).
+  ask(text, yesLabel, onYes) {
+    const box = el('div', 'sheet');
+    box.innerHTML = `<div class="ask"><div class="ask-text">${text}</div><div class="row"><button class="btn danger yes">${yesLabel}</button><button class="btn ghost no">Cancel</button></div></div>`;
+    box.querySelector('.yes').onclick = () => {
+      box.remove();
+      onYes();
+    };
+    box.querySelector('.no').onclick = () => box.remove();
+    this.root.appendChild(box);
+  }
+
+  deploy(checked = false) {
     const lo = this.game.profile.loadout;
-    if (!lo.weapons[0] && !lo.weapons[1]) {
-      if (!confirm('You have no weapon. Deploy anyway?')) return;
-    }
-    const w = lo.weapons.find((x) => x);
-    if (w && countIn(lo.bag, AMMO[ITEMS[w.id].ammo]) === 0 && w.mag === 0) {
-      if (!confirm('You have no ammo for your weapon. Deploy anyway?')) return;
+    if (!checked) {
+      const w = lo.weapons.find((x) => x);
+      if (!w) return this.ask('You have no weapon. Deploy anyway?', 'Deploy', () => this.deploy(true));
+      if (countIn(lo.bag, AMMO[ITEMS[w.id].ammo]) === 0 && w.mag === 0) {
+        return this.ask('You have no ammo for your weapon. Deploy anyway?', 'Deploy', () => this.deploy(true));
+      }
     }
     Audio.initAudio();
     if (this.game.input.touch) goFullscreen();
@@ -1197,9 +1209,10 @@ export class UI {
       </div>
       <button class="btn danger reset">Wipe save and start over</button>`;
     body.querySelector('.reset').onclick = () => {
-      if (!confirm('Delete your stash, credits and progress?')) return;
-      this.game.profile = resetProfile();
-      this.renderHub();
+      this.ask('Delete your stash, credits and progress?', 'Wipe save', () => {
+        this.game.profile = resetProfile();
+        this.renderHub();
+      });
     };
   }
 }

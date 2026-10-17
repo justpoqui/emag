@@ -384,3 +384,6 @@ body.touch .use-bar { bottom: 140px; }
   .rotate .icon { font-size: 64px; animation: tilt 1.6s ease-in-out infinite; }
 }
 @keyframes tilt { 50% { transform: rotate(90deg); } }
+
+.ask { background: var(--ink); border-top: 3px solid var(--orange); padding: 18px 20px; max-width: 420px; display: flex; flex-direction: column; gap: 6px; }
+.ask-text { font-family: var(--font); font-size: 20px; }
