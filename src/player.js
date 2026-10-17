@@ -319,7 +319,7 @@ export class Player {
     const sn = Math.sin(this.bodyYaw);
     u.legs.forEach((leg, i) => {
       const a = leg.hip.rotation.x;
-      const fwd = -(0.47 * Math.sin(a) + 0.48 * Math.sin(a + leg.knee.rotation.x)) + 0.05;
+      const fwd = -(0.46 * Math.sin(a) + 0.49 * Math.sin(a + leg.knee.rotation.x)) + 0.05;
       const side = leg.hip.position.x;
       // local (side, fwd) -> world, with the model's yaw
       const x = this.pos.x + side * c + fwd * sn;
