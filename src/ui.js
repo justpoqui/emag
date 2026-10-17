@@ -6,7 +6,7 @@ import {
   ITEMS, RARITY, AMMO, CARRY_LIMIT, MAPS, TRADERS, BUY_MARKUP, RECIPES, BENCH_SECTIONS, PLAYER, RAID_SECONDS, MAX_DURABILITY, REPAIR, isDurable, SALVAGE, salvageYield,
 } from './config.js';
 import {
-  addToSlots, loadoutWeight, stackWeight, durability, stackValue, countIn, moveStack, freeSlots, loadoutIsEmpty, applyFreeKit, countOwned, removeOwned, saveProfile, resetProfile, makeStack,
+  MAX_PINS, addToSlots, loadoutWeight, stackWeight, durability, stackValue, countIn, moveStack, freeSlots, loadoutIsEmpty, applyFreeKit, countOwned, removeOwned, saveProfile, resetProfile, makeStack,
 } from './inventory.js';
 import { MAP_HALF } from './collision.js';
 import * as Audio from './audio.js';
@@ -106,6 +106,7 @@ export class UI {
       <div class="reload-ring hidden"><div class="fill"></div><span>RELOADING</span></div>
       <div class="compass"><div class="strip"></div><div class="needle"></div></div>
       <div class="raid-timer"><div class="label">RAID</div><div class="time">20:00</div></div>
+      <div class="pins-hud"></div>
       <div class="notes"></div>
       <div class="prompt hidden"><span class="key">E</span><span class="text"></span><div class="bar"><div class="fill"></div></div></div>
       <div class="use-bar hidden"><div class="text"></div><div class="bar"><div class="fill"></div></div></div>
@@ -136,7 +137,7 @@ export class UI {
     const $ = (s) => hud.querySelector(s);
     this.h = {
       cross: $('.crosshair'), hit: $('.hitmarker'), dirs: $('.dmg-dirs'), reload: $('.reload-ring'),
-      compass: $('.compass .strip'), timer: $('.raid-timer .time'), timerBox: $('.raid-timer'), notes: $('.notes'),
+      compass: $('.compass .strip'), timer: $('.raid-timer .time'), timerBox: $('.raid-timer'), notes: $('.notes'), pins: $('.pins-hud'),
       prompt: $('.prompt'), promptText: $('.prompt .text'), promptFill: $('.prompt .fill'), promptBar: $('.prompt .bar'),
       use: $('.use-bar'), useText: $('.use-bar .text'), useFill: $('.use-bar .fill'),
       shieldRow: $('.shield-row'), shield: $('.bar.shield .fill'), shieldNum: $('.num.s'),
@@ -278,6 +279,16 @@ export class UI {
     css(this.h.stamina, 'width', `${(p.stamina / PLAYER.stamina) * 100}%`);
     this.h.stamina.parentElement.classList.toggle('locked', p.staminaLock > 0);
     const load = g.loadRatio || 0;
+    // pinned recipes, refreshed a couple of times a second
+    this.pinsTimer = (this.pinsTimer || 0) - dt;
+    if (this.pinsTimer <= 0) {
+      this.pinsTimer = 0.5;
+      const html = g.profile.pins.length ? `<div class="pins-title">PINNED</div>${this.pinsHtml(true)}` : '';
+      if (html !== this.pinsLast) {
+        this.pinsLast = html;
+        this.h.pins.innerHTML = html;
+      }
+    }
     // Skitters clinging on, and poison ticking
     const latched = g.latchedCount || 0;
     this.h.latch.classList.toggle('hidden', latched === 0);
@@ -882,11 +893,13 @@ export class UI {
     left.appendChild(el('div', 'sect', 'CONTENTS'));
     const cg = el('div', 'grid');
     const shown = Math.min(c.revealed ?? c.items.length, c.items.length);
+    const needs = this.pinnedNeeds();
     c.items.forEach((s, i) => {
       if (i >= shown) {
         cg.appendChild(el('div', 'tile searching', '<span class="spinner"></span>'));
       } else {
-        cg.appendChild(this.tile(s, { hint: 'Click: take', onClick: () => this.take(i) }));
+        const needed = needs.has(s.id);
+        cg.appendChild(this.tile(s, { cls: needed ? 'needed' : '', hint: needed ? 'Needed for a pinned recipe · Click: take' : 'Click: take', onClick: () => this.take(i) }));
       }
     });
     if (c.items.length === 0) cg.appendChild(el('div', 'empty-note', 'Empty.'));
@@ -1269,6 +1282,12 @@ export class UI {
       box.appendChild(this.settingsBlock(false));
       body.appendChild(box);
     }
+    if (p.pins.length) {
+      const card = el('div', 'pins-card', `<div class="pins-title">PINNED RECIPES</div>${this.pinsHtml()}`);
+      card.querySelectorAll('.unpin').forEach((b) => { b.onclick = () => this.togglePin(b.dataset.out); });
+      hub.appendChild(card);
+      hub.classList.add('has-pins');
+    }
     this.menus.appendChild(hub);
   }
 
@@ -1646,11 +1665,51 @@ export class UI {
         this.notifyHub(`Crafted ${d.name}${r.n > 1 ? ` ×${r.n}` : ''}.`);
         this.afterHubChange();
       };
+      const pinned = p.pins.includes(r.out);
+      const pin = el('button', `btn small ghost pin-btn ${pinned ? 'on' : ''}`, pinned ? '◆ Pinned' : '◇ Pin');
+      pin.title = 'Pin it: what it needs and how much you have shows in the Burrow and topside';
+      pin.onclick = () => this.togglePin(r.out);
+      row.appendChild(pin);
       row.appendChild(btn);
       rows.appendChild(row);
     }
     shop.appendChild(rows);
     body.appendChild(shop);
+  }
+
+  togglePin(out) {
+    const p = this.game.profile;
+    if (p.pins.includes(out)) p.pins = p.pins.filter((x) => x !== out);
+    else if (p.pins.length >= MAX_PINS) return this.notifyHub(`You can pin up to ${MAX_PINS} recipes.`);
+    else p.pins.push(out);
+    this.afterHubChange();
+  }
+
+  // Pinned recipes: each one's materials as have / need (stash + bag).
+  // compact: the raid HUD version (no unpin buttons).
+  pinsHtml(compact = false) {
+    const p = this.game.profile;
+    return p.pins.map((out) => {
+      const r = RECIPES.find((x) => x.out === out);
+      if (!r) return '';
+      const rows = Object.entries(r.cost).map(([id, n]) => {
+        const have = countOwned(p, id);
+        return `<div class="pin-row ${have >= n ? 'ok' : ''}"><span>${ITEMS[id].name}</span><b>${have}/${n}</b></div>`;
+      });
+      const ready = Object.entries(r.cost).every(([id, n]) => countOwned(p, id) >= n);
+      return `<div class="pin ${ready ? 'ready' : ''}"><div class="pin-head"><span>${ITEMS[out].name}${r.n > 1 ? ` ×${r.n}` : ''}</span>${ready ? '<i>READY</i>' : ''}${compact ? '' : `<button class="unpin" data-out="${out}" title="Unpin">✕</button>`}</div>${rows.join('')}</div>`;
+    }).join('');
+  }
+
+  // Materials still short for a pinned recipe (to flag them in loot).
+  pinnedNeeds() {
+    const p = this.game.profile;
+    const need = new Set();
+    for (const out of p.pins) {
+      const r = RECIPES.find((x) => x.out === out);
+      if (r) for (const [id, n] of Object.entries(r.cost)) if (countOwned(p, id) < n) need.add(id);
+    }
+    return need;
   }
 
   // How a raid works, Husk notes and controls.

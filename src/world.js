@@ -8,6 +8,8 @@ import { Collision, terrainHeight, MAP_HALF } from './collision.js';
 import { makeRng } from './rng.js';
 
 const TOWN = { x: -20, z: -10 };
+// the oil refinery in the south east, with a lift in the middle of it
+const REFINERY = { x: 165, z: 75 };
 
 function mat(color, opts = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: opts.roughness ?? 0.9, metalness: opts.metalness ?? 0.05, ...opts });
@@ -37,6 +39,12 @@ export function buildWorld(scene, opts = {}) {
     containerColors: [mat(0xc0582e, { metalness: 0.3 }), mat(0x2f7f86, { metalness: 0.3 }), mat(0x9a8a3a, { metalness: 0.3 }), mat(0x5a6e3a, { metalness: 0.3 }), mat(0x8a2f2a, { metalness: 0.3 })],
     carColors: [mat(0x7fa8a0, { metalness: 0.35, roughness: 0.6 }), mat(0xc98a4a, { metalness: 0.35, roughness: 0.6 }), mat(0xd9cfb0, { metalness: 0.35, roughness: 0.6 }), mat(0x8a3f35, { metalness: 0.35, roughness: 0.6 })],
     glass: mat(0x223238, { roughness: 0.2, metalness: 0.6 }),
+    tank: mat(0xcfc8b8, { roughness: 0.6, metalness: 0.3 }),
+    tankRust: mat(0x9a6a4a, { roughness: 0.8, metalness: 0.35 }),
+    pipe: mat(0x8a8f92, { roughness: 0.45, metalness: 0.7 }),
+    hazard: mat(0xe8b830, { roughness: 0.6 }),
+    tire: mat(0x1c1c1c, { roughness: 0.9 }),
+    barrels: [mat(0x2a4a7a, { metalness: 0.4, roughness: 0.6 }), mat(0x7a2a22, { metalness: 0.4, roughness: 0.6 }), mat(0x202224, { metalness: 0.4, roughness: 0.6 }), mat(0xb89a30, { metalness: 0.4, roughness: 0.6 })],
     rock: mat(0x7d756a, { flatShading: true }),
     trunk: mat(0x4a3a2a),
     leaves: [mat(0x5f7a35, { flatShading: true }), mat(0x6f8a3a, { flatShading: true }), mat(0x4e6b30, { flatShading: true })],
@@ -506,6 +514,200 @@ export function buildWorld(scene, opts = {}) {
     }
   }
 
+  // ---------- oil refinery round the Refinery Lift (south east) ----------
+  {
+    const R = REFINERY;
+    const at = (dx, dz) => [R.x + dx, R.z + dz, ground(R.x + dx, R.z + dz)];
+    // a vertical cylinder, collided as two crossed boxes (close to round)
+    const cyl = (material, dx, dz, r, h, { seg = 22, collide = true, y = null } = {}) => {
+      const [x, z, g] = at(dx, dz);
+      const y0 = y ?? g - 0.3;
+      const geo = new THREE.CylinderGeometry(r, r, h, seg);
+      geo.translate(x, y0 + h / 2, z);
+      pushGeo(material, geo);
+      if (collide) {
+        const a = r * 0.93;
+        const b = r * 0.62;
+        col.addBox({ x: x - a, y: y0, z: z - b }, { x: x + a, y: y0 + h, z: z + b }, 'metal');
+        col.addBox({ x: x - b, y: y0, z: z - a }, { x: x + b, y: y0 + h, z: z + a }, 'metal');
+      }
+      return y0;
+    };
+    // a horizontal pipe from (dx0, dz0) to (dx1, dz1) at height h above the first end's ground
+    const pipe = (material, dx0, dz0, dx1, dz1, h, r = 0.22) => {
+      const [x0, z0, g] = at(dx0, dz0);
+      const [x1, z1] = at(dx1, dz1);
+      const len = Math.hypot(x1 - x0, z1 - z0);
+      const geo = new THREE.CylinderGeometry(r, r, len, 10);
+      geo.rotateZ(Math.PI / 2);
+      geo.rotateY(-Math.atan2(z1 - z0, x1 - x0));
+      geo.translate((x0 + x1) / 2, g + h, (z0 + z1) / 2);
+      pushGeo(material, geo);
+    };
+
+    // storage tanks: dome roofs, a ladder, a band of rust
+    for (const [dx, dz, r, h, m] of [[-24, -12, 6, 9, M.tank], [-24, 7, 6, 9, M.tankRust], [15, 25, 5, 8, M.tank]]) {
+      const y0 = cyl(m, dx, dz, r, h, { seg: 32 });
+      const [x, z] = at(dx, dz);
+      const dome = new THREE.SphereGeometry(r, 32, 8, 0, Math.PI * 2, 0, Math.PI * 0.22);
+      dome.translate(x, y0 + h - r * Math.cos(Math.PI * 0.22), z);
+      pushGeo(m, dome);
+      const band = new THREE.CylinderGeometry(r + 0.03, r + 0.03, 0.5, 32, 1, true);
+      band.translate(x, y0 + 1.6, z);
+      pushGeo(M.hazard, band);
+      box(M.darkMetal, x + r + 0.15, y0 + h / 2, z, 0.1, h, 0.6, { collide: false });
+      for (let k = 0; k < h / 0.5; k++) box(M.darkMetal, x + r + 0.22, y0 + 0.4 + k * 0.5, z, 0.05, 0.05, 0.6, { collide: false });
+    }
+    // distillation columns with platforms, and a flare stack
+    for (const [dx, dz, r, h] of [[17, -15, 1.4, 22], [22, -8, 1.05, 18]]) {
+      const y0 = cyl(M.pipe, dx, dz, r, h, { seg: 18 });
+      const [x, z] = at(dx, dz);
+      for (let yy = 5; yy < h - 1; yy += 5) {
+        const ring = new THREE.CylinderGeometry(r + 0.9, r + 0.9, 0.15, 18);
+        ring.translate(x, y0 + yy, z);
+        pushGeo(M.darkMetal, ring);
+        const rail = new THREE.TorusGeometry(r + 0.9, 0.04, 4, 24);
+        rail.rotateX(Math.PI / 2);
+        rail.translate(x, y0 + yy + 1, z);
+        pushGeo(M.hazard, rail);
+      }
+      const cap = new THREE.SphereGeometry(r, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+      cap.translate(x, y0 + h, z);
+      pushGeo(M.pipe, cap);
+    }
+    {
+      const y0 = cyl(M.rust, 29, 19, 0.45, 30, { seg: 10 });
+      const [x, z] = at(29, 19);
+      for (let k = 0; k < 6; k++) {
+        const brace = new THREE.CylinderGeometry(0.06, 0.06, 6.2, 4);
+        brace.rotateZ(k % 2 ? 0.3 : -0.3);
+        brace.translate(x, y0 + 3 + k * 4.5, z);
+        pushGeo(M.darkMetal, brace);
+      }
+      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.7, 3.2, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      flame.position.set(x, y0 + 31.6, z);
+      scene.add(flame);
+      const core = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.8, 10), new THREE.MeshBasicMaterial({ color: 0xfff0b0 }));
+      core.position.set(x, y0 + 30.9, z);
+      scene.add(core);
+    }
+    // pipe racks: posts, a deck, and bundles of pipe between the tanks and the columns
+    for (let dx = -18; dx <= 14; dx += 8) {
+      const [x, z, g] = at(dx, -22);
+      for (const oz of [-1.2, 1.2]) box(M.darkMetal, x, g + 2.6, z + oz, 0.3, 5.2, 0.3, { tag: 'metal' });
+      box(M.darkMetal, x, g + 5.2, z, 0.3, 0.3, 2.8, { collide: false });
+    }
+    for (const [oz, r, m] of [[-0.7, 0.28, M.pipe], [0, 0.22, M.rust], [0.7, 0.18, M.pipe]]) pipe(m, -20, -22 + oz, 16, -22 + oz, 5.55, r);
+    for (const [ox, r] of [[-0.6, 0.24], [0.6, 0.2]]) pipe(M.pipe, -17 + ox, -6, -17 + ox, -21, 1.0, r);
+    pipe(M.pipe, 15.5, -21, 15.5, -15, 5.55, 0.24);
+    // pumpjacks nodding over their wells
+    for (const [dx, dz, ry] of [[-8, 27, 0.3], [2, 33, -0.4]]) {
+      const [x, z, g] = at(dx, dz);
+      const c = Math.cos(ry);
+      const sn = Math.sin(ry);
+      const off = (lx) => [x + lx * c, z - lx * sn];
+      box(M.concreteDark, x, g + 0.2, z, 6, 0.5, 2, { rotY: ry });
+      for (const side of [-0.6, 0.6]) {
+        const [px, pz] = off(0);
+        box(M.darkMetal, px + side * sn, g + 2, pz + side * c, 0.2, 4, 0.2, { rotY: ry, rotX: side * 0.2, collide: false });
+      }
+      const [bx, bz] = off(0);
+      box(M.hazard, bx, g + 4.1, bz, 6.4, 0.35, 0.35, { rotY: ry, rotZ: 0.12 });
+      const [hx2, hz2] = off(3.3);
+      box(M.hazard, hx2, g + 3.7, hz2, 0.5, 1.6, 0.6, { rotY: ry, rotZ: 0.4, collide: false });
+      const [cx, cz] = off(-2.6);
+      box(M.darkMetal, cx, g + 1.4, cz, 1.4, 1.4, 1.0, { rotY: ry });
+      const [wx, wz] = off(3.4);
+      box(M.darkMetal, wx, g + 0.9, wz, 0.25, 1.8, 0.25, { rotY: ry, collide: false });
+    }
+    // the control building
+    building(R.x + 2, R.z - 32, 10, 8, 1, { ruin: 0.05 });
+    addContainer(['locker', 'medical', 'crate'], R.x + 2, 0, R.z - 33);
+
+    // big trucks: a fuel tanker, a flatbed semi with pipes, a dump truck
+    const truck = (dx, dz, ry, kind) => {
+      const [x, z, g] = at(dx, dz);
+      const c = Math.cos(ry);
+      const sn = Math.sin(ry);
+      const P = (lx, lz) => [x + lx * c + lz * sn, z - lx * sn + lz * c]; // local (side, forward)
+      const paint = rng.pick([M.carColors[0], M.carColors[1], M.carColors[3], M.containerColors[1]]);
+      // chassis and cab (forward is +lz)
+      let [px, pz] = P(0, 0);
+      box(M.darkMetal, px, g + 0.9, pz, 2.4, 0.4, 11, { rotY: ry, tag: 'metal' });
+      [px, pz] = P(0, 4.3);
+      box(paint, px, g + 2.0, pz, 2.5, 2.4, 2.3, { rotY: ry, tag: 'metal' });
+      [px, pz] = P(0, 5.47);
+      box(M.glass, px, g + 2.5, pz, 2.2, 0.9, 0.05, { rotY: ry, collide: false });
+      [px, pz] = P(0, 5.6);
+      box(M.darkMetal, px, g + 1.3, pz, 2.5, 0.6, 0.2, { rotY: ry, collide: false });
+      for (const lz of [4.3, -0.5, -1.9, -3.8]) {
+        for (const lx of [-1.25, 1.25]) {
+          [px, pz] = P(lx, lz);
+          const w = new THREE.CylinderGeometry(0.55, 0.55, 0.45, 14);
+          w.rotateZ(Math.PI / 2);
+          w.rotateY(ry);
+          w.translate(px, g + 0.55, pz);
+          pushGeo(M.tire, w);
+        }
+      }
+      if (kind === 'tanker') {
+        [px, pz] = P(0, -1.2);
+        const t = new THREE.CapsuleGeometry(1.25, 5.2, 6, 18);
+        t.rotateX(Math.PI / 2);
+        t.rotateY(ry);
+        t.translate(px, g + 2.4, pz);
+        pushGeo(M.tank, t);
+        col.addBox({ x: px - 1.3, y: g + 1.1, z: pz - 1.3 }, { x: px + 1.3, y: g + 3.7, z: pz + 1.3 }, 'metal');
+        [px, pz] = P(0, -1.2);
+        box(M.hazard, px, g + 2.4, pz, 2.55, 0.35, 5.5, { rotY: ry, collide: false });
+      } else if (kind === 'flatbed') {
+        [px, pz] = P(0, -1.3);
+        box(M.darkMetal, px, g + 1.2, pz, 2.5, 0.2, 7.5, { rotY: ry, tag: 'metal' });
+        for (let k = 0; k < 6; k++) {
+          [px, pz] = P(-0.8 + (k % 3) * 0.8, -1.3);
+          const pp = new THREE.CylinderGeometry(0.32, 0.32, 7, 12);
+          pp.rotateX(Math.PI / 2);
+          pp.rotateY(ry);
+          pp.translate(px, g + 1.65 + Math.floor(k / 3) * 0.6, pz);
+          pushGeo(M.pipe, pp);
+        }
+        [px, pz] = P(0, -1.3);
+        col.addBox({ x: px - 1.4, y: g + 1.2, z: pz - 1.4 }, { x: px + 1.4, y: g + 2.6, z: pz + 1.4 }, 'metal');
+      } else {
+        [px, pz] = P(0, -1.6);
+        box(M.rust, px, g + 2.3, pz, 2.5, 2.0, 6.0, { rotY: ry, rotX: -0.08, tag: 'metal' });
+      }
+      const [lx, lz] = P(2.5, 1.5);
+      addContainer(['crate', 'weapon_case'], lx, 0, lz);
+    };
+    truck(9, 9, 0.5, 'tanker');
+    truck(-10, 16, -1.2, 'flatbed');
+    truck(26, -26, 2.4, 'dump');
+    truck(-30, -27, 1.6, 'tanker');
+
+    // oil barrels in loose clusters
+    for (const [dx, dz] of [[-13, -9], [7, -13], [-3, 17], [19, 3], [-31, -2]]) {
+      const n = rng.int(5, 10);
+      for (let k = 0; k < n; k++) {
+        const a = rng.range(0, Math.PI * 2);
+        const rr = Math.sqrt(k / n) * 2.2;
+        const [x, z, g] = at(dx + Math.cos(a) * rr, dz + Math.sin(a) * rr);
+        const tipped = rng.chance(0.12);
+        const geo = new THREE.CylinderGeometry(0.3, 0.3, 0.88, 14);
+        if (tipped) geo.rotateZ(Math.PI / 2).rotateY(rng.range(0, 3));
+        geo.translate(x, g + (tipped ? 0.3 : 0.44), z);
+        pushGeo(rng.pick(M.barrels), geo);
+        col.addBox({ x: x - 0.3, y: g, z: z - 0.3 }, { x: x + 0.3, y: g + (tipped ? 0.6 : 0.88), z: z + 0.3 }, 'metal');
+      }
+    }
+    // loot round the plant, and Husks picking over it
+    addContainer(['crate', 'locker', 'weapon_case'], R.x - 18, 0, R.z - 1);
+    addContainer(['crate', 'medical'], R.x + 11, 0, R.z - 20);
+    addContainer(['crate', 'husk_pod'], R.x - 4, 0, R.z + 22);
+    enemySpawns.push({ type: 'skitter', x: R.x - 10, z: R.z + 12, radius: 14, count: 3 });
+    enemySpawns.push({ type: 'buzzer', x: R.x + 10, z: R.z - 10, radius: 22, count: 1 });
+  }
+
   // ---------- radio tower (south east hill) ----------
   {
     const x = 150;
@@ -526,7 +728,7 @@ export function buildWorld(scene, opts = {}) {
   for (let i = 0; i < 10; i++) {
     const x = rng.range(-190, 190);
     const z = rng.range(-190, 190);
-    if (Math.hypot(x - TOWN.x, z - TOWN.z) < 90) continue;
+    if (Math.hypot(x - TOWN.x, z - TOWN.z) < 90 || Math.hypot(x - REFINERY.x, z - REFINERY.z) < 48) continue;
     const g = ground(x, z);
     // probe pod half-buried
     box(M.huskHull, x, g + 0.5, z, 1.4, 1.4, 2.2, { rotY: rng.range(0, 3), rotX: 0.3, tag: 'metal' });
@@ -538,7 +740,7 @@ export function buildWorld(scene, opts = {}) {
   for (let i = 0; i < 6; i++) {
     const x = rng.range(-180, 180);
     const z = rng.range(-180, 180);
-    if (Math.hypot(x - TOWN.x, z - TOWN.z) < 100) continue;
+    if (Math.hypot(x - TOWN.x, z - TOWN.z) < 100 || Math.hypot(x - REFINERY.x, z - REFINERY.z) < 48) continue;
     const g = ground(x, z);
     const tarp = rng.pick(M.tarp);
     for (const [dx, dz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) box(M.wood, x + dx, g + 1.2, z + dz, 0.15, 2.4, 0.15);
@@ -547,13 +749,14 @@ export function buildWorld(scene, opts = {}) {
   }
 
   // Lifts and drop points stay clear so nothing spawns inside them.
-  const KEEP_CLEAR = [[-40, -195], [195, 20], [30, 195], [-195, -20], [-170, 150], [170, -170], [-160, -170], [175, 175], [-200, 60], [80, 200]];
+  const KEEP_CLEAR = [[-40, -195], [REFINERY.x, REFINERY.z], [30, 195], [-195, -20], [-170, 150], [170, -170], [-160, -170], [175, 175], [-200, 60], [80, 200]];
   const onRoad = (x, z, pad) => (Math.abs(z - TOWN.z) < 5 + pad && Math.abs(x - TOWN.x) < 175) || (Math.abs(x - TOWN.x) < 5 + pad && Math.abs(z - TOWN.z) < 175);
   const nearBox = [];
   const infraSites = [];
   // true if (x,z) is free of other colliders (buildings, walls, earlier rocks) and loot
   const clearAt = (x, z, r) => {
     if (KEEP_CLEAR.some(([cx, cz]) => Math.hypot(x - cx, z - cz) < 9 + r)) return false;
+    if (Math.hypot(x - REFINERY.x, z - REFINERY.z) < 44) return false; // the refinery yard stays industrial
     if (infraSites.some((s) => Math.hypot(x - s.x, z - s.z) < 9 + r)) return false;
     if (containers.some((c) => Math.hypot(x - c.x, z - c.z) < 1.6 + r)) return false;
     const m = r + 0.8;
@@ -680,7 +883,7 @@ export function buildWorld(scene, opts = {}) {
   // ---------- extraction lifts ----------
   const liftSpots = [
     { name: 'North Lift', x: -40, z: -195 },
-    { name: 'East Lift', x: 195, z: 20 },
+    { name: 'Refinery Lift', x: REFINERY.x, z: REFINERY.z },
     { name: 'South Lift', x: 30, z: 195 },
     { name: 'West Lift', x: -195, z: -20 },
   ];

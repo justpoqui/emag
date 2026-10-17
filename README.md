@@ -57,7 +57,9 @@ level) is saved in the browser's localStorage.
 
 ## The Sanctuary
 
-Between raids you're in the **Patron's Sanctuary**. The hub screen shows your
+Between raids you're in the **Patron's Sanctuary**: an old mine shaft turned
+survivalist town under the Dustline, with timber supports, cart rails, string
+lights and neon shopfronts along its main street. The hub screen shows your
 stash and loadout on the left and your raider on the right. Press
 **EXPLORE THE SANCTUARY** to walk around:
 
@@ -75,6 +77,10 @@ Tab opens your stash & loadout anywhere; Esc opens the Sanctuary menu.
 **Shields** don't refill on their own. Use a Shield Cell: key 4 in a raid, or
 right-click your shield (or a cell) in the stash or loadout and pick *Recharge*.
 
+**Pinned recipes:** pin a recipe at the Workbench and it shows, in the Burrow
+and on your raid HUD, what it needs and how much you have (stash + bag). Loot
+you still need for a pin is marked in containers.
+
 **Dismantling:** right-click an item for *Dismantle*, or use
 the Salvage bench. Weapons, shields, consumables, valuables and the rarer
 materials break down into basic materials (worn gear gives less).
@@ -89,7 +95,9 @@ materials break down into basic materials (worn gear gives less).
    cases, car trunks and Husk pods. Items are revealed one at a time. Destroyed
    Husks leave wrecks you can loot too. Each raid puts containers in a random
    set of spots (with a random container type), so caches move between raids.
-4. **Extract**: find one of the four lifts (cyan ▲ on the compass, **M** for
+4. **Extract**: find one of the four lifts (the Refinery Lift stands in the
+   middle of an oil refinery in the south east: tanks, columns, a flare stack,
+   pumpjacks, big trucks and oil barrels) (cyan ▲ on the compass, **M** for
    the map). Hold **E** at the call panel. The lift takes 20 seconds to arrive
    and the noise draws Husks in. Once the doors open, step inside and hold **E**.
 5. **Die, or still be topside when the 20-minute clock ends**, and your
@@ -158,9 +166,9 @@ Each gun has its own model: the **Mule** (wood-stocked carbine), **Badger**
 (assault rifle with a red-dot sight), **Sparrow** (compact SMG with a folding
 stock), **Hammerhead** (heavy revolver), **Boar** (pump shotgun) and **Heron**
 (scoped long rifle). Both your weapons are always visible: the one you're
-using is in your hands, the other is carried by size. Long guns sling across
-your back (two cross over), the pistol sits in a holster on your left hip and
-the SMG hangs on your right.
+using is in your hands, the other is carried by size. Long guns hang down the
+left side of your pack, the pistol sits in a holster on your left hip and
+the SMG hangs on your right. Your stick rides down the right side of the pack.
 
 ## Controls
 

@@ -1,6 +1,6 @@
 // Slot-based inventory helpers, plus the saved profile (localStorage).
 
-import { ITEMS, BAG_SLOTS, SAFE_SLOTS, STASH_SLOTS, START_CREDITS, stackSize, FREE_KIT, MAX_DURABILITY, isDurable } from './config.js';
+import { ITEMS, BAG_SLOTS, SAFE_SLOTS, STASH_SLOTS, START_CREDITS, stackSize, FREE_KIT, MAX_DURABILITY, isDurable, RECIPES } from './config.js';
 import { cleanMemory, blankMemory } from './network.js';
 
 
@@ -46,7 +46,7 @@ function template() {
   stash[3] = makeStack('fabric', 4);
   const loadout = emptyLoadout();
   applyFreeKit(loadout);
-  return { credits: START_CREDITS, stash, loadout, stats: { raids: 0, extracts: 0, deaths: 0, kills: 0 }, level: 1, xp: 0, network: blankMemory() };
+  return { credits: START_CREDITS, stash, loadout, stats: { raids: 0, extracts: 0, deaths: 0, kills: 0 }, level: 1, xp: 0, network: blankMemory(), pins: [] };
 }
 
 // Item ids from older saves, renamed since.
@@ -95,6 +95,8 @@ export function normalizeProfile(data) {
 
 // Clamp everything to values the game can actually produce, so a hand-edited
 // save can't carry impossible stacks, ammo, credits or stats.
+export const MAX_PINS = 6;
+
 function int(v, min, max, fallback = min) {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
@@ -129,8 +131,10 @@ function sanitize(p) {
   lo.safe = lo.safe.map(cleanStack);
   p.inRaid = !!p.inRaid;
   p.network = cleanMemory(p.network);
+  // pinned recipes (by what they make)
+  p.pins = Array.isArray(p.pins) ? [...new Set(p.pins.filter((id) => RECIPES.some((r) => r.out === id)))].slice(0, MAX_PINS) : [];
   // drop any keys the game doesn't use
-  for (const k of Object.keys(p)) if (!['credits', 'stash', 'loadout', 'stats', 'level', 'xp', 'inRaid', 'network'].includes(k)) delete p[k];
+  for (const k of Object.keys(p)) if (!['credits', 'stash', 'loadout', 'stats', 'level', 'xp', 'inRaid', 'network', 'pins'].includes(k)) delete p[k];
   for (const k of Object.keys(lo)) if (!['weapons', 'shield', 'bag', 'safe'].includes(k)) delete lo[k];
 }
 

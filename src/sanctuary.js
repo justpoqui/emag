@@ -1,4 +1,5 @@
-// The Patron's Sanctuary: the raider's quarters, shown behind the menus and
+// The Patron's Sanctuary: an old mine shaft turned survivalist town under the
+// Dustline. The raider's quarters are shown behind the menus and are
 // walkable when exploring. A door leads to a hallway with the Trade Hall,
 // the Workshop, the Checkout (pick where to deploy) and the Lift topside.
 //
@@ -46,6 +47,123 @@ function signTexture(lines, opts = {}) {
   return tex;
 }
 
+// ---------- procedural surface textures (world-scaled on big surfaces) ----------
+function canvasTex(size, paint) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  paint(c.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+const rnd = (() => {
+  let s = 7;
+  return () => ((s = (s * 16807) % 2147483647) / 2147483647);
+})();
+// rough rock: mottled stone with strata and cracks
+function rockTexture(base) {
+  return canvasTex(256, (g, n) => {
+    g.fillStyle = base;
+    g.fillRect(0, 0, n, n);
+    for (let i = 0; i < 260; i++) {
+      const r = 4 + rnd() * 26;
+      g.fillStyle = rnd() < 0.5 ? `rgba(0,0,0,${0.05 + rnd() * 0.12})` : `rgba(255,240,220,${0.03 + rnd() * 0.07})`;
+      g.beginPath();
+      // draw each blob three times so it wraps across the tile edges
+      for (const [ox, oy] of [[0, 0], [n, 0], [0, n]]) g.ellipse((rnd() * n + ox) % n, (rnd() * n + oy) % n, r, r * (0.4 + rnd() * 0.5), rnd() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    for (let i = 0; i < 6; i++) {
+      g.fillStyle = `rgba(0,0,0,${0.06 + rnd() * 0.06})`;
+      g.fillRect(0, rnd() * n, n, 2 + rnd() * 6); // strata
+    }
+    g.strokeStyle = 'rgba(20,14,10,0.55)';
+    for (let i = 0; i < 14; i++) {
+      g.lineWidth = 1 + rnd() * 1.5;
+      g.beginPath();
+      let x = rnd() * n;
+      let y = rnd() * n;
+      g.moveTo(x, y);
+      for (let k = 0; k < 5; k++) g.lineTo((x += (rnd() - 0.5) * 50), (y += rnd() * 30));
+      g.stroke();
+    }
+  });
+}
+// packed earth with grit
+function dirtTexture() {
+  return canvasTex(256, (g, n) => {
+    g.fillStyle = '#4a3f33';
+    g.fillRect(0, 0, n, n);
+    for (let i = 0; i < 2600; i++) {
+      g.fillStyle = rnd() < 0.5 ? `rgba(0,0,0,${rnd() * 0.25})` : `rgba(200,170,130,${rnd() * 0.15})`;
+      const r = 0.6 + rnd() * 2.2;
+      g.fillRect(rnd() * n, rnd() * n, r, r);
+    }
+  });
+}
+// steel diamond plate
+function plateTexture() {
+  return canvasTex(128, (g, n) => {
+    g.fillStyle = '#4f5254';
+    g.fillRect(0, 0, n, n);
+    g.fillStyle = 'rgba(255,255,255,0.18)';
+    for (let y = 0; y < n; y += 16) {
+      for (let x = (y / 16) % 2 ? 8 : 0; x < n; x += 16) {
+        g.save();
+        g.translate(x + 4, y + 8);
+        g.rotate(0.6);
+        g.fillRect(-5, -1.2, 10, 2.4);
+        g.restore();
+      }
+    }
+    for (let i = 0; i < 300; i++) {
+      g.fillStyle = `rgba(90,60,40,${rnd() * 0.18})`; // rust and grime
+      g.fillRect(rnd() * n, rnd() * n, 3, 3);
+    }
+  });
+}
+// a material whose texture tiles every `tile` metres on big surfaces
+function surface(tex, tile, opts = {}) {
+  const m = new THREE.MeshStandardMaterial({ map: tex, bumpMap: tex, bumpScale: opts.bump ?? 1.2, roughness: opts.roughness ?? 0.95, metalness: opts.metalness ?? 0.02, color: opts.color ?? 0xffffff });
+  m.userData.tile = tile;
+  return m;
+}
+// Scale a box's UVs to its size, so textures keep a real-world scale.
+function worldUV(geo, sx, sy, sz, tile) {
+  const uv = geo.attributes.uv;
+  const dims = [[sz, sy], [sz, sy], [sx, sz], [sx, sz], [sx, sy], [sx, sy]]; // +x -x +y -y +z -z faces
+  for (let f = 0; f < 6; f++) {
+    for (let k = 0; k < 4; k++) {
+      const i = f * 4 + k;
+      uv.setXY(i, (uv.getX(i) * dims[f][0]) / tile, (uv.getY(i) * dims[f][1]) / tile);
+    }
+  }
+}
+
+// Glowing neon lettering on a transparent board.
+function neonSign(text, color, w = 512, h = 128, size = 78) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d');
+  g.font = `800 ${size}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.shadowColor = color;
+  g.shadowBlur = 22;
+  g.fillStyle = color;
+  for (let i = 0; i < 3; i++) g.fillText(text, w / 2, h / 2 + 4);
+  g.shadowBlur = 0;
+  g.fillStyle = '#fffaf0';
+  g.globalAlpha = 0.85;
+  g.fillText(text, w / 2, h / 2 + 4);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false });
+}
+
 const ROOMS = [
   { name: "PATRON'S SANCTUARY", test: (x, z) => z > -3.55 },
   { name: 'TRADE HALL', test: (x, z) => z < -6.6 && x < 9 },
@@ -70,13 +188,19 @@ export class Sanctuary {
     this.npcs = [];
     this.exploring = false;
 
+    // hewn rock walls and ceilings, packed-earth floors, steel plate in the workshop
+    const rock = rockTexture('#6e6457');
     const M = {
-      concrete: mat(0x8c8273),
-      plaster: mat(0xb39b7c),
-      hall: mat(0x7d7466),
-      floor: mat(0x4e463c),
-      tile: mat(0x5a5246),
-      ceiling: mat(0x3a332b),
+      concrete: surface(rock, 2.2, { color: 0xd8d0c4 }),
+      plaster: surface(rock, 2.2, { color: 0xf0dcc4 }),
+      hall: surface(rock, 2.2, { color: 0xc8beb0 }),
+      floor: surface(dirtTexture(), 2.5, { bump: 0.6 }),
+      tile: surface(plateTexture(), 1.2, { bump: 0.5, roughness: 0.6, metalness: 0.4 }),
+      ceiling: surface(rock, 2.6, { color: 0x8a8074 }),
+      timber: mat(0x5a4128, { roughness: 0.95 }),
+      steel: mat(0x45494c, { metalness: 0.6, roughness: 0.5 }),
+      shade: mat(0x45494c, { metalness: 0.6, roughness: 0.5, side: THREE.DoubleSide }),
+      rust: mat(0x7a4a2a, { metalness: 0.4, roughness: 0.8 }),
       wood: mat(0x6b4c30),
       darkWood: mat(0x3f2d1e),
       metal: mat(0x5f6468, { metalness: 0.5, roughness: 0.5 }),
@@ -95,6 +219,7 @@ export class Sanctuary {
     const box = (material, x, y, z, sx, sy, sz, { collide = true, rot = [0, 0, 0], shadow = false } = {}) => {
       const small = Math.max(sx, sy, sz) < 3 && Math.min(sx, sy, sz) > 0.05;
       const geo = small ? new RoundedBoxGeometry(sx, sy, sz, 2, Math.min(0.05, Math.min(sx, sy, sz) * 0.3)) : new THREE.BoxGeometry(sx, sy, sz);
+      if (!small && material.userData.tile) worldUV(geo, sx, sy, sz, material.userData.tile);
       const m = new THREE.Mesh(geo, material);
       m.position.set(x, y, z);
       m.rotation.set(...rot);
@@ -136,13 +261,26 @@ export class Sanctuary {
       scene.add(m);
       return m;
     };
+    // a caged work lamp hanging on its cable
     const lamp = (x, z, intensity = 9, dist = 9) => {
       const l = new THREE.PointLight(0xffc38a, intensity, dist, 1.7);
-      l.position.set(x, H - 0.45, z);
+      l.position.set(x, H - 0.55, z);
       scene.add(l);
       const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), M.glowWarm);
       bulb.position.copy(l.position);
       scene.add(bulb);
+      const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.45, 4), M.steel);
+      cord.position.set(x, H - 0.3, z);
+      scene.add(cord);
+      const shade = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.1, 14, 1, true), M.shade);
+      shade.position.set(x, H - 0.47, z);
+      scene.add(shade);
+      for (const dy of [-0.05, -0.12]) {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.006, 4, 16), M.steel);
+        ring.rotation.x = Math.PI / 2;
+        ring.position.set(x, H - 0.55 + dy + 0.05, z);
+        scene.add(ring);
+      }
       return l;
     };
     const interact = (kind, x, z, label, data = {}) => this.interactables.push({ kind, x, z, label, ...data });
@@ -156,21 +294,42 @@ export class Sanctuary {
     this.frontWall = box(M.concrete, 0, H / 2, 3.6, 8.2, H, 0.2);
     this.frontWall.visible = false;
     for (let i = -3; i <= 3; i++) box(M.darkWood, i * 1.2, H - 0.12, 0, 0.18, 0.18, 7, { collide: false });
-    // round window showing dusk
+    // no windows down here: a round monitor shows the topside camera feed
     {
       const wx = 2.6;
       const wz = -3.39;
-      const sky = new THREE.Mesh(new THREE.CircleGeometry(0.75, 32), new THREE.MeshBasicMaterial({ color: 0xe8935a }));
-      sky.position.set(wx, 2.15, wz);
-      scene.add(sky);
-      const horizon = new THREE.Mesh(new THREE.CircleGeometry(0.75, 32, Math.PI, Math.PI), new THREE.MeshBasicMaterial({ color: 0x8a5a48 }));
-      horizon.position.set(wx, 2.1, wz + 0.005);
-      scene.add(horizon);
+      const c = document.createElement('canvas');
+      c.width = c.height = 256;
+      const g = c.getContext('2d');
+      const sky = g.createLinearGradient(0, 0, 0, 256);
+      sky.addColorStop(0, '#3a4a5a');
+      sky.addColorStop(0.55, '#e8935a');
+      sky.addColorStop(1, '#5a3a30');
+      g.fillStyle = sky;
+      g.fillRect(0, 0, 256, 256);
+      g.fillStyle = '#2a1e1a'; // the Dustline skyline
+      g.beginPath();
+      g.moveTo(0, 256);
+      for (let x = 0; x <= 256; x += 16) g.lineTo(x, 150 + Math.sin(x * 0.05) * 14 - (x % 48 < 20 ? 28 : 0));
+      g.lineTo(256, 256);
+      g.fill();
+      g.fillStyle = 'rgba(0,0,0,0.18)'; // scanlines
+      for (let y = 0; y < 256; y += 4) g.fillRect(0, y, 256, 2);
+      g.font = '700 22px "Barlow Condensed", Arial, sans-serif';
+      g.fillStyle = '#9effe0';
+      g.fillText('CAM 03 · TOPSIDE', 60, 52);
+      g.fillStyle = '#ff4a3a';
+      g.beginPath();
+      g.arc(46, 45, 6, 0, Math.PI * 2);
+      g.fill();
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const screen = new THREE.Mesh(new THREE.CircleGeometry(0.75, 40), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+      screen.position.set(wx, 2.15, wz);
+      scene.add(screen);
       const frame = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.08, 8, 32), M.metal);
       frame.position.set(wx, 2.15, wz + 0.03);
       scene.add(frame);
-      box(M.metal, wx, 2.15, wz + 0.02, 1.55, 0.05, 0.03, { collide: false });
-      box(M.metal, wx, 2.15, wz + 0.02, 0.05, 1.55, 0.03, { collide: false });
     }
     sign([{ text: "PATRON'S SANCTUARY", size: 62, y: 66 }, { text: 'REST · REARM · RETURN', size: 30, weight: 600, y: 118, color: '#cfc3ad' }], 0.2, 2.85, -3.38, 2.2, 0.6);
     // bed, nightstand, lamp
@@ -225,7 +384,7 @@ export class Sanctuary {
     windowLight.position.set(2.6, 2.2, -3.1);
     windowLight.target.position.set(1.0, 0, 0.8);
     scene.add(windowLight, windowLight.target);
-    scene.add(new THREE.HemisphereLight(0xffe2c0, 0x2a2018, 0.55));
+    scene.add(new THREE.HemisphereLight(0xffe2c0, 0x2a2018, 0.8));
     this.player = new Player(scene, this.col);
 
     // ---------- hallway ----------
@@ -344,6 +503,9 @@ export class Sanctuary {
     this.liftLight = liftLight;
     box(M.glowTeal, 36.38, 1.3, -5.1, 0.05, 0.6, 0.8, { collide: false });
     interact('lift', 35.0, -5.1, 'Ride the lift topside', { hold: 1.2 });
+
+    // ---------- the mine town: supports, rails, cables, shops ----------
+    this.dressMine(M, box, sign);
 
     // ---------- dust ----------
     const count = 160;
@@ -494,6 +656,169 @@ export class Sanctuary {
     this.camera.lookAt(cam.clone().add(look));
     // too close in a tight corridor: hide the raider rather than fill the screen with them
     p.model.visible = dist > 1.0;
+  }
+
+  // Set dressing that makes the Sanctuary an old mine turned underground town.
+  // Everything here is decoration: it stays out of the walkways and only a few
+  // solid props (cart, barrels, tank, crates) add collision.
+  dressMine(M, box, sign) {
+    const scene = this.scene;
+    const add = (geo, material, x, y, z, rot) => {
+      const m = new THREE.Mesh(geo, material);
+      m.position.set(x, y, z);
+      if (rot) m.rotation.set(...rot);
+      m.receiveShadow = true;
+      scene.add(m);
+      return m;
+    };
+    const deco = { collide: false };
+    const wood = M.timber;
+
+    // timber mine sets along the hallway: posts against the walls, a cap beam, knee braces
+    for (const x of [-4.4, 0.4, 2.6, 6.2, 11.0, 16.4, 21.2, 26.0, 28.6, 32.4]) {
+      box(wood, x, H / 2, -6.41, 0.18, H, 0.16, deco);
+      box(wood, x, H / 2, x < 4 ? -3.69 : -3.79, 0.18, H, 0.16, deco);
+      box(wood, x, H - 0.13, -5.1, 0.2, 0.22, 2.95, deco);
+      for (const [z, r] of [[-6.15, 0.75], [-4.05, -0.75]]) box(wood, x, H - 0.45, z, 0.12, 0.6, 0.1, { collide: false, rot: [r, 0, 0] });
+    }
+    // mine-cart rails down the middle of the hallway, on sleepers
+    for (const z of [-4.85, -5.35]) box(M.steel, 14.1, 0.025, z, 37.6, 0.05, 0.05, deco);
+    {
+      const sleepers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 0.03, 0.8), wood, 64);
+      const m = new THREE.Matrix4();
+      let n = 0;
+      for (let x = -4.4; x < 33 && n < 64; x += 0.6) sleepers.setMatrixAt(n++, m.makeTranslation(x, 0.015, -5.1));
+      sleepers.count = n;
+      sleepers.receiveShadow = true;
+      scene.add(sleepers);
+    }
+    // an ore cart parked at the dead end, barrels beside it
+    box(M.rust, -4.25, 0.55, -5.1, 0.9, 0.55, 1.1, { shadow: true });
+    box(M.steel, -4.25, 0.24, -5.1, 0.7, 0.1, 0.9, deco);
+    for (const [dx, dz] of [[-0.3, -0.4], [0.3, -0.4], [-0.3, 0.4], [0.3, 0.4]]) add(new THREE.CylinderGeometry(0.11, 0.11, 0.06, 12), M.steel, -4.25 + dx, 0.13, -5.1 + dz, [0, 0, Math.PI / 2]);
+    for (let i = 0; i < 5; i++) add(new THREE.DodecahedronGeometry(0.16 + rnd() * 0.06, 0), M.hall, -4.25 + (rnd() - 0.5) * 0.5, 0.86, -5.1 + (rnd() - 0.5) * 0.7);
+    for (const [x, z] of [[-4.55, -6.2], [-4.55, -3.95]]) {
+      add(new THREE.CylinderGeometry(0.28, 0.28, 0.85, 16), M.rust, x, 0.43, z);
+      this.col.addBox({ x: x - 0.28, y: 0, z: z - 0.28 }, { x: x + 0.28, y: 0.85, z: z + 0.28 });
+    }
+    // cables and a vent duct along the ceiling
+    [0x1c1c1c, 0x8a2a20, 0xb89a30].forEach((c, i) => add(new THREE.CylinderGeometry(0.018, 0.018, 38, 6), mat(c), 14, H - 0.42 - i * 0.05, -6.36 + i * 0.03, [0, 0, Math.PI / 2]));
+    box(M.steel, 14, H - 0.2, -6.15, 37.8, 0.3, 0.45, deco);
+    for (let x = -4; x < 33; x += 3) box(M.shade, x, H - 0.2, -6.15, 0.05, 0.34, 0.49, deco); // duct bands
+    // string lights sagging down the hallway
+    {
+      const pts = [];
+      for (let x = -4.2; x <= 32.6; x += 0.25) pts.push(new THREE.Vector3(x, H - 0.4 - Math.abs(Math.sin(((x + 4.2) / 4.6) * Math.PI)) * 0.35, -5.1));
+      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x222222 })));
+      const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ toneMapped: false }), 80);
+      const colors = [0xffc070, 0xff7a3a, 0x40ffd0, 0xffe0a0];
+      const m = new THREE.Matrix4();
+      const c = new THREE.Color();
+      let n = 0;
+      for (let i = 0; i < pts.length && n < 80; i += 2) {
+        bulbs.setMatrixAt(n, m.makeTranslation(pts[i].x, pts[i].y - 0.05, pts[i].z));
+        bulbs.setColorAt(n, c.setHex(colors[n % colors.length]));
+        n++;
+      }
+      bulbs.count = n;
+      scene.add(bulbs);
+    }
+    // shopfronts cut into the south wall: shutter, frame, awning, neon sign, a crate counter
+    const shops = [
+      { x: 6.4, name: 'NOODLES', color: '#ff5a3a' },
+      { x: 13.2, name: 'BUNKS', color: '#40ffd0' },
+      { x: 17.8, name: 'CLINIC', color: '#7ad0ff' },
+      { x: 23.4, name: 'WATER · RATION', color: '#4fb3e8', size: 56 },
+      { x: 27.4, name: 'RADIO & PARTS', color: '#f2c14e', size: 52 },
+    ];
+    for (const sh of shops) {
+      const z = -3.72;
+      box(M.steel, sh.x, 1.0, z, 1.7, 2.0, 0.06, deco); // rolled-down shutter
+      for (let y = 0.12; y < 2.0; y += 0.12) box(M.shade, sh.x, y, z - 0.035, 1.66, 0.02, 0.012, deco);
+      for (const dx of [-0.9, 0.9]) box(wood, sh.x + dx, 1.1, z - 0.06, 0.12, 2.2, 0.12, deco);
+      box(M.orange, sh.x, 2.35, z - 0.28, 2.0, 0.05, 0.6, { collide: false, rot: [-0.3, 0, 0] });
+      const neon = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.42), neonSign(sh.name, sh.color, 512, 128, sh.size || 78));
+      neon.position.set(sh.x, 2.75, z - 0.08);
+      neon.rotation.y = Math.PI;
+      scene.add(neon);
+      box(M.wood, sh.x + 0.45, 0.3, -3.98, 0.55, 0.6, 0.4); // crate counter
+    }
+    // north wall: a hydroponic grow rack, a notice board, a water tank
+    {
+      const x = 9.2;
+      const z = -6.32;
+      box(M.steel, x, 0.95, z, 1.6, 1.9, 0.3, { collide: false });
+      const grow = new THREE.MeshBasicMaterial({ color: 0xd060ff, toneMapped: false });
+      const leaf = mat(0x4f8a3a, { flatShading: true });
+      for (const y of [0.45, 1.05, 1.65]) {
+        box(M.shade, x, y - 0.18, z + 0.02, 1.5, 0.03, 0.26, deco);
+        add(new THREE.BoxGeometry(1.4, 0.02, 0.02), grow, x, y + 0.2, z + 0.12);
+        for (let k = 0; k < 5; k++) add(new THREE.IcosahedronGeometry(0.1 + rnd() * 0.04, 0), leaf, x - 0.56 + k * 0.28, y - 0.08, z + 0.03);
+      }
+      const glow = new THREE.PointLight(0xc060ff, 3, 4, 2);
+      glow.position.set(x, 1.4, z + 0.6);
+      scene.add(glow);
+    }
+    sign([{ text: 'NOTICES', size: 56, y: 40 }, { text: 'RATIONS THU · CURFEW 22:00', size: 26, weight: 600, y: 96, color: '#cfc3ad' }, { text: 'LIFT CREW WANTED · ASK AT CHECKOUT', size: 22, weight: 600, y: 132, color: '#cfc3ad' }], 18.6, 1.55, -6.48, 1.5, 0.75, 0, { w: 420, h: 210, bg: '#3f2d1e', edge: '#2a1e14' });
+    for (const [dx, dy, c] of [[-0.5, 0.15, '#e6dccb'], [0.45, -0.2, '#f2c14e'], [0.15, 0.25, '#e6dccb']]) {
+      const paper = add(new THREE.PlaneGeometry(0.22, 0.28), mat(c), 18.6 + dx, 1.55 + dy, -6.47);
+      paper.rotation.z = (rnd() - 0.5) * 0.3;
+    }
+    add(new THREE.CylinderGeometry(0.38, 0.38, 1.6, 18), M.steel, 31.2, 0.8, -6.05);
+    this.col.addBox({ x: 30.82, y: 0, z: -6.43 }, { x: 31.58, y: 1.6, z: -5.67 });
+    add(new THREE.CylinderGeometry(0.05, 0.05, H - 1.6, 8), M.steel, 31.2, 1.6 + (H - 1.6) / 2, -6.3);
+    // laundry strung across the west end
+    {
+      const a = new THREE.Vector3(-0.9, 3.0, -6.45);
+      const b = new THREE.Vector3(1.6, 2.95, -3.7);
+      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), new THREE.LineBasicMaterial({ color: 0x9a8a6a })));
+      [0x2f8f8a, 0xc4672f, 0xd9d2c0, 0x6b4b2e].forEach((c, i) => {
+        const t = (i + 1) / 5;
+        const cloth = add(new THREE.PlaneGeometry(0.32, 0.36), mat(c, { side: THREE.DoubleSide }), a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t - 0.2, a.z + (b.z - a.z) * t);
+        cloth.rotation.y = Math.atan2(b.x - a.x, b.z - a.z) + Math.PI / 2;
+      });
+    }
+    // a little warm and cool light from the street fronts
+    const neonGlow = new THREE.PointLight(0xff6a40, 2.5, 6, 2);
+    neonGlow.position.set(6.4, 2.4, -4.4);
+    scene.add(neonGlow);
+    const cool = new THREE.PointLight(0x40c0ff, 2, 6, 2);
+    cool.position.set(23.4, 2.4, -4.4);
+    scene.add(cool);
+
+    // Trade Hall: steel arch ribs, string lights, a market sign, stacked crates
+    for (const z of [-8.3, -10.2]) {
+      const rib = add(new THREE.TorusGeometry(4.6, 0.07, 6, 40, Math.PI), M.steel, 4.25, -1.2, z);
+      rib.scale.set(1, 1, 1);
+    }
+    const market = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.6), neonSign('MARKET', '#ff9a3a', 512, 128, 90));
+    market.position.set(4.25, 2.95, -6.75);
+    scene.add(market);
+    for (const [x, z, h] of [[0.2, -7.3, 2], [8.3, -7.3, 1], [0.2, -8.2, 1]]) {
+      for (let k = 0; k < h; k++) box(M.wood, x, 0.35 + k * 0.7, z, 0.7, 0.68, 0.7, { shadow: true });
+    }
+
+    // Workshop: overhead beams, a chain hoist, a drum
+    for (const x of [11.6, 14, 16.4]) box(wood, x, H - 0.13, -10.8, 0.22, 0.24, 8.3, deco);
+    box(M.steel, 14, H - 0.4, -10.8, 0.12, 0.12, 8.3, deco);
+    for (let i = 0; i < 8; i++) add(new THREE.TorusGeometry(0.035, 0.01, 4, 8), M.steel, 14, H - 0.55 - i * 0.07, -10.8, [0, i % 2 ? Math.PI / 2 : 0, 0]);
+    add(new THREE.TorusGeometry(0.08, 0.02, 6, 12, Math.PI * 1.4), M.orange, 14, H - 1.2, -10.8);
+    add(new THREE.CylinderGeometry(0.3, 0.3, 0.9, 16), M.teal, 12.6, 0.45, -7.15);
+    this.col.addBox({ x: 12.3, y: 0, z: -7.45 }, { x: 12.9, y: 0.9, z: -6.85 });
+
+    // Checkout: steel ribs and a server rack blinking on the east wall
+    for (const z of [-8.6, -12.6]) add(new THREE.TorusGeometry(4.75, 0.07, 6, 40, Math.PI), M.steel, 23.75, -1.35, z);
+    box(M.steel, 28.2, 1.0, -9.0, 0.5, 2.0, 1.2);
+    const blink = new THREE.MeshBasicMaterial({ color: 0x40ffd0, toneMapped: false });
+    const amber = new THREE.MeshBasicMaterial({ color: 0xffa040, toneMapped: false });
+    for (let i = 0; i < 18; i++) add(new THREE.BoxGeometry(0.01, 0.03, 0.05), i % 4 ? blink : amber, 27.94, 0.4 + (i % 9) * 0.18, -9.3 + Math.floor(i / 9) * 0.55);
+
+    // Lift: a cage of bars and the winch cable going up the shaft
+    for (const z of [-3.72, -6.48]) for (let x = 33.3; x < 36.4; x += 0.28) box(M.steel, x, H / 2, z, 0.035, H, 0.035, deco);
+    add(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 6), M.steel, 34.8, H - 0.2, -5.1);
+
+    // your quarters: timber corner posts and a cross beam
+    for (const [x, z] of [[-3.8, -3.3], [3.8, -3.3], [-3.8, 3.3], [3.8, 3.3]]) box(wood, x, H / 2, z, 0.2, H, 0.2, deco);
   }
 
   // ---------- idle (behind the menus) ----------

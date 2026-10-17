@@ -112,9 +112,11 @@ export function buildRaiderModel(colors = {}) {
 
   // the stick: carried across the back, drawn into the right hand to swing
   const stickGeo = new THREE.CylinderGeometry(0.028, 0.034, 1.05, 8);
+  // the raider faces +z, so their left is +x and their right is -x
+  // the stick rides upright down the right side of the pack
   const backStick = new THREE.Group();
-  backStick.position.set(0.05, 0.36, -0.35);
-  backStick.rotation.set(0, 0, 0.9);
+  backStick.position.set(-0.21, 0.3, -0.24);
+  backStick.rotation.set(0.1, 0, -0.08);
   body.add(backStick);
   part(stickGeo, wood, 0, 0, 0, backStick);
   part(new THREE.CylinderGeometry(0.04, 0.04, 0.16, 8), tape, 0, -0.35, 0, backStick);
@@ -133,24 +135,26 @@ export function buildRaiderModel(colors = {}) {
   gunSocket.rotation.order = 'YXZ';
   gunSocket.position.set(0.15, 0.47, 0.16);
   body.add(gunSocket);
-  const backSocket = new THREE.Group();
-  backSocket.position.set(-0.05, 0.36, -0.37);
-  backSocket.rotation.set(0.15, Math.PI / 2, -0.95);
-  body.add(backSocket);
-  // a second long gun crosses the first on the back
-  const backSocket2 = new THREE.Group();
-  backSocket2.position.set(0.05, 0.34, -0.41);
-  backSocket2.rotation.set(0.15, Math.PI / 2, 0.95);
-  body.add(backSocket2);
+  // long guns hang upright down the left side of the pack (a second one just behind it)
+  const sling = (x, z, lean) => {
+    const g = new THREE.Group();
+    g.rotation.order = 'ZXY';
+    g.position.set(x, 0.28, z);
+    g.rotation.set(-Math.PI / 2, 0, lean); // muzzle up, top leaning out a little
+    body.add(g);
+    return g;
+  };
+  const backSocket = sling(0.215, -0.22, 0.1);
+  const backSocket2 = sling(0.25, -0.31, 0.16);
   // hip carry: muzzle down, grip forward (pistol in a left-hip holster, SMG slung on the right)
   const hipLSocket = new THREE.Group();
   hipLSocket.rotation.order = 'YXZ';
-  hipLSocket.position.set(-0.215, -0.02, 0.03);
+  hipLSocket.position.set(0.215, -0.02, 0.03);
   hipLSocket.rotation.set(Math.PI / 2, Math.PI, 0);
   body.add(hipLSocket);
   const hipRSocket = new THREE.Group();
   hipRSocket.rotation.order = 'YXZ';
-  hipRSocket.position.set(0.235, 0.02, 0.02);
+  hipRSocket.position.set(-0.235, 0.02, 0.02);
   hipRSocket.rotation.set(Math.PI / 2 - 0.22, Math.PI, 0);
   body.add(hipRSocket);
 
@@ -167,7 +171,7 @@ export function buildRaiderModel(colors = {}) {
   const torchLens = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, emissive: 0xfff2cc, emissiveIntensity: 0, roughness: 0.3 });
   const torchGlass = part(new THREE.CylinderGeometry(0.022, 0.022, 0.004, 14), torchLens, 0, 0.068, 0.045, torch);
   torchGlass.rotation.x = Math.PI / 2;
-  // sits on the belt, just left of the buckle, facing forward
+  // on the belt, just to the side of the buckle, facing forward
   torch.position.set(-0.075, 0.035, 0.13);
 
   root.userData = { body, head, torso, legs, arms, backStick, handStick, gunSocket, backSocket, backSocket2, hipLSocket, hipRSocket, torch, torchLens };

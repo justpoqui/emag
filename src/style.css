@@ -568,3 +568,28 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .fx-chip.poison { background: #5a9a3a; }
 .hub .loadout-tab .tile .name, .explore-panel .loadout-tab .tile .name { font-size: 12px; line-height: 1.05; }
 .hub .loadout-tab .tile.wide .name, .explore-panel .loadout-tab .tile.wide .name { font-size: 15px; }
+
+/* ---------------- pinned recipes ---------------- */
+.pins-card { position: absolute; right: 28px; top: 92px; width: 250px; max-height: calc(100% - 200px); overflow-y: auto; background: var(--panel); border-top: 3px solid var(--yellow); padding: 10px 14px; z-index: 2; }
+.pins-hud { position: absolute; right: 18px; top: 92px; width: 210px; pointer-events: none; }
+.pins-hud:empty { display: none; }
+.pins-hud { background: rgba(20, 18, 16, 0.55); border-left: 3px solid var(--yellow); padding: 6px 10px; }
+.pins-title { font-family: var(--font); font-weight: 800; font-size: 13px; letter-spacing: 0.18em; color: var(--yellow); margin-bottom: 4px; }
+.pin { padding: 5px 0; border-top: 1px solid var(--line); }
+.pin:first-of-type { border-top: 0; }
+.pin-head { display: flex; align-items: center; gap: 6px; font-family: var(--font); font-weight: 700; font-size: 16px; }
+.pin-head span { flex: 1; }
+.pin-head i { font-style: normal; font-size: 11px; letter-spacing: 0.1em; background: var(--teal); color: var(--ink); padding: 0 5px; }
+.pin.ready .pin-head span { color: var(--teal); }
+.unpin { background: none; border: 0; color: var(--cream-dim); cursor: pointer; font-size: 13px; padding: 0 2px; }
+.unpin:hover { color: var(--red); }
+.pin-row { display: flex; justify-content: space-between; font-size: 13px; color: #e6a39b; }
+.pin-row.ok { color: var(--cream-dim); }
+.pin-row b { font-family: var(--font); font-weight: 700; }
+.pins-hud .pin-head { font-size: 14px; }
+.pins-hud .pin-row { font-size: 12px; }
+.btn.pin-btn.on { color: var(--yellow); border-color: var(--yellow); }
+.tile.needed { box-shadow: inset 0 0 0 2px var(--yellow); }
+.tile.needed::after { content: '◆'; position: absolute; left: 4px; bottom: 18px; color: var(--yellow); font-size: 11px; }
+/* keep the pinned card from covering tab content (the loadout panels sit on the left anyway) */
+.hub.has-pins .hub-body:not(.loadout-tab) { padding-right: 300px; }

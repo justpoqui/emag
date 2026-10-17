@@ -197,8 +197,8 @@ export class Player {
   }
 
   // The weapon in use (in the hands, or holstered) and the other one carried.
-  // Holstered guns go where their size says: big ones on the back (two cross
-  // over), a pistol on the left hip, an SMG on the right.
+  // Holstered guns go where their size says: long guns down the left side of
+  // the pack (a second just behind), a pistol on the left hip, an SMG on the right.
   setGuns(activeId, holstered = false, otherId = null) {
     const key = `${activeId}|${holstered}|${otherId}`;
     if (key === this.gunKey) return;
@@ -215,7 +215,7 @@ export class Player {
       const order = want === 'hipL' ? ['hipL', 'hipR', 'back', 'back2'] : want === 'hipR' ? ['hipR', 'hipL', 'back', 'back2'] : ['back', 'back2'];
       const spot = order.find((o) => !used.has(o)) || 'back2';
       used.add(spot);
-      // centre long guns on the sling; hip guns hang from their grip
+      // long guns hang centred on their sling; hip guns hang from their grip
       if (spot.startsWith('back')) m.position.z = -(m.userData.butt + m.userData.length / 2) * m.userData.hold.scale;
       ({ back: u.backSocket, back2: u.backSocket2, hipL: u.hipLSocket, hipR: u.hipRSocket })[spot].add(m);
     };
