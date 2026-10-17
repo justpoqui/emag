@@ -909,7 +909,7 @@ export class UI {
   take(i) {
     const g = this.game;
     const c = this.lootTarget;
-    const s = c.items[i];
+    const s = c && c.items[i];
     if (!s) return;
     const before = s.n;
     const left = moveStack(s, g.profile.loadout.bag);
@@ -927,7 +927,9 @@ export class UI {
       c.revealed = Math.max(0, (c.revealed ?? 1) - 1);
     }
     this.hideTooltip();
-    this.refreshInventory();
+    // emptied it: close the loot window and get back to the raid
+    if (c.items.length === 0) this.closeMenus();
+    else this.refreshInventory();
   }
 
   takeAll() {
@@ -968,7 +970,7 @@ export class UI {
     ctx.fillRect((town.x + MAP_HALF - 5) * s, 0, 10 * s, 640);
     // every collision box, darker the taller it is
     for (const b of this.game.col.boxes) {
-      if (b.tag === 'wall') continue;
+      if (b.tag === 'wall' || b.off) continue;
       const h = b.max.y - b.min.y;
       if (h < 0.8) continue;
       ctx.fillStyle = b.tag === 'metal' ? 'rgba(60,70,75,0.85)' : b.tag === 'wood' ? 'rgba(40,60,30,0.7)' : 'rgba(200,190,170,0.75)';

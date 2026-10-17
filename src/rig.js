@@ -90,18 +90,22 @@ export function buildRaiderModel(colors = {}) {
     return { hip, knee };
   });
 
-  // arms: shoulder (inside the torso's shoulder) -> upper arm -> elbow -> forearm -> hand
+  // arms: a shoulder cap fixed to each side of the torso, and the arm hanging
+  // from inside the cap, so the arm sits just outside the body and never cuts
+  // through it: shoulder -> upper arm -> elbow -> forearm -> hand
   const arms = [-1, 1].map((side) => {
+    const cap = part(new THREE.SphereGeometry(0.078, 16, 12), jacket, side * 0.245, 0.5, 0, body);
+    cap.scale.set(1.05, 0.9, 1);
     const shoulder = new THREE.Group();
-    shoulder.position.set(side * 0.215, 0.53, 0);
+    shoulder.position.set(side * 0.262, 0.495, 0);
     body.add(shoulder);
-    hanging(0.058, 0.3, jacket, shoulder);
+    hanging(0.056, 0.3, jacket, shoulder);
     const elbow = new THREE.Group();
     elbow.position.y = -0.29;
     shoulder.add(elbow);
-    part(new THREE.SphereGeometry(0.054, 12, 10), jacket, 0, 0, 0, elbow);
-    hanging(0.05, 0.27, jacket, elbow);
-    const hand = part(new THREE.SphereGeometry(0.048, 12, 10), skin, 0, -0.3, 0, elbow);
+    part(new THREE.SphereGeometry(0.052, 12, 10), jacket, 0, 0, 0, elbow);
+    hanging(0.048, 0.27, jacket, elbow);
+    const hand = part(new THREE.SphereGeometry(0.046, 12, 10), skin, 0, -0.3, 0, elbow);
     hand.scale.set(0.9, 1.15, 0.8);
     return { shoulder, elbow, hand };
   });
@@ -123,8 +127,11 @@ export function buildRaiderModel(colors = {}) {
   handStick.visible = false;
 
   // gun in hands, and a holster spot across the back
+  // the gun's socket is the shoulder pocket the stock rests in; it yaws (to
+  // cancel the side-on stance) and then pitches with the aim
   const gunSocket = new THREE.Group();
-  gunSocket.position.set(0.2, 0.42, 0.32);
+  gunSocket.rotation.order = 'YXZ';
+  gunSocket.position.set(0.15, 0.47, 0.16);
   body.add(gunSocket);
   const backSocket = new THREE.Group();
   backSocket.position.set(-0.05, 0.36, -0.37);
@@ -214,25 +221,28 @@ export function poseRig(u, s, dt) {
   }
   const lean = lerp((s.sprint ? 0.22 : 0.05 * move) + cb * 0.2, 1.0, tuck);
   u.body.rotation.x = lerp(u.body.rotation.x, lean, k);
-  u.body.rotation.y = lerp(u.body.rotation.y, s.armed ? 0 : sw * 0.08 * move, k);
+  // holding a gun, the upper body turns side-on (left shoulder forward) like a real shooter
+  const gun = s.armed ? u.gunSocket.children[0] : null;
+  const twist = gun ? gun.userData.hold.twist : 0;
+  u.body.rotation.y = lerp(u.body.rotation.y, gun ? twist : sw * 0.08 * move, k);
   u.head.rotation.x = lerp(u.head.rotation.x, -(s.pitch || 0) * 0.5 - lean * 0.6, k);
-  u.head.rotation.y = lerp(u.head.rotation.y, s.look || 0, Math.min(1, dt * 3));
+  // the head keeps facing forward whatever the shoulders do
+  u.lookY = lerp(u.lookY || 0, s.look || 0, Math.min(1, dt * 3));
+  u.head.rotation.y = u.lookY - u.body.rotation.y;
 
   // ---- arms ----
-  let rUp = { x: sw * amp * 0.9, z: -0.08 };
+  let rUp = { x: sw * amp * 0.9, z: 0.1 }; // z > 0 swings the right arm outward
   let rEl = -0.25 - Math.abs(sw) * 0.5 * amp - (s.sprint ? 1.0 : 0);
-  let lUp = { x: -sw * amp * 0.9, z: 0.08 };
+  let lUp = { x: -sw * amp * 0.9, z: -0.1 };
   let lEl = -0.25 - Math.abs(sw) * 0.5 * amp - (s.sprint ? 1.0 : 0);
-  if (s.armed) {
-    const aim = s.sprint && !s.ads ? -0.7 : s.pitch || 0;
+  if (gun) {
+    // the stock sits in the shoulder pocket and the gun points where the
+    // raider aims; a sprint carries it low across the body
+    const aim = s.pitch || 0;
     const kick = s.recoil || 0;
-    rUp = { x: -0.95 - aim * 0.9 - kick * 0.25, z: -0.15 };
-    rEl = -0.85 + kick * 0.2;
-    lUp = { x: -1.15 - aim * 0.9, z: 0.55 };
-    lEl = -0.75;
-    u.gunSocket.rotation.set(-aim - kick * 0.3, 0, 0);
-    u.gunSocket.position.set(0.18, 0.5 + Math.sin(-aim) * 0.1, 0.38 - kick * 0.08);
-    if (s.sprint && !s.ads) u.gunSocket.rotation.set(0.6, -0.6, 0);
+    u.gunSocket.position.set(0.15, 0.47, 0.16 - kick * 0.06);
+    if (s.sprint && !s.ads) u.gunSocket.rotation.set(0.55, -u.body.rotation.y - 0.5, 0);
+    else u.gunSocket.rotation.set(-aim - kick * 0.3, -u.body.rotation.y, 0);
   }
   // melee swing: wind up over the shoulder, chop forward and across, recover
   const m = s.melee ?? -1;
@@ -270,10 +280,54 @@ export function poseRig(u, s, dt) {
     lEl = lerp(lEl, -1.7, tuck);
   }
   const kk = m >= 0 ? Math.min(1, dt * 30) : k;
-  rArm.shoulder.rotation.x = lerp(rArm.shoulder.rotation.x, rUp.x, kk);
-  rArm.shoulder.rotation.z = lerp(rArm.shoulder.rotation.z, rUp.z, kk);
-  rArm.elbow.rotation.x = lerp(rArm.elbow.rotation.x, rEl, kk);
-  lArm.shoulder.rotation.x = lerp(lArm.shoulder.rotation.x, lUp.x, k);
-  lArm.shoulder.rotation.z = lerp(lArm.shoulder.rotation.z, lUp.z, k);
-  lArm.elbow.rotation.x = lerp(lArm.elbow.rotation.x, lEl, k);
+  if (gun && tuck < 0.5) {
+    // hands on the gun: right hand on the grip, left on the fore-grip
+    u.gunSocket.updateMatrix();
+    gun.updateMatrix();
+    const toBody = (v) => _t.copy(v).applyMatrix4(gun.matrix).applyMatrix4(u.gunSocket.matrix);
+    reachArm(rArm, toBody(gun.userData.grip), 1, Math.min(1, dt * 20));
+    reachArm(lArm, toBody(gun.userData.fore), -1, Math.min(1, dt * 20));
+    return;
+  }
+  for (const [arm, up, el, rate] of [[rArm, rUp, rEl, kk], [lArm, lUp, lEl, k]]) {
+    arm.shoulder.rotation.x = lerp(arm.shoulder.rotation.x, up.x, rate);
+    arm.shoulder.rotation.y = lerp(arm.shoulder.rotation.y, 0, rate);
+    arm.shoulder.rotation.z = lerp(arm.shoulder.rotation.z, up.z, rate);
+    arm.elbow.rotation.x = lerp(arm.elbow.rotation.x, el, rate);
+  }
+}
+
+// Two-bone arm reach: turn the shoulder and bend the elbow so the hand lands
+// on target (body space), with the elbow hanging down and out. side: +1 right, -1 left.
+const UPPER = 0.29; // shoulder to elbow
+const FORE = 0.3; // elbow to the centre of the hand
+const _t = new THREE.Vector3();
+const _dir = new THREE.Vector3();
+const _hand = new THREE.Vector3();
+const _elbow = new THREE.Vector3();
+const _pole = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _twist = new THREE.Quaternion();
+function reachArm(arm, target, side, rate) {
+  _dir.subVectors(target, arm.shoulder.position);
+  const d = Math.min(UPPER + FORE - 0.002, Math.max(0.08, _dir.length()));
+  _dir.normalize();
+  // elbow bend from the law of cosines
+  const cosInner = (UPPER * UPPER + FORE * FORE - d * d) / (2 * UPPER * FORE);
+  const bend = Math.PI - Math.acos(Math.max(-1, Math.min(1, cosInner)));
+  // where the hand is with that bend and no shoulder turn, then turn it onto the target
+  _hand.set(0, -UPPER - FORE * Math.cos(bend), FORE * Math.sin(bend)).normalize();
+  _q.setFromUnitVectors(_hand, _dir);
+  // spin about the shoulder->hand line so the elbow points down and outward
+  _elbow.set(0, -1, 0).applyQuaternion(_q);
+  // the trigger arm's elbow sits out to the side; the support elbow hangs lower
+  if (side > 0) _pole.set(1, -0.55, -0.2).normalize();
+  else _pole.set(-0.6, -1, -0.2).normalize();
+  _elbow.addScaledVector(_dir, -_elbow.dot(_dir));
+  _pole.addScaledVector(_dir, -_pole.dot(_dir));
+  const angle = Math.atan2(_dir.dot(_hand.crossVectors(_elbow, _pole)), _elbow.dot(_pole));
+  _twist.setFromAxisAngle(_dir, angle);
+  _q.premultiply(_twist);
+  arm.shoulder.quaternion.slerp(_q, rate);
+  arm.elbow.rotation.x = lerp(arm.elbow.rotation.x, -bend, rate);
 }

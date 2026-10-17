@@ -34,6 +34,12 @@ export function buildGunModel(id) {
     return mesh;
   };
   let muzzle = 0.7;
+  // where the hands go (gun space), the back of the stock, and how it's held:
+  // scale to suit the body, and how far the upper body turns side-on
+  let grip = new THREE.Vector3(0, -0.1, -0.06);
+  let fore = new THREE.Vector3(0, -0.06, 0.33);
+  let butt = -0.45;
+  let hold = { scale: 0.75, twist: 0.8, out: 0 };
   switch (item.shape) {
     case 'smg':
       add(rbox(0.09, 0.14, 0.42), body, 0, 0, 0.1);
@@ -41,12 +47,20 @@ export function buildGunModel(id) {
       add(rbox(0.06, 0.2, 0.08), dark, 0, -0.14, 0.12);
       add(rbox(0.06, 0.08, 0.2), dark, 0, -0.02, -0.18);
       muzzle = 0.5;
+      grip = new THREE.Vector3(0, -0.1, 0.1);
+      fore = new THREE.Vector3(0, -0.05, 0.36);
+      butt = -0.28;
       break;
     case 'pistol':
       add(rbox(0.08, 0.13, 0.32), body, 0, 0, 0.12);
       add(new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8), dark, 0, 0, 0.08).rotation.x = Math.PI / 2;
       add(rbox(0.07, 0.17, 0.08), wood, 0, -0.12, -0.02);
       muzzle = 0.3;
+      // held out in front in both hands, support hand cupping the grip
+      grip = new THREE.Vector3(0, -0.11, -0.02);
+      fore = new THREE.Vector3(-0.05, -0.12, 0.0);
+      butt = 0;
+      hold = { scale: 0.85, twist: 0.3, out: 0.36 };
       break;
     case 'shotgun':
       add(rbox(0.1, 0.13, 0.5), body, 0, 0, 0.1);
@@ -54,6 +68,8 @@ export function buildGunModel(id) {
       add(rbox(0.09, 0.08, 0.2), wood, 0, -0.04, 0.45);
       add(rbox(0.08, 0.14, 0.32), wood, 0, -0.05, -0.28);
       muzzle = 0.85;
+      grip = new THREE.Vector3(0, -0.07, -0.1);
+      fore = new THREE.Vector3(0, -0.07, 0.32);
       break;
     case 'long':
       add(rbox(0.08, 0.12, 0.5), body, 0, 0, 0.05);
@@ -61,6 +77,9 @@ export function buildGunModel(id) {
       add(new THREE.CylinderGeometry(0.045, 0.045, 0.3, 8), dark, 0, 0.12, 0.05).rotation.x = Math.PI / 2;
       add(rbox(0.07, 0.15, 0.36), wood, 0, -0.04, -0.34);
       muzzle = 1.05;
+      grip = new THREE.Vector3(0, -0.08, -0.12);
+      fore = new THREE.Vector3(0, -0.04, 0.26);
+      butt = -0.52;
       break;
     default: // rifle
       add(rbox(0.09, 0.14, 0.55), body, 0, 0, 0.1);
@@ -71,6 +90,7 @@ export function buildGunModel(id) {
       muzzle = 0.8;
   }
   g.userData.muzzle = new THREE.Vector3(0, 0.02, muzzle);
+  Object.assign(g.userData, { grip, fore, butt, hold });
   return g;
 }
 
@@ -145,7 +165,13 @@ export class Player {
     this.gunModel = id ? buildGunModel(id) : null;
     this.gunId = id;
     this.gunHolstered = holstered;
-    if (this.gunModel) (holstered ? u.backSocket : u.gunSocket).add(this.gunModel);
+    if (this.gunModel) {
+      const { hold, butt } = this.gunModel.userData;
+      this.gunModel.scale.setScalar(hold.scale);
+      // drawn: the back of the stock sits at the socket (the shoulder pocket); a pistol is held out
+      if (!holstered) this.gunModel.position.z = -butt * hold.scale + hold.out;
+      (holstered ? u.backSocket : u.gunSocket).add(this.gunModel);
+    }
   }
 
   get armed() {
