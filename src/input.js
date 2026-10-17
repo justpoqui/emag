@@ -1,7 +1,4 @@
-// Keyboard, mouse and pointer-lock state. On touch devices there is no
-// pointer lock; TouchControls writes into the same state instead.
-
-import { IS_TOUCH } from './settings.js';
+// Keyboard, mouse and pointer-lock state.
 
 export class Input {
   constructor(canvas) {
@@ -12,8 +9,6 @@ export class Input {
     this.locked = false;
     this.sensitivity = 0.0022;
     this.enabled = true;
-    this.touch = IS_TOUCH;
-    this.stick = null; // analog { x, y } from the touch stick
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Tab' || e.code === 'AltLeft' || (e.code === 'Space' && this.locked)) e.preventDefault();
@@ -57,7 +52,6 @@ export class Input {
   }
 
   lock() {
-    if (this.touch) return;
     if (!this.locked) {
       const p = this.canvas.requestPointerLock();
       if (p && p.catch) p.catch(() => {});
@@ -77,7 +71,6 @@ export class Input {
   }
 
   axis() {
-    if (this.stick) return { x: this.stick.x, y: this.stick.y };
     let x = 0;
     let y = 0;
     if (this.down('KeyW')) y += 1;

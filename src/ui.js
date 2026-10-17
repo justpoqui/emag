@@ -10,7 +10,9 @@ import {
 } from './inventory.js';
 import { MAP_HALF } from './collision.js';
 import * as Audio from './audio.js';
-import { QUALITY, getQualityName, setQualityName } from './settings.js';
+import {
+  QUALITY, getQualityName, setQualityName, FPS_CAPS, RES_SCALES, getResScale, setResScale, setFpsCap, setShowFps,
+} from './settings.js';
 import { renderHome, renderLogin } from './home.js';
 import { describe as describeNetwork } from './network.js';
 import { signOut, currentUser, isAdmin, storageKind, changePassword, passwordProblem, adminData, adminSetBans, adminSetBulletin, adminName } from './accounts.js';
@@ -132,10 +134,6 @@ export class UI {
     `;
     this.root.appendChild(hud);
     this.hud = hud;
-    if (this.game.input.touch) {
-      hud.querySelector('.help').textContent = 'Left thumb: move (push to the edge to sprint) · Right thumb: look · Hold FIRE and drag to aim while shooting';
-      hud.querySelector('.prompt .key').textContent = 'USE';
-    }
     const $ = (s) => hud.querySelector(s);
     this.h = {
       cross: $('.crosshair'), hit: $('.hitmarker'), dirs: $('.dmg-dirs'), reload: $('.reload-ring'),
@@ -224,7 +222,7 @@ export class UI {
       if (stack) s.style.borderColor = RARITY[ITEMS[stack.id].rarity].color;
     });
     const cur = w.current();
-    const key = (k) => (this.game.input.touch ? '' : ` · ${k}`);
+    const key = (k) => ` · ${k}`;
     if (cur && !w.holstered) {
       this.h.mag.textContent = cur.mag;
       this.h.mag.classList.toggle('low', cur.mag <= Math.ceil(ITEMS[cur.id].mag * 0.25));
@@ -365,7 +363,6 @@ export class UI {
   }
 
   closeMenus() {
-    this.closeSheet();
     this.closeContextMenu();
     if (this.game.mode === 'explore') {
       this.open = null;
@@ -442,25 +439,6 @@ export class UI {
       <span class="glyph" style="color:#${def.color.toString(16).padStart(6, '0')}">${TYPE_GLYPH[def.type] || '?'}</span>
       <span class="name">${def.name}</span>
       ${stack.n > 1 ? `<span class="count">${stack.n}</span>` : ''}${extra}${durBar}`;
-    if (this.game.input.touch) {
-      // tap = main action, long-press = item info and every other action
-      let timer = null;
-      let long = false;
-      t.addEventListener('pointerdown', () => {
-        long = false;
-        timer = setTimeout(() => {
-          long = true;
-          this.showSheet(stack, opts);
-        }, 420);
-      });
-      for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) t.addEventListener(ev, () => clearTimeout(timer));
-      t.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (long) return;
-        if (opts.onClick) opts.onClick(e);
-      });
-      return t;
-    }
     t.addEventListener('mouseenter', () => this.showTooltip(stack, opts.hint));
     t.addEventListener('mouseleave', () => this.hideTooltip());
     if (opts.onClick) t.addEventListener('click', (e) => { e.stopPropagation(); opts.onClick(e); });
@@ -712,53 +690,9 @@ export class UI {
     this.afterHubChange();
   }
 
-  // Touch: item details plus buttons for the actions a mouse gets from
-  // click / shift-click / right-click.
-  showSheet(stack, opts) {
-    this.closeSheet();
-    const sheet = el('div', 'sheet');
-    this.showTooltip(stack, '');
-    sheet.innerHTML = `<div class="sheet-info">${this.tooltip.innerHTML}</div><div class="sheet-btns"></div>`;
-    this.hideTooltip();
-    const btns = sheet.querySelector('.sheet-btns');
-    const labels = opts.labels || {};
-    const add = (label, fn, disabled) => {
-      const b = el('button', 'btn', label);
-      b.disabled = !!disabled;
-      b.onclick = (e) => {
-        e.stopPropagation();
-        this.closeSheet();
-        fn();
-      };
-      btns.appendChild(b);
-    };
-    if (opts.menu) {
-      for (const it of opts.menu()) add(it.label, it.fn, it.disabled);
-    } else {
-      if (opts.onClick && labels.tap) add(labels.tap, () => opts.onClick({ shiftKey: false }));
-      if (opts.onClick && labels.shift) add(labels.shift, () => opts.onClick({ shiftKey: true }));
-      if (opts.onRight && labels.right) add(labels.right, () => opts.onRight({}));
-    }
-    add('Close', () => {});
-    btns.lastChild.classList.add('ghost');
-    // the finger that long-pressed lifts onto the backdrop; ignore that first release
-    let armed = false;
-    document.addEventListener('pointerup', () => setTimeout(() => { armed = true; }, 150), { once: true });
-    sheet.addEventListener('click', (e) => {
-      if (e.target === sheet && armed) this.closeSheet();
-    });
-    this.root.appendChild(sheet);
-    this.sheet = sheet;
-  }
-
-  closeSheet() {
-    if (this.sheet) this.sheet.remove();
-    this.sheet = null;
-  }
-
   // Panel header with a close button (Tab/M/Esc on keyboard).
   titleBar(text, hint) {
-    const bar = el('div', 'panel-title', `<span>${text}</span><span class="close">${this.game.input.touch ? '' : hint}</span>`);
+    const bar = el('div', 'panel-title', `<span>${text}</span><span class="close">${hint}</span>`);
     const x = el('button', 'x', '✕');
     x.onclick = () => this.closeMenus();
     bar.querySelector('.close').appendChild(x);
@@ -1112,10 +1046,14 @@ export class UI {
     const box = el('div', 'settings');
     const q = getQualityName();
     box.innerHTML = `
-      <label class="setting">${this.game.input.touch ? 'Look' : 'Mouse'} sensitivity <input type="range" class="sens" min="0.0006" max="0.006" step="0.0001"></label>
+      <label class="setting">Mouse sensitivity <input type="range" class="sens" min="0.0006" max="0.006" step="0.0001"></label>
       <label class="setting">Volume <input type="range" class="vol" min="0" max="1" step="0.05"></label>
       <div class="setting">Graphics <span class="seg">${Object.entries(QUALITY).map(([k, v]) => `<button class="seg-b ${k === q ? 'on' : ''}" data-q="${k}">${v.label}</button>`).join('')}</span></div>
       <div class="q-note hidden"></div>
+      <div class="setting">Frame-rate cap <span class="seg fps">${FPS_CAPS.map((v) => `<button class="seg-b ${v === this.game.fpsCap ? 'on' : ''}" data-v="${v}">${v || 'Off'}</button>`).join('')}</span></div>
+      <div class="setting">Resolution <span class="seg res">${RES_SCALES.map((v) => `<button class="seg-b ${v === getResScale() ? 'on' : ''}" data-v="${v}">${Math.round(v * 100)}%</button>`).join('')}</span></div>
+      <label class="setting">Show FPS <input type="checkbox" class="showfps" ${this.game.showFps ? 'checked' : ''}></label>
+      <div class="q-tip">Using a lot of CPU? Lower the frame-rate cap and resolution first, then graphics.</div>
       <button class="btn ghost fs">Fullscreen</button>`;
     if (!inRaid && currentUser()) box.prepend(this.accountBlock());
     const sens = box.querySelector('.sens');
@@ -1131,11 +1069,33 @@ export class UI {
       Audio.setVolume(this.volume);
       try { localStorage.setItem('scrapfall_vol', vol.value); } catch (e) { /* ignore */ }
     };
+    // frame cap and resolution apply immediately
+    const seg = (sel, apply) => {
+      for (const b of box.querySelectorAll(`${sel} .seg-b`)) {
+        b.onclick = () => {
+          apply(Number(b.dataset.v));
+          box.querySelectorAll(`${sel} .seg-b`).forEach((x) => x.classList.toggle('on', x === b));
+          Audio.playUI();
+        };
+      }
+    };
+    seg('.fps', (v) => {
+      setFpsCap(v);
+      this.game.fpsCap = v;
+    });
+    seg('.res', (v) => {
+      setResScale(v);
+      this.game.applyResolution();
+    });
+    box.querySelector('.showfps').onchange = (e) => {
+      this.game.showFps = e.target.checked;
+      setShowFps(e.target.checked);
+    };
     const note = box.querySelector('.q-note');
-    for (const b of box.querySelectorAll('.seg-b')) {
+    for (const b of box.querySelectorAll('.seg-b[data-q]')) {
       b.onclick = () => {
         setQualityName(b.dataset.q);
-        box.querySelectorAll('.seg-b').forEach((x) => x.classList.toggle('on', x === b));
+        box.querySelectorAll('.seg-b[data-q]').forEach((x) => x.classList.toggle('on', x === b));
         note.classList.remove('hidden');
         if (inRaid) {
           note.textContent = 'Applies the next time the game starts (after this raid).';
@@ -1248,7 +1208,6 @@ export class UI {
     const g = this.game;
     const p = g.profile;
     this.hideTooltip();
-    this.closeSheet();
     this.closeContextMenu();
     this.menus.innerHTML = '';
     const hub = el('div', 'hub');
@@ -1279,7 +1238,6 @@ export class UI {
     });
     hub.querySelector('.deploy').onclick = () => {
       Audio.initAudio();
-      if (this.game.input.touch) goFullscreen();
       this.game.enterExplore();
     };
     hub.querySelector('.home-btn').onclick = () => this.game.goHome();
@@ -1336,7 +1294,6 @@ export class UI {
       }
     }
     Audio.initAudio();
-    if (this.game.input.touch) goFullscreen();
     Audio.playLift();
     this.menus.innerHTML = '';
     this.fade.classList.add('on');
@@ -1410,7 +1367,7 @@ export class UI {
     left.appendChild(kitRow);
 
     const right = el('div', 'hub-col wide');
-    right.appendChild(el('div', 'col-title', `STASH <small>${freeSlots(p.stash)} / ${p.stash.length} free · ${g.input.touch ? 'tap to load, hold for more' : 'click to load, right-click for more'}</small>`));
+    right.appendChild(el('div', 'col-title', `STASH <small>${freeSlots(p.stash)} / ${p.stash.length} free · click to load, right-click for more</small>`));
     const stash = el('div', 'grid stash');
     p.stash.forEach((s, i) => stash.appendChild(this.tile(s, {
       hint: s ? 'Click: move to loadout · Right-click: sell, move, repair' : '',
@@ -1682,14 +1639,11 @@ export class UI {
 
   // How a raid works, Husk notes and controls (PC or phone).
   guideHtml() {
-    const touch = this.game.input.touch;
-    const controls = touch
-      ? 'Left thumb: move (push to the edge to sprint) · Right thumb: look · FIRE (hold and drag to aim) · AIM · STICK swings your melee stick · RELOAD · JUMP · CROUCH · ROLL · USE appears near loot and lifts · SWAP, HOLSTER, HEAL, SHIELD and NADE on the left · tap an item to use it, hold it for more'
-      : 'WASD move · Shift sprint · Space jump · C crouch · V dodge roll · Mouse aim/fire · RMB aim down sights · R reload · 1/2 or wheel swap weapon · F swing your stick · H holster (move faster) · 3 heal · 4 recharge shield · G grenade · E interact (hold) · Tab backpack · M map · Esc pause';
+    const controls = 'WASD move · Shift sprint · Space jump · C crouch · V dodge roll · Mouse aim/fire · RMB aim down sights · R reload · 1/2 or wheel swap weapon · F swing your stick · H holster (move faster) · 3 heal · 4 recharge shield · G grenade · E interact (hold) · Tab backpack · M map · Esc pause';
     return `
       <div class="guide">
         <h3>How a raid works</h3>
-        <p>Everything in your loadout comes topside with you. Search crates, lockers, cars and Husk pods for materials and valuables, destroy Husks and loot their wrecks, then <b>call a lift</b> at one of the four extraction points. Hold out while it arrives (the noise draws Husks in), step inside and hold <b>${touch ? 'USE' : 'E'}</b>.</p>
+        <p>Everything in your loadout comes topside with you. Search crates, lockers, cars and Husk pods for materials and valuables, destroy Husks and loot their wrecks, then <b>call a lift</b> at one of the four extraction points. Hold out while it arrives (the noise draws Husks in), step inside and hold <b>E</b>.</p>
         <p>Die, or still be topside when the ${Math.round(RAID_SECONDS / 60)}-minute raid clock runs out, and you lose everything you carried except your <b>safe pocket</b>.</p>
         <h3>Between raids</h3>
         <p>In the Burrow, move gear between your stash and loadout, buy from Tobias and Nia, sell loot, and craft at the Workbench. Broke? Take the free kit.</p>
@@ -1713,8 +1667,8 @@ export class UI {
       const e = el('div', 'explore-hud hidden');
       e.innerHTML = `
         <div class="room-label"><small>PATRON'S SANCTUARY</small><span></span></div>
-        <div class="prompt hidden"><span class="key">${this.game.input.touch ? 'USE' : 'E'}</span><span class="text"></span><div class="bar"><div class="fill"></div></div></div>
-        <div class="explore-help">${this.game.input.touch ? 'Left thumb: move · Right thumb: look · BAG: stash · ❚❚: menu' : 'WASD move · Shift run · E interact · Tab stash & loadout · Esc menu'}</div>`;
+        <div class="prompt hidden"><span class="key">E</span><span class="text"></span><div class="bar"><div class="fill"></div></div></div>
+        <div class="explore-help">WASD move · Shift run · E interact · Tab stash & loadout · Esc menu</div>`;
       this.root.appendChild(e);
       this.exploreHud = e;
     }
@@ -1745,7 +1699,6 @@ export class UI {
   // Panels opened by walking up to something in the Sanctuary.
   openExplorePanel(kind, arg) {
     const g = this.game;
-    this.closeSheet();
     this.closeContextMenu();
     this.hideTooltip();
     this.open = 'panel';
@@ -1849,7 +1802,6 @@ export class UI {
   showHome() {
     this.hud.classList.add('hidden');
     this.open = null;
-    this.closeSheet();
     this.hideTooltip();
     this.menus.innerHTML = '';
     this.menus.appendChild(renderHome(this));
@@ -1866,7 +1818,6 @@ export class UI {
   showLogin() {
     this.hud.classList.add('hidden');
     this.open = null;
-    this.closeSheet();
     this.hideTooltip();
     this.menus.innerHTML = '';
     this.menus.appendChild(renderLogin(this));
@@ -1886,7 +1837,6 @@ export class UI {
   leaveHome() {
     if (this.modal) this.modal.close();
     Audio.initAudio();
-    if (this.game.input.touch) goFullscreen();
     this.game.enterHub();
   }
 

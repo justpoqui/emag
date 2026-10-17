@@ -18,8 +18,7 @@ import {
   blankProfile, loadoutWeight, durability, saveProfile, addToSlots, removeFrom, loadoutValue, emptyLoadout, countIn,
 } from './inventory.js';
 import * as Audio from './audio.js';
-import { getQuality, IS_TOUCH } from './settings.js';
-import { TouchControls } from './touch.js';
+import { getQuality, getFpsCap, getResScale, getShowFps } from './settings.js';
 import { Sanctuary } from './sanctuary.js';
 import { Infrastructure } from './infrastructure.js';
 import {
@@ -49,10 +48,11 @@ export class Game {
     const quality = getQuality();
     this.quality = quality;
     const renderer = new THREE.WebGLRenderer({ antialias: quality.antialias, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.pixelRatio));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.pixelRatio) * getResScale());
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = quality.shadows;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // soft shadows cost several extra lookups per pixel; only High pays for them
+    renderer.shadowMap.type = quality.shadowMap >= 2048 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -143,10 +143,6 @@ export class Game {
       this.ui.volume = this.savedVolume;
       Audio.setVolume(this.savedVolume);
     }
-    if (IS_TOUCH) {
-      document.body.classList.add('touch');
-      this.touch = new TouchControls(this.input, this);
-    }
     this.input.onLockChange = (locked) => {
       if (!locked && this.mode === 'raid' && !this.ui.menuOpen() && this.player.alive) this.setPaused(true);
       if (!locked && this.mode === 'explore' && !this.ui.menuOpen()) this.ui.showExplorePause();
@@ -163,6 +159,8 @@ export class Game {
     this.clock = new THREE.Clock();
     this.player.alive = false; // keeps menu-scene Husks from noticing the hidden player
     this.ui.showLogin();
+    this.fpsCap = getFpsCap();
+    this.showFps = getShowFps();
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
   }
@@ -426,7 +424,6 @@ export class Game {
   updateExplore(dt) {
     const input = this.input;
     const menu = this.ui.menuOpen();
-    if (this.touch) this.touch.update(!menu, !!this.exploreTarget);
     if (!menu) {
       if (input.hit('Tab') || input.hit('KeyI')) this.ui.openExplorePanel('stash');
     } else if (input.hit('Escape') || (this.ui.open === 'panel' && input.hit('Tab'))) {
@@ -545,7 +542,6 @@ export class Game {
   endRaid(extracted, reason) {
     if (this.mode !== 'raid') return;
     this.mode = 'results';
-    if (this.touch) this.touch.update(false, false);
     this.using = null;
     this.input.unlock();
     Audio.setWind(false);
@@ -631,7 +627,6 @@ export class Game {
 
   setPaused(on) {
     this.paused = on;
-    if (this.touch && on) this.touch.update(false, false);
     this.ui.showPause(on);
     if (!on) this.input.lock();
   }
@@ -1102,8 +1097,28 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
-  loop() {
+  // Apply the resolution scale setting right away.
+  applyResolution() {
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality.pixelRatio) * getResScale());
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  loop(now) {
     requestAnimationFrame(this.loop);
+    // frame-rate cap: skip frames that come sooner than the cap allows. Menus
+    // only need 30 fps for the room behind them.
+    const menus = (this.mode !== 'raid' && this.mode !== 'explore') || this.paused || (this.ui && this.ui.menuOpen && this.ui.menuOpen());
+    const cap = menus ? 30 : this.fpsCap;
+    // how often the monitor refreshes (smoothed), so a cap at or above it never drops frames
+    if (this.lastTick !== undefined) this.tickMs = this.tickMs ? this.tickMs * 0.95 + (now - this.lastTick) * 0.05 : now - this.lastTick;
+    this.lastTick = now;
+    if (cap && !(this.tickMs > (1000 / cap) * 0.85)) {
+      const interval = 1000 / cap;
+      if (this.lastFrame !== undefined && now - this.lastFrame < interval * 0.9) return;
+      // step the schedule by whole intervals so odd refresh rates still average out to the cap
+      this.lastFrame = this.lastFrame === undefined || now - this.lastFrame > interval * 2 ? now : this.lastFrame + interval;
+    }
+    this.countFps(now);
     const dt = Math.min(0.05, this.clock.getDelta());
     this.time += dt;
     if (this.mode === 'raid') {
@@ -1122,6 +1137,27 @@ export class Game {
       this.renderer.render(this.sanctuary.scene, this.sanctuary.camera);
     }
     this.input.endFrame();
+  }
+
+  // Optional on-screen frame counter (Settings → Show FPS).
+  countFps(now) {
+    if (!this.showFps) {
+      if (this.fpsEl) this.fpsEl.style.display = 'none';
+      return;
+    }
+    if (!this.fpsEl) {
+      this.fpsEl = document.createElement('div');
+      this.fpsEl.className = 'fps-counter';
+      document.body.appendChild(this.fpsEl);
+    }
+    this.fpsEl.style.display = '';
+    this.fpsFrames = (this.fpsFrames || 0) + 1;
+    if (!this.fpsStart) this.fpsStart = now;
+    if (now - this.fpsStart >= 500) {
+      this.fpsEl.textContent = `${Math.round((this.fpsFrames * 1000) / (now - this.fpsStart))} FPS`;
+      this.fpsFrames = 0;
+      this.fpsStart = now;
+    }
   }
 
   updateSun() {
@@ -1158,7 +1194,6 @@ export class Game {
     const input = this.input;
     const p = this.player;
     const menu = this.ui.menuOpen();
-    if (this.touch) this.touch.update(!menu && p.alive, !!this.interact.target);
 
     // ---- keys ----
     if (input.hit('Tab') || input.hit('KeyI')) this.ui.toggleInventory();
@@ -1231,9 +1266,11 @@ export class Game {
     // ---- world ----
     const ctx = this.getHuskCtx();
     for (const e of this.enemies) {
-      // far-away Husks think less often (5x a second past 60 m, 2x past 120 m)
+      // far-away Husks think less often: ones that aren't fighting drop to 10x
+      // a second past 40 m, 5x past 70 m, 2x past 120 m
       const d = e.pos.distanceTo(p.pos);
-      const every = d > 120 ? 0.5 : d > 60 && e.state !== 'alert' ? 0.2 : d > 90 ? 0.1 : 0;
+      const calm = e.state !== 'alert';
+      const every = d > 120 ? 0.5 : calm && d > 70 ? 0.2 : calm && d > 40 ? 0.1 : d > 90 ? 0.1 : 0;
       if (every) {
         e._skip = (e._skip || 0) + dt;
         if (e._skip < every) continue;

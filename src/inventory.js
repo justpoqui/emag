@@ -1,7 +1,7 @@
 // Slot-based inventory helpers, plus the saved profile (localStorage).
 
 import { ITEMS, BAG_SLOTS, SAFE_SLOTS, STASH_SLOTS, START_CREDITS, stackSize, FREE_KIT, MAX_DURABILITY, isDurable } from './config.js';
-import { cleanMemory } from './network.js';
+import { cleanMemory, blankMemory } from './network.js';
 
 
 export function makeStack(id, n = 1) {
@@ -46,7 +46,7 @@ function template() {
   stash[3] = makeStack('fabric', 4);
   const loadout = emptyLoadout();
   applyFreeKit(loadout);
-  return { credits: START_CREDITS, stash, loadout, stats: { raids: 0, extracts: 0, deaths: 0, kills: 0 }, level: 1, xp: 0 };
+  return { credits: START_CREDITS, stash, loadout, stats: { raids: 0, extracts: 0, deaths: 0, kills: 0 }, level: 1, xp: 0, network: blankMemory() };
 }
 
 // Item ids from older saves, renamed since.

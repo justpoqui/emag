@@ -5,11 +5,11 @@ Drop topside into the ruined Dustline, scavenge, fight Husks and get
 to a lift before the raid clock runs out. Die and you lose everything you
 carried except your safe pocket.
 
-It runs in any modern browser on PC or phone. Everything is built from code: the
+It runs in any modern desktop browser, played with mouse and keyboard. Everything is built from code: the
 map, models, UI and sounds (synthesized with WebAudio), so there are no asset
 files.
 
-## Play it (PC and phone)
+## Play it
 
 Every push to the `3d-shooter` branch builds the game and publishes it to the
 `gh-pages` branch. Turn on GitHub Pages once:
@@ -19,12 +19,24 @@ Every push to the `3d-shooter` branch builds the game and publishes it to the
    pick **gh-pages** and **/ (root)**, and save.
 3. After a minute the game is live at **https://justpoqui.github.io/projects/**.
 
-Open that link on your PC or your phone.
+This link is lighter than the Claude page, which runs the game inside
+claude.ai.
 
-**On a phone:** play in landscape. For true fullscreen, add it to your home
-screen (Safari: Share → *Add to Home Screen*; Chrome on Android: ⋮ → *Add to
-Home screen* / *Install app*). It then opens like an app, without the
-browser bars. Your progress is stored on each device separately.
+## Performance
+
+If the game uses a lot of CPU:
+
+1. **Check the browser is drawing on your graphics card.** Open
+   `chrome://gpu` (Chrome or Edge). If WebGL says *Software only* or
+   *SwiftShader*, turn on *Use graphics acceleration when available* in the
+   browser's Settings → System and restart it.
+2. **Settings → Frame-rate cap.** 60 by default; 30 halves the work again.
+   *Off* draws as fast as your monitor refreshes (144 Hz = 144 frames a second).
+3. **Settings → Resolution.** 75% or 60% draws far fewer pixels.
+4. **Settings → Graphics.** Low turns off shadows and grass.
+
+Menus and the pause screen always run at 30 fps. *Show FPS* puts a frame
+counter in the corner.
 
 ## Running it locally
 
@@ -61,7 +73,7 @@ Tab opens your stash & loadout anywhere; Esc opens the Sanctuary menu.
 **Shields** don't refill on their own. Use a Shield Cell: key 4 in a raid, or
 right-click your shield (or a cell) in the stash or loadout and pick *Recharge*.
 
-**Dismantling:** right-click (or hold on a phone) an item for *Dismantle*, or use
+**Dismantling:** right-click an item for *Dismantle*, or use
 the Salvage bench. Weapons, shields, consumables, valuables and the rarer
 materials break down into basic materials (worn gear gives less).
 
@@ -125,26 +137,7 @@ The Husks learn. Every raid they remember what you did to them and where
 
 The Raider Log tab shows what the network has learned about you.
 
-## Phone controls
-
-| Control | Action |
-| --- | --- |
-| Left thumb, anywhere on the lower left | Move (push the stick to the edge to sprint) |
-| Right thumb, anywhere else | Look |
-| FIRE | Shoot. Keep your thumb down and drag to aim while firing |
-| AIM | Toggle aim down sights |
-| RELOAD / JUMP / CROUCH / ROLL | As on PC |
-| STICK / HOLSTER | Swing the stick / put your gun away to move faster |
-| USE | Appears near something you can search or a lift; hold it |
-| SWAP / HEAL / SHIELD / NADE | Left column |
-| ❚❚ / MAP / BAG | Top left |
-| Tap an item | Its main action (use, equip, take, load…) |
-| Hold an item | Details, plus every other action (safe pocket, drop, sell) |
-
-Bullets get a small aim assist on touch screens. Phones default to **Low**
-graphics; change it under **Settings** in the hub or in the pause menu.
-
-## PC controls
+## Controls
 
 | Key | Action |
 | --- | --- |
@@ -187,8 +180,7 @@ shooter/
     effects.js     tracers, sparks, explosions, damage numbers
     audio.js       synthesized sound effects
     input.js       keyboard / mouse / pointer lock
-    touch.js       on-screen controls for phones and tablets
-    settings.js    device detection and Low / Medium / High graphics presets
+    settings.js    graphics presets, frame-rate cap, resolution scale
     rng.js         seeded RNG and loot rolls
 ```
 

@@ -16,7 +16,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; touch-action: manipulation; background: #1d1c1a; color: var(--cream); font-family: var(--body); user-select: none; }
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #1d1c1a; color: var(--cream); font-family: var(--body); user-select: none; }
 #app canvas { display: block; }
 #overlay { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
 #numbers { position: absolute; inset: 0; overflow: hidden; }
@@ -272,53 +272,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .q-note { color: var(--yellow); font-size: 14px; display: flex; gap: 10px; align-items: center; }
 .settings-tab .hub-col { min-width: 420px; }
 
-/* long-press item sheet (touch) */
+/* dialog backdrop (ask) */
 .sheet { position: fixed; inset: 0; z-index: 70; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; pointer-events: auto; }
 .sheet > * { background: var(--ink); }
-.sheet-info { width: 260px; padding: 14px; border-top: 3px solid var(--orange); font-size: 14px; }
-.sheet-btns { display: flex; flex-direction: column; padding: 8px 14px 14px 0; gap: 0; }
-.sheet-btns .btn { margin-top: 6px; }
 
-/* ---------------- touch controls ---------------- */
-#touch { position: fixed; inset: 0; z-index: 3; touch-action: none; user-select: none; -webkit-user-select: none; }
-#touch.hidden { display: none; }
-.t-look { position: absolute; inset: 0; }
-.t-stick-zone { position: absolute; left: 0; top: 30%; bottom: 0; width: 42%; }
-.t-stick { position: absolute; left: -60px; top: -60px; width: 120px; height: 120px; border-radius: 50%; border: 2px solid rgba(244, 234, 216, 0.35); background: rgba(20, 18, 16, 0.25); pointer-events: none; }
-.t-knob { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(244, 234, 216, 0.55); }
-.t-btn { font-family: var(--font); font-weight: 800; letter-spacing: 0.06em; color: var(--cream); background: rgba(20, 18, 16, 0.45); border: 2px solid rgba(244, 234, 216, 0.35); border-radius: 50%; width: 58px; height: 58px; font-size: 12px; padding: 0; touch-action: none; }
-.t-btn.down { background: rgba(244, 234, 216, 0.45); color: var(--ink); }
-.t-btn.on { background: var(--orange); border-color: var(--orange); color: #fff; }
-.t-btn.small { border-radius: 8px; width: auto; height: 36px; padding: 0 12px; font-size: 12px; }
-.t-right { position: absolute; right: calc(14px + env(safe-area-inset-right)); bottom: 14px; width: 220px; height: 210px; }
-.t-right .t-btn { position: absolute; }
-.t-right .fire { right: 0; bottom: 20px; width: 92px; height: 92px; font-size: 16px; border-color: rgba(234, 106, 44, 0.8); background: rgba(234, 106, 44, 0.3); }
-.t-right .aim { right: 100px; bottom: 0; }
-.t-right [data-key='KeyR'] { right: 100px; bottom: 66px; }
-.t-right [data-key='Space'] { right: 22px; bottom: 122px; }
-.t-right [data-key='KeyC'] { right: 160px; bottom: 34px; }
-.t-right [data-key='KeyV'] { right: 84px; bottom: 132px; }
-.t-right .interact { right: 160px; bottom: 165px; width: 70px; height: 70px; font-size: 15px; border-color: var(--yellow); background: rgba(242, 193, 78, 0.35); }
-.t-top { position: absolute; left: calc(12px + env(safe-area-inset-left)); top: 10px; display: flex; gap: 6px; }
-.t-items { position: absolute; left: calc(12px + env(safe-area-inset-left)); top: 54px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-
-/* the HUD moves out of the thumbs' way on touch */
-body.touch .vitals { left: 50%; transform: translateX(-50%); bottom: 10px; width: 240px; gap: 4px; }
-body.touch .vitals .bar { height: 10px; }
-body.touch .vitals .num { font-size: 14px; width: 28px; }
-body.touch .weapon-panel { right: calc(18px + env(safe-area-inset-right)); bottom: 232px; width: auto; }
-body.touch .weapon-panel .quick, body.touch .weapon-panel .slots { display: none; }
-body.touch .weapon-panel .mag { font-size: 34px; }
-body.touch .weapon-panel .reserve { font-size: 16px; }
-body.touch .help { display: none; }
-body.touch .notes { top: 48px; left: 50%; transform: translateX(-50%); width: 320px; align-items: center; }
-body.touch .note { font-size: 14px; padding: 4px 10px; }
-body.touch .raid-timer { right: calc(14px + env(safe-area-inset-right)); top: 10px; padding: 3px 10px; }
-body.touch .raid-timer .time { font-size: 20px; }
-body.touch .raid-timer .label { display: none; }
-body.touch .compass { top: 8px; width: 300px; }
-body.touch .prompt { top: auto; bottom: 84px; font-size: 15px; }
-body.touch .use-bar { bottom: 140px; }
 
 /* ---------------- small screens (phones, landscape) ---------------- */
 @media (max-height: 520px), (max-width: 760px) {
@@ -375,13 +332,6 @@ body.touch .use-bar { bottom: 140px; }
   .setting { font-size: 15px; }
 }
 
-/* portrait phones: ask for landscape */
-.rotate { display: none; }
-@media (orientation: portrait) and (max-width: 760px) {
-  body.touch .rotate { display: flex; position: fixed; inset: 0; z-index: 100; background: var(--ink); color: var(--cream); flex-direction: column; align-items: center; justify-content: center; font-family: var(--font); font-size: 24px; letter-spacing: 0.08em; text-align: center; gap: 12px; }
-  .rotate .icon { font-size: 64px; animation: tilt 1.6s ease-in-out infinite; }
-}
-@keyframes tilt { 50% { transform: rotate(90deg); } }
 
 .ask { background: var(--ink); border-top: 3px solid var(--orange); padding: 18px 20px; max-width: 420px; display: flex; flex-direction: column; gap: 6px; }
 .ask-text { font-family: var(--font); font-size: 20px; }
@@ -567,8 +517,6 @@ body.touch .use-bar { bottom: 140px; }
 .explore-panel { width: min(1180px, 96vw); }
 .explore-panel .panel-creds { font-family: var(--font); font-weight: 800; font-size: 20px; color: var(--yellow); letter-spacing: 0.04em; margin-right: 12px; }
 .explore-panel .hub-body { padding: 14px 18px; max-height: calc(90vh - 70px); overflow: auto; }
-body.exploring #touch .t-right [data-act=fire], body.exploring #touch .t-right [data-act=aim], body.exploring #touch .t-right [data-key=KeyR],
-body.exploring #touch .t-right .melee, body.exploring #touch .t-right [data-key=KeyV], body.exploring #touch .t-items, body.exploring #touch [data-act=map] { display: none; }
 
 /* checkout: panel on the left, live preview of the drop behind it */
 .menus:has(.checkout-panel) { justify-content: flex-start; padding-left: calc(24px + env(safe-area-inset-left)); }
@@ -601,3 +549,6 @@ body.exploring #touch .t-right .melee, body.exploring #touch .t-right [data-key=
 .net-bar div { flex: 1; height: 6px; background: rgba(255, 255, 255, 0.08); }
 .net-bar i { display: block; height: 100%; }
 .net-card ul { margin: 10px 0 0; padding-left: 18px; font-size: 14px; line-height: 1.5; }
+
+.q-tip { font-size: 13px; color: var(--cream-dim); }
+.fps-counter { position: fixed; top: 8px; left: 8px; z-index: 200; font-family: var(--font); font-size: 15px; font-weight: 700; color: var(--teal); background: rgba(0, 0, 0, 0.45); padding: 2px 8px; pointer-events: none; }

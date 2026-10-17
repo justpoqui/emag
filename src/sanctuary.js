@@ -458,7 +458,7 @@ export class Sanctuary {
     return best;
   }
 
-  // look: whether mouse/touch look and movement apply (no menu open)
+  // look: whether mouse look and movement apply (no menu open)
   updateExplore(dt, input, look, sensitivity) {
     this.time += dt;
     const p = this.player;

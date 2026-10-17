@@ -73,7 +73,7 @@ export function renderHome(ui) {
     </aside>
     <footer class="home-foot">
       <span>v${VERSION}</span>
-      <span>${g.input.touch ? 'Progress saves on this device' : 'Press Enter to play · progress saves in this browser'}</span>
+      <span>Press Enter to play · progress saves in this browser</span>
     </footer>`;
 
   // posts from the admin go above the built-in notes
@@ -203,7 +203,7 @@ export function renderLogin(ui) {
     ready = true;
     go.disabled = false;
     setMode(mode);
-    if (!ui.game.input.touch) user.focus();
+    user.focus();
   });
   return wrap;
 }

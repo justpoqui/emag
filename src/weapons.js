@@ -291,10 +291,8 @@ export class Weapons {
       const along = toE.dot(dir);
       if (along < 0 || along > best.dist + 4) continue;
       if (toE.lengthSq() - along * along > 16) continue;
-      // touch aiming is harder, so player bullets get a little help on phones
-      const assist = game.input.touch ? 1.3 : 1;
       for (const hb of e.hitboxes()) {
-        const t = raySphere(origin, dir, hb.center.x, hb.center.y, hb.center.z, hb.r * assist);
+        const t = raySphere(origin, dir, hb.center.x, hb.center.y, hb.center.z, hb.r);
         if (t !== null && t < best.dist) {
           best = { dist: t, enemy: e, mult: hb.mult, weak: hb.weak };
         } else if (t !== null && best.enemy === e && hb.weak && Math.abs(t - best.dist) < hb.r) {
