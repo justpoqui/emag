@@ -12,6 +12,8 @@ export class Input {
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Tab' || e.code === 'AltLeft' || (e.code === 'Space' && this.locked)) e.preventDefault();
+      // Backspace closes windows; don't let it do anything else (unless typing)
+      if (e.code === 'Backspace' && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '')) e.preventDefault();
       if (!e.repeat) this.pressed.add(e.code);
       this.keys.add(e.code);
     });

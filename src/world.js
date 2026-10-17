@@ -10,6 +10,8 @@ import { makeRng } from './rng.js';
 const TOWN = { x: -20, z: -10 };
 // the oil refinery in the south east, with a lift in the middle of it
 const REFINERY = { x: 165, z: 75 };
+// Crucible Works: the robots' factory, walled, south of the West Lift
+const FACTORY = { x: -150, z: 95 };
 
 function mat(color, opts = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: opts.roughness ?? 0.9, metalness: opts.metalness ?? 0.05, ...opts });
@@ -44,6 +46,10 @@ export function buildWorld(scene, opts = {}) {
     pipe: mat(0x8a8f92, { roughness: 0.45, metalness: 0.7 }),
     hazard: mat(0xe8b830, { roughness: 0.6 }),
     tire: mat(0x1c1c1c, { roughness: 0.9 }),
+    corrugated: mat(0x7a7f80, { roughness: 0.6, metalness: 0.5 }),
+    sandbag: mat(0xb8a27a, { roughness: 1 }),
+    gasCan: mat(0xb8321f, { roughness: 0.5, metalness: 0.3 }),
+    forge: new THREE.MeshStandardMaterial({ color: 0x401000, emissive: 0xff6a10, emissiveIntensity: 2.2 }),
     barrels: [mat(0x2a4a7a, { metalness: 0.4, roughness: 0.6 }), mat(0x7a2a22, { metalness: 0.4, roughness: 0.6 }), mat(0x202224, { metalness: 0.4, roughness: 0.6 }), mat(0xb89a30, { metalness: 0.4, roughness: 0.6 })],
     rock: mat(0x7d756a, { flatShading: true }),
     trunk: mat(0x4a3a2a),
@@ -100,9 +106,10 @@ export function buildWorld(scene, opts = {}) {
 
   // A spot where loot can appear. Each raid picks a random set of spots and a
   // random container type from the spot's pool, so caches move between raids.
-  function addContainer(pool, x, y, z, rotY = 0) {
+  // always: filled every raid (caches under camp tarps, survivor shacks)
+  function addContainer(pool, x, y, z, rotY = 0, always = false) {
     const types = Array.isArray(pool) ? pool : [pool];
-    containers.push({ pool: types, type: types[0], x, y, z, rotY });
+    containers.push({ pool: types, type: types[0], x, y, z, rotY, always });
   }
 
   // ---------- terrain ----------
@@ -728,7 +735,7 @@ export function buildWorld(scene, opts = {}) {
   for (let i = 0; i < 10; i++) {
     const x = rng.range(-190, 190);
     const z = rng.range(-190, 190);
-    if (Math.hypot(x - TOWN.x, z - TOWN.z) < 90 || Math.hypot(x - REFINERY.x, z - REFINERY.z) < 48) continue;
+    if (Math.hypot(x - TOWN.x, z - TOWN.z) < 90 || Math.hypot(x - REFINERY.x, z - REFINERY.z) < 48 || Math.hypot(x - FACTORY.x, z - FACTORY.z) < 62) continue;
     const g = ground(x, z);
     // probe pod half-buried
     box(M.huskHull, x, g + 0.5, z, 1.4, 1.4, 2.2, { rotY: rng.range(0, 3), rotX: 0.3, tag: 'metal' });
@@ -736,16 +743,380 @@ export function buildWorld(scene, opts = {}) {
     addContainer(['husk_pod', 'husk_pod', 'crate'], x + 1.6, g, z);
     if (rng.chance(0.6)) enemySpawns.push({ type: rng.pick(['skitter', 'skitter', 'buzzer']), x, z, radius: 16, count: rng.int(1, 3) });
   }
-  // raider camps with tarps
-  for (let i = 0; i < 6; i++) {
+  const stoneGeo = new THREE.DodecahedronGeometry(1, 0);
+
+  // ---------- Crucible Works: the robot factory (south of the West Lift) ----------
+  // A walled plant where the Crucible AI builds its Husks. Stretches of the
+  // outer wall have fallen; survivors have built shacks, towers and nests into
+  // the ones still standing. Four big buildings each make one kind of part.
+  {
+    const F = FACTORY;
+    const HW = 35; // half width (x)
+    const HD = 30; // half depth (z)
+    const at = (dx, dz) => [F.x + dx, F.z + dz, ground(F.x + dx, F.z + dz)];
+    const WALL_H = 4.5;
+    const SEG = 5;
+    const factorySign = (lines, x, y, z, rotY, w = 6, h = 1.5) => {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 128;
+      const g2 = c.getContext('2d');
+      g2.fillStyle = '#1d1c1a';
+      g2.fillRect(0, 0, 512, 128);
+      g2.fillStyle = '#ff6a20';
+      g2.fillRect(0, 0, 512, 10);
+      g2.fillStyle = '#f4ead8';
+      g2.textAlign = 'center';
+      g2.font = '800 54px "Barlow Condensed", "Arial Narrow", sans-serif';
+      g2.fillText(lines[0], 256, 66);
+      g2.fillStyle = '#ff9a5a';
+      g2.font = '600 28px "Barlow Condensed", "Arial Narrow", sans-serif';
+      g2.fillText(lines[1], 256, 106);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.25 }));
+      m.position.set(x, y, z);
+      m.rotation.y = rotY;
+      scene.add(m);
+    };
+
+    // ---- the outer wall: four sides of 5 m segments; gates east and north
+    const sides = [
+      { axis: 'x', fixed: -HD, from: -HW, to: HW, inward: 1, gate: 0 }, // north (z-)
+      { axis: 'x', fixed: HD, from: -HW, to: HW, inward: -1, gate: null }, // south
+      { axis: 'z', fixed: -HW, from: -HD, to: HD, inward: 1, gate: null }, // west
+      { axis: 'z', fixed: HW, from: -HD, to: HD, inward: -1, gate: 0 }, // east, facing the town
+    ];
+    const built = [];
+    for (const side of sides) {
+      for (let t = side.from + SEG / 2; t < side.to; t += SEG) {
+        if (side.gate !== null && Math.abs(t - side.gate) < SEG) continue; // gateway
+        const [x, z, g] = side.axis === 'x' ? at(t, side.fixed) : at(side.fixed, t);
+        const sx = side.axis === 'x' ? SEG : 0.6;
+        const sz = side.axis === 'x' ? 0.6 : SEG;
+        if (rng.chance(0.4)) {
+          // fallen: a stub and rubble
+          const h = rng.range(0.4, 1.6);
+          box(M.concreteDark, x, g + h / 2, z, sx, h, sz);
+          for (let k = 0; k < 4; k++) geoAt(M.concrete, stoneGeo, x + rng.range(-2, 2) * (side.axis === 'x' ? 1 : 0.2), g + 0.2, z + rng.range(-2, 2) * (side.axis === 'z' ? 1 : 0.2), rng.range(0, 6), rng.range(0.3, 0.7));
+          continue;
+        }
+        box(M.concrete, x, g + WALL_H / 2 - 0.3, z, sx, WALL_H + 0.6, sz);
+        box(M.stripe, x, g + WALL_H - 0.6, z, sx + 0.02, 0.25, sz + 0.02, { collide: false });
+        if (rng.chance(0.38)) built.push({ side, t, x, z, g });
+      }
+    }
+    // ---- what survivors built into the standing wall (on its inside face)
+    for (const b of built) {
+      const { side } = b;
+      const n = side.inward; // which way is "inside"
+      // local frame: u along the wall, v away from it, inward
+      const P = (u, v) => (side.axis === 'x' ? [b.x + u, b.z + v * n] : [b.x + v * n, b.z + u]);
+      const rotY = side.axis === 'x' ? 0 : Math.PI / 2;
+      const kind = rng.pick(['shack', 'tower', 'shanty', 'nest']);
+      if (kind === 'shack') {
+        // a lean-to: corrugated roof sloping off the wall, plank side walls, a cache inside
+        for (const u of [-2.2, 2.2]) {
+          const [px, pz] = P(u, 1.6);
+          box(M.wood, px, b.g + 1.2, pz, side.axis === 'x' ? 0.12 : 3.2, 2.4, side.axis === 'x' ? 3.2 : 0.12);
+        }
+        const [rx, rz] = P(0, 1.6);
+        const roof = new THREE.BoxGeometry(4.8, 0.06, 3.6);
+        roof.rotateX(-0.28);
+        if (n < 0) roof.rotateY(Math.PI);
+        roof.rotateY(rotY);
+        roof.translate(rx, b.g + 2.85, rz);
+        pushGeo(M.corrugated, roof);
+        const [cx, cz] = P(-1, 1.2);
+        addContainer(['crate', 'locker', 'medical'], cx, 0, cz, rotY, true);
+      } else if (kind === 'tower') {
+        // a scaffold watchtower against the wall with a sandbagged platform
+        for (const [u, v] of [[-1.2, 0.6], [1.2, 0.6], [-1.2, 3], [1.2, 3]]) {
+          const [px, pz] = P(u, v);
+          box(M.wood, px, b.g + 3.3, pz, 0.18, 6.6, 0.18, { tag: 'wood' });
+        }
+        const [px, pz] = P(0, 1.8);
+        box(M.wood, px, b.g + 5.2, pz, side.axis === 'x' ? 2.8 : 2.8, 0.15, 2.8);
+        for (const [u, v, w, d] of [[0, 3.1, 2.6, 0.4], [-1.25, 1.8, 0.4, 2.6], [1.25, 1.8, 0.4, 2.6]]) {
+          const [sx2, sz2] = P(u, v);
+          const ww = side.axis === 'x' ? w : d;
+          const dd = side.axis === 'x' ? d : w;
+          box(M.sandbag, sx2, b.g + 5.55, sz2, ww, 0.55, dd);
+        }
+        const tg = new THREE.BoxGeometry(3.2, 0.05, 3.2);
+        tg.translate(px, b.g + 7.0, pz);
+        pushGeo(rng.pick(M.tarp), tg);
+        for (let k = 0; k < 9; k++) {
+          const [lx, lz] = P(-1.2, 3.25);
+          box(M.wood, lx, b.g + 0.5 + k * 0.55, lz, 0.5, 0.06, 0.06, { rotY, collide: false });
+        }
+      } else if (kind === 'shanty') {
+        // a container cabin bolted to the wall: door, window, a painted mark
+        const [px, pz] = P(0, 1.5);
+        const w = side.axis === 'x' ? 4.4 : 2.6;
+        const d = side.axis === 'x' ? 2.6 : 4.4;
+        box(rng.pick(M.containerColors), px, b.g + 1.3, pz, w, 2.6, d, { tag: 'metal' });
+        const [dx2, dz2] = P(1.2, 2.82);
+        box(M.darkMetal, dx2, b.g + 1.0, dz2, side.axis === 'x' ? 0.9 : 0.05, 1.9, side.axis === 'x' ? 0.05 : 0.9, { collide: false });
+        const [wx, wz] = P(-1.0, 2.82);
+        box(M.glass, wx, b.g + 1.6, wz, side.axis === 'x' ? 0.9 : 0.05, 0.6, side.axis === 'x' ? 0.05 : 0.9, { collide: false });
+        const [cx, cz] = P(1.2, 3.5);
+        addContainer(['crate', 'locker'], cx, 0, cz, rotY, true);
+      } else {
+        // a sandbag nest with a catwalk along the wall top
+        const [px, pz] = P(0, 0.9);
+        box(M.wood, px, b.g + WALL_H - 0.5, pz, side.axis === 'x' ? SEG : 1.2, 0.15, side.axis === 'x' ? 1.2 : SEG, { collide: false });
+        for (const u of [-1.6, 0, 1.6]) {
+          const [sx2, sz2] = P(u, 1.6);
+          box(M.sandbag, sx2, b.g + 0.35, sz2, side.axis === 'x' ? 1.4 : 0.6, 0.7, side.axis === 'x' ? 0.6 : 1.4);
+        }
+      }
+    }
+
+    // ---- a building shell: four walls (a big door on one side) and a roof
+    const hall = (dx, dz, w, d, h, doorSide, material, roof = true) => {
+      const [cx, cz, g0] = at(dx, dz);
+      const g = Math.min(g0, ground(cx - w / 2, cz - d / 2), ground(cx + w / 2, cz + d / 2)) - 0.2;
+      const t = 0.5;
+      const doorW = 5;
+      const doorH = 5;
+      const wallRun = (axis, fixed, len, hasDoor) => {
+        const segs = hasDoor ? [[-len / 2, -doorW / 2], [doorW / 2, len / 2]] : [[-len / 2, len / 2]];
+        for (const [a, bb] of segs) {
+          const mid = (a + bb) / 2;
+          const L = bb - a;
+          if (axis === 'x') box(material, cx + mid, g + h / 2, cz + fixed, L, h, t, { tag: 'metal' });
+          else box(material, cx + fixed, g + h / 2, cz + mid, t, h, L, { tag: 'metal' });
+        }
+        if (hasDoor) {
+          if (axis === 'x') box(material, cx, g + doorH + (h - doorH) / 2, cz + fixed, doorW, h - doorH, t);
+          else box(material, cx + fixed, g + doorH + (h - doorH) / 2, cz, t, h - doorH, doorW);
+          // hazard-striped door frame
+          if (axis === 'x') box(M.stripe, cx, g + doorH + 0.15, cz + fixed, doorW + 0.4, 0.3, t + 0.05, { collide: false });
+          else box(M.stripe, cx + fixed, g + doorH + 0.15, cz, t + 0.05, 0.3, doorW + 0.4, { collide: false });
+        }
+      };
+      wallRun('x', -d / 2, w, doorSide === 'n');
+      wallRun('x', d / 2, w, doorSide === 's');
+      wallRun('z', -w / 2, d, doorSide === 'w');
+      wallRun('z', w / 2, d, doorSide === 'e');
+      if (roof) box(M.darkMetal, cx, g + h + 0.15, cz, w + 0.4, 0.3, d + 0.4, { tag: 'metal' });
+      box(M.concreteDark, cx, g + 0.05, cz, w, 0.1, d, { collide: false });
+      return { cx, cz, g };
+    };
+
+    // 1. Casting Hall: hull plating. A furnace glows inside; two chimneys.
+    {
+      const { cx, cz, g } = hall(-17, -14, 20, 14, 9, 's', M.rust);
+      box(M.darkMetal, cx - 5, g + 1.8, cz - 4, 4, 3.6, 3);
+      box(M.forge, cx - 5, g + 1.4, cz - 2.48, 2, 1.2, 0.05, { collide: false });
+      const ladle = new THREE.CylinderGeometry(1.1, 0.8, 1.2, 14);
+      ladle.translate(cx + 1, g + 3.6, cz - 3);
+      pushGeo(M.darkMetal, ladle);
+      box(M.forge, cx + 1, g + 4.2, cz - 3, 1.6, 0.05, 1.6, { collide: false });
+      for (let k = 0; k < 4; k++) box(M.huskHull, cx + 4 + (k % 2) * 1.6, g + 0.15 + Math.floor(k / 2) * 0.12, cz + 2, 1.4, 0.1, 2.2, { rotY: k * 0.2, collide: false });
+      for (const ox of [-6, -2]) {
+        const ch = new THREE.CylinderGeometry(0.8, 1.0, 16, 12);
+        ch.translate(cx + ox, g + 8, cz - 5);
+        pushGeo(M.rust, ch);
+        col.addBox({ x: cx + ox - 0.9, y: g, z: cz - 5.9 }, { x: cx + ox + 0.9, y: g + 16, z: cz - 4.1 }, 'metal');
+        box(M.forge, cx + ox, g + 16.05, cz - 5, 1.2, 0.1, 1.2, { collide: false });
+      }
+      const furnace = new THREE.PointLight(0xff6a20, 25, 16, 2);
+      furnace.position.set(cx - 5, g + 2, cz - 1);
+      scene.add(furnace);
+      lights.push(furnace);
+      factorySign(['CASTING HALL', 'HULL PLATING · SHELLS'], cx, g + 7.2, cz + 7.27, 0);
+      addContainer(['husk_pod', 'crate'], cx + 6, 0, cz - 4);
+      addContainer(['weapon_case', 'locker'], cx - 8, 0, cz + 4);
+    }
+    // 2. Optics Lab: eyes and sensors. Racks of glowing eyes; a dish on the roof.
+    {
+      const { cx, cz, g } = hall(18, -15, 14, 12, 6, 's', M.concrete);
+      const eyeGeo = new THREE.SphereGeometry(0.12, 10, 8);
+      for (let r = 0; r < 3; r++) {
+        box(M.darkMetal, cx - 4 + r * 4, g + 1.2, cz - 4.6, 3, 2.4, 0.6);
+        for (let k = 0; k < 12; k++) geoAt(M.huskGlow, eyeGeo, cx - 5.2 + r * 4 + (k % 6) * 0.48, g + 0.6 + Math.floor(k / 6) * 0.9, cz - 4.25, 0, 1);
+      }
+      const dish = new THREE.SphereGeometry(2.2, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.35);
+      dish.rotateX(-0.9);
+      dish.translate(cx + 3, g + 7.4, cz - 2);
+      pushGeo(M.metal, dish);
+      box(M.darkMetal, cx + 3, g + 6.6, cz - 2, 0.3, 1.2, 0.3, { collide: false });
+      factorySign(['OPTICS LAB', 'EYES · SENSORS · LENSES'], cx, g + 5.2, cz + 6.27, 0, 5, 1.25);
+      addContainer(['husk_pod', 'crate', 'locker'], cx - 3, 0, cz + 2);
+    }
+    // 3. Actuator Works: legs and joints. Sawtooth roof, a conveyor of limbs.
+    {
+      const { cx, cz, g } = hall(-16, 15, 22, 12, 7, 'n', M.concrete, false);
+      for (let k = 0; k < 4; k++) {
+        const r = new THREE.BoxGeometry(5.6, 0.2, 12.4);
+        r.rotateZ(0.32);
+        r.translate(cx - 8.3 + k * 5.5, g + 7.9, cz);
+        pushGeo(M.corrugated, r);
+        box(M.glass, cx - 5.6 + k * 5.5, g + 7.9, cz, 0.1, 1.8, 12, { collide: false });
+      }
+      col.addBox({ x: cx - 11, y: g + 7, z: cz - 6 }, { x: cx + 11, y: g + 9, z: cz + 6 }, 'metal');
+      box(M.darkMetal, cx, g + 0.5, cz + 1, 16, 1, 1.6);
+      box(M.stripe, cx, g + 1.02, cz + 1, 16, 0.04, 1.2, { collide: false });
+      for (let k = 0; k < 7; k++) {
+        const lx = cx - 7 + k * 2.3;
+        const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(lx, g + 1.1, cz + 1), new THREE.Vector3(lx + 0.5, g + 1.6, cz + 1.2), new THREE.Vector3(lx + 1, g + 1.1, cz + 0.8));
+        pushGeo(M.darkMetal, new THREE.TubeGeometry(curve, 8, 0.07, 6));
+      }
+      factorySign(['ACTUATOR WORKS', 'LEGS · JOINTS · LIMBS'], cx, g + 6, cz - 6.27, Math.PI, 6, 1.5);
+      addContainer(['crate', 'weapon_case'], cx + 8, 0, cz - 3);
+      addContainer(['husk_pod', 'locker'], cx - 8, 0, cz + 3.5);
+    }
+    // 4. Core Assembly: cores. A dome over a glowing core column.
+    {
+      const { cx, cz, g } = hall(18, 14, 14, 14, 3.5, 'n', M.concreteDark, false);
+      const dome = new THREE.SphereGeometry(7.6, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+      dome.scale(1, 0.75, 1);
+      dome.translate(cx, g + 3.5, cz);
+      pushGeo(M.metal, dome);
+      col.addBox({ x: cx - 6, y: g + 6.5, z: cz - 6 }, { x: cx + 6, y: g + 9.2, z: cz + 6 }, 'metal');
+      const core = new THREE.CylinderGeometry(0.9, 0.9, 5, 18);
+      core.translate(cx, g + 2.5, cz);
+      pushGeo(M.huskGlow, core);
+      col.addBox({ x: cx - 1, y: g, z: cz - 1 }, { x: cx + 1, y: g + 5, z: cz + 1 }, 'metal');
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(cx + Math.cos(a) * 0.9, g + 4.5, cz + Math.sin(a) * 0.9), new THREE.Vector3(cx + Math.cos(a) * 4, g + 6, cz + Math.sin(a) * 4), new THREE.Vector3(cx + Math.cos(a) * 6.5, g + 0.3, cz + Math.sin(a) * 6.5));
+        pushGeo(M.darkMetal, new THREE.TubeGeometry(curve, 12, 0.1, 6));
+      }
+      const glow = new THREE.PointLight(0xff6a20, 18, 14, 2);
+      glow.position.set(cx, g + 3, cz);
+      scene.add(glow);
+      lights.push(glow);
+      factorySign(['CORE ASSEMBLY', 'CORES · MINDS'], cx, g + 3.0, cz - 7.27, Math.PI, 5, 1.25);
+      addContainer(['husk_pod', 'weapon_case'], cx + 4, 0, cz + 4);
+    }
+
+    // ---- the yard: a gantry crane, piles of parts, conveyor runs, a gate sign
+    {
+      const [x, z, g] = at(0, 0);
+      for (const ox of [-9, 9]) for (const oz of [-2.5, 2.5]) box(M.stripe, x + ox, g + 4, z + oz, 0.5, 8, 0.5, { tag: 'metal' });
+      box(M.stripe, x, g + 8, z - 2.5, 18.5, 0.6, 0.6, { collide: false });
+      box(M.stripe, x, g + 8, z + 2.5, 18.5, 0.6, 0.6, { collide: false });
+      box(M.darkMetal, x + 2, g + 7.6, z, 1.2, 0.8, 5.4, { collide: false });
+      box(M.darkMetal, x + 2, g + 5.5, z, 0.05, 4, 0.05, { collide: false });
+      box(M.huskHull, x + 2, g + 3.2, z, 2.2, 1.0, 3.0, { rotY: 0.3, collide: false });
+      // part piles
+      for (const [dx, dz] of [[-5, 6], [6, -5], [4, 7]]) {
+        const [px, pz, pg] = at(dx, dz);
+        for (let k = 0; k < 6; k++) box(M.huskHull, px + rng.range(-1, 1), pg + 0.15 + k * 0.14, pz + rng.range(-1, 1), 1.4, 0.12, 1.8, { rotY: rng.range(0, 3), collide: k === 0 });
+      }
+      const [gx, gz, gg] = at(HW + 0.5, 0);
+      factorySign(['CRUCIBLE WORKS', 'THE NETWORK PROVIDES'], gx + 0.4, gg + 6.2, gz, Math.PI / 2, 7, 1.75);
+      box(M.darkMetal, gx, gg + 6.2, gz + 4, 0.4, 12.4, 0.4, { tag: 'metal' });
+      box(M.darkMetal, gx, gg + 6.2, gz - 4, 0.4, 12.4, 0.4, { tag: 'metal' });
+      box(M.darkMetal, gx, gg + 7.2, gz, 0.3, 0.3, 8.4, { collide: false });
+    }
+    addContainer(['husk_pod', 'crate'], F.x + 8, 0, F.z + 4);
+    addContainer(['crate', 'weapon_case'], F.x - 6, 0, F.z - 4);
+    // the plant is busy
+    enemySpawns.push({ type: 'skitter', x: F.x, z: F.z, radius: 20, count: 4 });
+    enemySpawns.push({ type: 'skitter', x: F.x - 16, z: F.z + 15, radius: 10, count: 3 });
+    enemySpawns.push({ type: 'buzzer', x: F.x + 10, z: F.z - 10, radius: 25, count: 2 });
+    enemySpawns.push({ type: 'watcher', x: F.x, z: F.z, radius: 30 });
+  }
+
+  // raider camps: a sloped tarp on four posts over a cache (always stocked),
+  // with what's left of their gear round it, and sometimes a broken-down car
+  for (let i = 0; i < 8; i++) {
     const x = rng.range(-180, 180);
     const z = rng.range(-180, 180);
-    if (Math.hypot(x - TOWN.x, z - TOWN.z) < 100 || Math.hypot(x - REFINERY.x, z - REFINERY.z) < 48) continue;
+    if (Math.hypot(x - TOWN.x, z - TOWN.z) < 100 || Math.hypot(x - REFINERY.x, z - REFINERY.z) < 48 || Math.hypot(x - FACTORY.x, z - FACTORY.z) < 62) continue;
     const g = ground(x, z);
-    const tarp = rng.pick(M.tarp);
-    for (const [dx, dz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) box(M.wood, x + dx, g + 1.2, z + dz, 0.15, 2.4, 0.15);
-    box(tarp, x, g + 2.5, z, 4.6, 0.08, 4.6, { rotZ: 0.12, collide: false });
-    addContainer(['crate', 'medical', 'locker'], x, g, z);
+    const ry = rng.range(0, Math.PI);
+    const c = Math.cos(ry);
+    const sn = Math.sin(ry);
+    const P = (lx, lz) => [x + lx * c + lz * sn, z - lx * sn + lz * c];
+    // posts reach the tarp at each corner: higher at the back, lower at the front
+    const hBack = 2.9;
+    const hFront = 2.1;
+    for (const [lx, lz] of [[-2.1, -2], [2.1, -2], [-2.1, 2], [2.1, 2]]) {
+      const [px, pz] = P(lx, lz);
+      const gp = ground(px, pz);
+      const top = g + (lz < 0 ? hBack : hFront);
+      box(M.wood, px, (gp + top) / 2 - 0.1, pz, 0.15, top - gp + 0.2, 0.15);
+    }
+    const run = Math.hypot(4, hBack - hFront);
+    const tarpGeo = new THREE.BoxGeometry(4.5, 0.05, run + 0.3);
+    tarpGeo.rotateX(Math.atan2(hBack - hFront, 4));
+    tarpGeo.rotateY(ry);
+    tarpGeo.translate(x, g + (hBack + hFront) / 2 + 0.03, z);
+    pushGeo(rng.pick(M.tarp), tarpGeo);
+    // the cache underneath
+    const [cx, cz] = P(-0.6, -0.4);
+    addContainer(['crate', 'locker', 'medical', 'weapon_case'], cx, 0, cz, ry, true);
+    // their stuff: a few of these under and round the tarp
+    const props = [
+      () => { // gas cans
+        for (let k = 0; k < rng.int(2, 4); k++) {
+          const [px, pz] = P(1.2 + k * 0.32, -1.2 + rng.range(-0.2, 0.2));
+          box(M.gasCan, px, ground(px, pz) + 0.19, pz, 0.18, 0.38, 0.28, { rotY: ry + rng.range(-0.3, 0.3), collide: false });
+        }
+      },
+      () => { // a stack of tyres
+        const [px, pz] = P(-1.5, 1.2);
+        for (let k = 0; k < rng.int(2, 4); k++) {
+          const t = new THREE.TorusGeometry(0.34, 0.13, 8, 16);
+          t.rotateX(Math.PI / 2);
+          t.translate(px, ground(px, pz) + 0.13 + k * 0.25, pz);
+          pushGeo(M.darkMetal, t);
+        }
+        col.addBox({ x: px - 0.45, y: ground(px, pz), z: pz - 0.45 }, { x: px + 0.45, y: ground(px, pz) + 0.8, z: pz + 0.45 }, 'wood');
+      },
+      () => { // a fire pit
+        const [px, pz] = P(0.4, 3.4);
+        const gp = ground(px, pz);
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          geoAt(M.rock, stoneGeo, px + Math.cos(a) * 0.55, gp + 0.08, pz + Math.sin(a) * 0.55, a, 0.16);
+        }
+        for (const r of [0.4, -0.5]) box(M.wood, px, gp + 0.1, pz, 0.9, 0.12, 0.12, { rotY: r, collide: false });
+        box(M.forge, px, gp + 0.05, pz, 0.35, 0.06, 0.35, { collide: false });
+      },
+      () => { // a hand cart
+        const [px, pz] = P(1.5, 0.6);
+        const gp = ground(px, pz);
+        box(M.wood, px, gp + 0.55, pz, 0.9, 0.12, 1.4, { rotY: ry });
+        for (const lx of [-0.5, 0.5]) {
+          const [wx, wz] = P(1.5 + lx, 0.6);
+          box(M.darkMetal, wx, gp + 0.3, wz, 0.08, 0.6, 0.6, { rotY: ry, collide: false });
+        }
+        const [hx, hz] = P(1.5, 1.6);
+        box(M.wood, hx, gp + 0.7, hz, 0.06, 0.06, 0.9, { rotY: ry, rotX: 0.3, collide: false });
+      },
+      () => { // bedrolls
+        for (const lx of [-1.4, -0.8]) {
+          const [px, pz] = P(lx, 1.0);
+          const b = new THREE.CapsuleGeometry(0.22, 1.3, 4, 10);
+          b.rotateX(Math.PI / 2);
+          b.rotateY(ry);
+          b.translate(px, ground(px, pz) + 0.18, pz);
+          pushGeo(rng.pick(M.tarp), b);
+        }
+      },
+      () => { // a crate stack
+        const [px, pz] = P(1.4, -1.0);
+        const gp = ground(px, pz);
+        box(M.wood, px, gp + 0.35, pz, 0.7, 0.7, 0.7, { rotY: ry });
+        if (rng.chance(0.6)) box(M.wood, px, gp + 1.0, pz, 0.6, 0.6, 0.6, { rotY: ry + 0.4 });
+      },
+    ];
+    for (let k = props.length - 1; k > 0; k--) {
+      const j = rng.int(0, k);
+      [props[k], props[j]] = [props[j], props[k]];
+    }
+    props.slice(0, rng.int(3, 5)).forEach((f) => f());
+    // a broken-down car next to some camps (with its own boot to search)
+    if (rng.chance(0.6)) {
+      const [vx, vz] = P(rng.chance(0.5) ? 5.5 : -5.5, rng.range(-1, 2));
+      car(vx, vz, ry + rng.range(-0.6, 0.6));
+    }
   }
 
   // Lifts and drop points stay clear so nothing spawns inside them.
@@ -757,6 +1128,7 @@ export function buildWorld(scene, opts = {}) {
   const clearAt = (x, z, r) => {
     if (KEEP_CLEAR.some(([cx, cz]) => Math.hypot(x - cx, z - cz) < 9 + r)) return false;
     if (Math.hypot(x - REFINERY.x, z - REFINERY.z) < 44) return false; // the refinery yard stays industrial
+    if (Math.abs(x - FACTORY.x) < 40 && Math.abs(z - FACTORY.z) < 35) return false; // and so does the factory
     if (infraSites.some((s) => Math.hypot(x - s.x, z - s.z) < 9 + r)) return false;
     if (containers.some((c) => Math.hypot(x - c.x, z - c.z) < 1.6 + r)) return false;
     const m = r + 0.8;

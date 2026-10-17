@@ -498,7 +498,7 @@ export class UI {
       if (this.ctxMenu && !this.ctxMenu.contains(e.target)) this.closeContextMenu();
     };
     const esc = (e) => {
-      if (e.code === 'Escape') this.closeContextMenu();
+      if (e.code === 'Backspace' || e.code === 'Escape') this.closeContextMenu();
     };
     setTimeout(() => {
       document.addEventListener('mousedown', away);
@@ -707,7 +707,7 @@ export class UI {
     this.afterHubChange();
   }
 
-  // Panel header with a close button (Tab/M/Esc on keyboard).
+  // Panel header with a close button (or Backspace).
   titleBar(text, hint) {
     const bar = el('div', 'panel-title', `<span>${text}</span><span class="close">${hint}</span>`);
     const x = el('button', 'x', '✕');
@@ -775,7 +775,7 @@ export class UI {
     const lo = g.profile.loadout;
     this.menus.innerHTML = '';
     const panel = el('div', 'panel inventory');
-    panel.appendChild(this.titleBar('BACKPACK', 'Tab to close'));
+    panel.appendChild(this.titleBar('BACKPACK', 'Backspace to close'));
     const body = el('div', 'panel-body two');
     body.appendChild(this.equipmentColumn(lo, {
       weapon: (i) => g.weapons.switchTo(i),
@@ -887,7 +887,7 @@ export class UI {
     const lo = g.profile.loadout;
     this.menus.innerHTML = '';
     const panel = el('div', 'panel loot');
-    panel.appendChild(this.titleBar(c.name.toUpperCase(), 'Tab to close · F take all'));
+    panel.appendChild(this.titleBar(c.name.toUpperCase(), 'Backspace to close · F take all'));
     const body = el('div', 'panel-body two');
     const left = el('div', 'container-col');
     left.appendChild(el('div', 'sect', 'CONTENTS'));
@@ -971,7 +971,7 @@ export class UI {
   renderMap() {
     this.menus.innerHTML = '';
     const panel = el('div', 'panel map-panel');
-    panel.appendChild(this.titleBar('TOPSIDE · DUSTLINE', 'M to close'));
+    panel.appendChild(this.titleBar('TOPSIDE · DUSTLINE', 'Backspace to close'));
     const canvas = el('canvas', 'map');
     canvas.width = 640;
     canvas.height = 640;
@@ -1714,7 +1714,7 @@ export class UI {
 
   // How a raid works, Husk notes and controls.
   guideHtml() {
-    const controls = 'WASD move · Shift sprint · Space jump · C crouch · V dodge roll · Mouse aim/fire · RMB aim down sights · R reload · 1/2 or wheel swap weapon · Q swing your stick · F flashlight on/off · H holster (move faster) · 3 heal · 4 recharge shield · G grenade · E interact (hold) · Tab backpack · M map · Esc pause';
+    const controls = 'WASD move · Shift sprint · Space jump · C crouch · V dodge roll · Mouse aim/fire · RMB aim down sights · R reload · 1/2 or wheel swap weapon · Q swing your stick · F flashlight on/off · H holster (move faster) · 3 heal · 4 recharge shield · G grenade · E interact (hold) · Tab backpack · M map · Backspace close a window · Esc pause';
     return `
       <div class="guide">
         <h3>How a raid works</h3>
@@ -1787,7 +1787,7 @@ export class UI {
       checkout: 'CHECKOUT',
     };
     const panel = el('div', `panel explore-panel ${kind}-panel`);
-    const bar = this.titleBar(titles[kind], 'Esc to close');
+    const bar = this.titleBar(titles[kind], 'Backspace to close');
     const wallet = el('span', 'panel-creds', `⌬ ${g.profile.credits.toLocaleString()}`);
     bar.querySelector('.close').prepend(wallet);
     panel.appendChild(bar);
@@ -1883,7 +1883,8 @@ export class UI {
     if (!this._homeKeys) {
       this._homeKeys = (e) => {
         if (this.game.mode !== 'home') return;
-        if (e.code === 'Escape' && this.modal) this.modal.close();
+        const typing = /^(INPUT|TEXTAREA)$/.test((e.target && e.target.tagName) || '');
+        if (e.code === 'Backspace' && !typing && this.modal) this.modal.close();
         else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && !this.modal) this.leaveHome();
       };
       window.addEventListener('keydown', this._homeKeys);

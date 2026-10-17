@@ -97,7 +97,18 @@ materials break down into basic materials (worn gear gives less).
    set of spots (with a random container type), so caches move between raids.
 4. **Extract**: find one of the four lifts (the Refinery Lift stands in the
    middle of an oil refinery in the south east: tanks, columns, a flare stack,
-   pumpjacks, big trucks and oil barrels) (cyan ▲ on the compass, **M** for
+   pumpjacks, big trucks and oil barrels)
+
+   **Crucible Works**, south of the West Lift, is the factory where the
+   Crucible AI builds its Husks: a walled plant with four big buildings (the
+   Casting Hall for hull plating, the Optics Lab for eyes and sensors, Actuator
+   Works for legs and joints, Core Assembly for cores), a gantry crane over the
+   yard, and plenty of Husks and loot. Parts of its outer wall have fallen; on
+   the rest, survivors have built shacks, watchtowers and sandbag nests, each
+   with a cache. Raider camps out in the open always have a cache under the
+   tarp too, among their gas cans, tyres, carts and broken-down cars.
+
+   The gold orb over a container only shows while there's something in it. (cyan ▲ on the compass, **M** for
    the map). Hold **E** at the call panel. The lift takes 20 seconds to arrive
    and the noise draws Husks in. Once the doors open, step inside and hold **E**.
 5. **Die, or still be topside when the 20-minute clock ends**, and your
@@ -187,6 +198,7 @@ the SMG hangs on your right. Your stick rides down the right side of the pack.
 | G | Throw a frag grenade |
 | E (hold) | Search, call a lift, extract |
 | Tab | Backpack (click to use or equip, shift-click for safe pocket, right-click to drop) |
+| Backspace (or the ✕) | Close the open window |
 | F (loot window open) | Take everything; the window closes once the container is empty |
 | M | Map |
 | Esc | Pause (sensitivity, volume, abandon raid) |

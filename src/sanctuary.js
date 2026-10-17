@@ -787,14 +787,14 @@ export class Sanctuary {
     scene.add(cool);
 
     // Trade Hall: steel arch ribs, string lights, a market sign, stacked crates
-    for (const z of [-8.3, -10.2]) {
+    for (const z of [-8.6, -10.4]) {
       const rib = add(new THREE.TorusGeometry(4.6, 0.07, 6, 40, Math.PI), M.steel, 4.25, -1.2, z);
       rib.scale.set(1, 1, 1);
     }
     const market = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.6), neonSign('MARKET', '#ff9a3a', 512, 128, 90));
     market.position.set(4.25, 2.95, -6.75);
     scene.add(market);
-    for (const [x, z, h] of [[0.2, -7.3, 2], [8.3, -7.3, 1], [0.2, -8.2, 1]]) {
+    for (const [x, z, h] of [[0.2, -7.2, 2], [8.3, -7.2, 1]]) {
       for (let k = 0; k < h; k++) box(M.wood, x, 0.35 + k * 0.7, z, 0.7, 0.68, 0.7, { shadow: true });
     }
 
@@ -807,11 +807,12 @@ export class Sanctuary {
     this.col.addBox({ x: 12.3, y: 0, z: -7.45 }, { x: 12.9, y: 0.9, z: -6.85 });
 
     // Checkout: steel ribs and a server rack blinking on the east wall
-    for (const z of [-8.6, -12.6]) add(new THREE.TorusGeometry(4.75, 0.07, 6, 40, Math.PI), M.steel, 23.75, -1.35, z);
-    box(M.steel, 28.2, 1.0, -9.0, 0.5, 2.0, 1.2);
+    // ribs clear of the desk, the map board and the rack
+    for (const z of [-7.4, -14.0]) add(new THREE.TorusGeometry(4.75, 0.07, 6, 40, Math.PI), M.steel, 23.75, -1.35, z);
+    box(M.steel, 28.2, 1.0, -10.2, 0.5, 2.0, 1.2);
     const blink = new THREE.MeshBasicMaterial({ color: 0x40ffd0, toneMapped: false });
     const amber = new THREE.MeshBasicMaterial({ color: 0xffa040, toneMapped: false });
-    for (let i = 0; i < 18; i++) add(new THREE.BoxGeometry(0.01, 0.03, 0.05), i % 4 ? blink : amber, 27.94, 0.4 + (i % 9) * 0.18, -9.3 + Math.floor(i / 9) * 0.55);
+    for (let i = 0; i < 18; i++) add(new THREE.BoxGeometry(0.01, 0.03, 0.05), i % 4 ? blink : amber, 27.94, 0.4 + (i % 9) * 0.18, -10.5 + Math.floor(i / 9) * 0.55);
 
     // Lift: a cage of bars and the winch cable going up the shaft
     for (const z of [-3.72, -6.48]) for (let x = 33.3; x < 36.4; x += 0.28) box(M.steel, x, H / 2, z, 0.035, H, 0.035, deco);

@@ -321,7 +321,8 @@ export class Game {
     const cradles = new Set(this.infra.active.filter((a) => a.kind === 'cradle').map((a) => a.site));
     for (const spot of this.containerSpots) {
       // a Cradle's pods are always stocked; without a Cradle they aren't there at all
-      if (spot.infra !== undefined ? !cradles.has(spot.infra) : Math.random() > CONTAINER_FILL) continue;
+      // camp caches and survivor shacks are always stocked
+      if (spot.infra !== undefined ? !cradles.has(spot.infra) : !spot.always && Math.random() > CONTAINER_FILL) continue;
       const type = spot.pool[Math.floor(Math.random() * spot.pool.length)];
       const c = this.makeContainer(spot, type, this.containers.length);
       c.items = rollTable(LOOT_TABLES[type]);
@@ -438,7 +439,7 @@ export class Game {
     const menu = this.ui.menuOpen();
     if (!menu) {
       if (input.hit('Tab') || input.hit('KeyI')) this.ui.openExplorePanel('stash');
-    } else if (input.hit('Escape') || (this.ui.open === 'panel' && input.hit('Tab'))) {
+    } else if (input.hit('Backspace') || (this.ui.open === 'panel' && input.hit('Tab'))) {
       this.ui.closeMenus();
     }
     this.sanctuary.updateExplore(dt, input, !menu, input.sensitivity);
@@ -1305,7 +1306,7 @@ export class Game {
     // ---- keys ----
     if (input.hit('Tab') || input.hit('KeyI')) this.ui.toggleInventory();
     if (input.hit('KeyM')) this.ui.toggleMap();
-    if (input.hit('Escape') && menu) this.ui.closeMenus();
+    if (input.hit('Backspace') && menu) this.ui.closeMenus();
     if (p.alive && !menu) {
       if (input.hit('KeyR')) this.weapons.startReload();
       if (input.hit('Digit1')) this.weapons.switchTo(0);
@@ -1404,11 +1405,12 @@ export class Game {
     const lootDist = Math.min(70, drawDist * 0.45);
     for (const c of this.containers) {
       c.group.visible = Math.abs(c.x - p.pos.x) < lootDist && Math.abs(c.z - p.pos.z) < lootDist;
-      c.marker.visible = !(c.searched && c.items.length === 0);
+      // the gold orb only shows while there's something in it to take
+      c.marker.visible = c.items.length > 0;
       c.marker.rotation.y += dt * 2;
     }
     for (const w of this.wrecks) {
-      w.marker.visible = !(w.searched && w.items.length === 0);
+      w.marker.visible = w.items.length > 0;
       w.marker.rotation.y += dt * 2;
     }
 
