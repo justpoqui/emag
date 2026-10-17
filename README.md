@@ -5,11 +5,28 @@ Drop topside into the ruined Rust Belt, scavenge, fight ARC machines and get
 to a lift before the raid clock runs out. Die and you lose everything you
 carried except your safe pocket.
 
-It runs in any modern desktop browser. Everything is built from code: the
+It runs in any modern browser on PC or phone. Everything is built from code: the
 map, models, UI and sounds (synthesized with WebAudio), so there are no asset
 files.
 
-## Running it
+## Play it (PC and phone)
+
+Every push to the `3d-shooter` branch builds the game and publishes it to the
+`gh-pages` branch. Turn on GitHub Pages once:
+
+1. On GitHub, open the repo's **Settings → Pages**.
+2. Under **Build and deployment**, set **Source** to *Deploy from a branch*,
+   pick **gh-pages** and **/ (root)**, and save.
+3. After a minute the game is live at **https://justpoqui.github.io/projects/**.
+
+Open that link on your PC or your phone.
+
+**On a phone:** play in landscape. For true fullscreen, add it to your home
+screen (Safari: Share → *Add to Home Screen*; Chrome on Android: ⋮ → *Add to
+Home screen* / *Install app*). It then opens like an app, without the
+browser bars. Your progress is stored on each device separately.
+
+## Running it locally
 
 ```bash
 cd shooter
@@ -50,7 +67,25 @@ level) is saved in the browser's localStorage.
 | **Leaper** | Armored jumper that slams down with a shockwave | Glowing core on top takes extra damage |
 | **Bastion** | Walking fortress with twin miniguns, guards the plaza | Core on its back takes triple damage; bring heavy ammo |
 
-## Controls
+## Phone controls
+
+| Control | Action |
+| --- | --- |
+| Left thumb, anywhere on the lower left | Move (push the stick to the edge to sprint) |
+| Right thumb, anywhere else | Look |
+| FIRE | Shoot. Keep your thumb down and drag to aim while firing |
+| AIM | Toggle aim down sights |
+| RELOAD / JUMP / CROUCH / ROLL | As on PC |
+| USE | Appears near something you can search or a lift; hold it |
+| SWAP / HEAL / SHIELD / NADE | Left column |
+| ❚❚ / MAP / BAG | Top left |
+| Tap an item | Its main action (use, equip, take, load…) |
+| Hold an item | Details, plus every other action (safe pocket, drop, sell) |
+
+Bullets get a small aim assist on touch screens. Phones default to **Low**
+graphics; change it under **Settings** in the hub or in the pause menu.
+
+## PC controls
 
 | Key | Action |
 | --- | --- |
@@ -87,6 +122,8 @@ shooter/
     effects.js     tracers, sparks, explosions, damage numbers
     audio.js       synthesized sound effects
     input.js       keyboard / mouse / pointer lock
+    touch.js       on-screen controls for phones and tablets
+    settings.js    device detection and Low / Medium / High graphics presets
     rng.js         seeded RNG and loot rolls
 ```
 

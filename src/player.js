@@ -238,7 +238,8 @@ export class Player {
     const right = new THREE.Vector3(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
     const move = new THREE.Vector3().addScaledVector(fwd, input.y).addScaledVector(right, input.x);
     const moving = move.lengthSq() > 0.01;
-    if (moving) move.normalize();
+    const amount = Math.min(1, move.length());
+    if (moving) move.normalize().multiplyScalar(amount < 0.35 ? 0.35 : amount);
 
     this.sprinting = input.sprint && moving && input.y > 0.1 && !this.ads && this.stamina > 1 && this.slow <= 0 && this.staminaLock <= 0;
     if (this.sprinting) this.crouch = false;

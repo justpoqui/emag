@@ -13,7 +13,7 @@ function mat(color, opts = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: opts.roughness ?? 0.9, metalness: opts.metalness ?? 0.05, ...opts });
 }
 
-export function buildWorld(scene) {
+export function buildWorld(scene, opts = {}) {
   const rng = makeRng(1337);
   const col = new Collision();
   const buckets = new Map(); // material -> geometries[]
@@ -631,7 +631,7 @@ export function buildWorld(scene) {
   {
     const tuft = new THREE.ConeGeometry(0.07, 0.45, 3);
     tuft.translate(0, 0.22, 0);
-    const count = 9000;
+    const count = opts.grass ?? 9000;
     const grassMesh = new THREE.InstancedMesh(tuft, new THREE.MeshStandardMaterial({ color: 0x8a9147, roughness: 1 }), count);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();

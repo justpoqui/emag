@@ -4,6 +4,8 @@ let ctx = null;
 let master = null;
 let noiseBuffer = null;
 
+let volume = 0.5;
+
 export function initAudio() {
   if (ctx) {
     if (ctx.state === 'suspended') ctx.resume();
@@ -13,7 +15,7 @@ export function initAudio() {
   if (!AudioCtx) return;
   ctx = new AudioCtx();
   master = ctx.createGain();
-  master.gain.value = 0.5;
+  master.gain.value = volume;
   const comp = ctx.createDynamicsCompressor();
   master.connect(comp);
   comp.connect(ctx.destination);
@@ -23,6 +25,7 @@ export function initAudio() {
 }
 
 export function setVolume(v) {
+  volume = v;
   if (master) master.gain.value = v;
 }
 

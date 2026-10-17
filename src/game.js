@@ -17,6 +17,8 @@ import {
   loadProfile, saveProfile, addToSlots, removeFrom, loadoutValue, emptyLoadout, countIn,
 } from './inventory.js';
 import * as Audio from './audio.js';
+import { getQuality, IS_TOUCH } from './settings.js';
+import { TouchControls } from './touch.js';
 
 const SEARCH_TIME = { crate: 1.2, locker: 1.0, medical: 1.0, weapon_case: 1.8, arc_probe: 2.0, car: 1.4, wreck: 0.9 };
 const MAX_ARC = 40;
@@ -44,10 +46,12 @@ export class Game {
     this.time = 0;
 
     // ---- renderer ----
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    const quality = getQuality();
+    this.quality = quality;
+    const renderer = new THREE.WebGLRenderer({ antialias: quality.antialias, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.pixelRatio));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = quality.shadows;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
@@ -79,8 +83,8 @@ export class Game {
     const hemi = new THREE.HemisphereLight(0xffe2c0, 0x5a5040, 0.7);
     scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xffd2a0, 2.6);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.castShadow = quality.shadows;
+    sun.shadow.mapSize.set(quality.shadowMap, quality.shadowMap);
     const sc = sun.shadow.camera;
     sc.left = -70;
     sc.right = 70;
@@ -96,7 +100,7 @@ export class Game {
     this.sunDir = new THREE.Vector3(-0.55, 0.42, 0.72).normalize();
 
     // ---- world ----
-    this.world = buildWorld(scene);
+    this.world = buildWorld(scene, { grass: quality.grass });
     this.col = this.world.collision;
     this.buildContainers();
 
@@ -112,10 +116,24 @@ export class Game {
     } catch (err) {
       // storage blocked: keep the default
     }
+    try {
+      const vol = localStorage.getItem('scrapfall_vol');
+      if (vol !== null) this.savedVolume = Number(vol);
+    } catch (err) {
+      // ignore
+    }
     renderer.domElement.addEventListener('click', () => {
       if (this.mode === 'raid' && !this.paused && !this.ui.menuOpen() && !this.input.locked) this.input.lock();
     });
     this.ui = new UI(this);
+    if (this.savedVolume !== undefined) {
+      this.ui.volume = this.savedVolume;
+      Audio.setVolume(this.savedVolume);
+    }
+    if (IS_TOUCH) {
+      document.body.classList.add('touch');
+      this.touch = new TouchControls(this.input, this);
+    }
     this.input.onLockChange = (locked) => {
       if (!locked && this.mode === 'raid' && !this.ui.menuOpen() && this.player.alive) this.setPaused(true);
     };
@@ -341,6 +359,7 @@ export class Game {
   endRaid(extracted, reason) {
     if (this.mode !== 'raid') return;
     this.mode = 'results';
+    if (this.touch) this.touch.update(false, false);
     this.using = null;
     this.input.unlock();
     Audio.setWind(false);
@@ -392,6 +411,7 @@ export class Game {
 
   setPaused(on) {
     this.paused = on;
+    if (this.touch && on) this.touch.update(false, false);
     this.ui.showPause(on);
     if (!on) this.input.lock();
   }
@@ -800,6 +820,7 @@ export class Game {
     const input = this.input;
     const p = this.player;
     const menu = this.ui.menuOpen();
+    if (this.touch) this.touch.update(!menu && p.alive, !!this.interact.target);
 
     // ---- keys ----
     if (input.hit('Tab') || input.hit('KeyI')) this.ui.toggleInventory();
@@ -888,7 +909,11 @@ export class Game {
     }
     this.updateGrenades(dt);
     this.updateLifts(dt);
+    // skip drawing far-away things (fog hides them anyway); big win on phones
+    const drawDist = this.quality.drawDist;
+    for (const e of this.enemies) e.model.visible = e.pos.distanceTo(p.pos) < drawDist;
     for (const c of this.containers) {
+      c.group.visible = Math.abs(c.x - p.pos.x) < drawDist * 0.6 && Math.abs(c.z - p.pos.z) < drawDist * 0.6;
       c.marker.visible = !(c.searched && c.items.length === 0);
       c.marker.rotation.y += dt * 2;
     }

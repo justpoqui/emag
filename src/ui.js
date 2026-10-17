@@ -10,6 +10,23 @@ import {
 } from './inventory.js';
 import { MAP_HALF } from './collision.js';
 import * as Audio from './audio.js';
+import { QUALITY, getQualityName, setQualityName } from './settings.js';
+
+// Fullscreen + landscape on phones (Android honours the orientation lock; on
+// iPhone, add the game to the home screen for fullscreen).
+export function goFullscreen() {
+  const doc = document.documentElement;
+  const req = doc.requestFullscreen || doc.webkitRequestFullscreen;
+  if (!req || document.fullscreenElement || document.webkitFullscreenElement) return;
+  try {
+    const p = req.call(doc, { navigationUI: 'hide' });
+    const lock = () => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {});
+    if (p && p.then) p.then(lock).catch(() => {});
+    else lock();
+  } catch (err) {
+    // not allowed here; ignore
+  }
+}
 
 const el = (tag, cls, html) => {
   const e = document.createElement(tag);
@@ -50,7 +67,9 @@ export class UI {
         this.tooltip.style.transform = `translate(${x}px, ${y}px)`;
       }
     });
-    document.addEventListener('click', () => Audio.initAudio(), { once: false });
+    // browsers only allow audio after a user gesture
+    document.addEventListener('click', () => Audio.initAudio());
+    document.addEventListener('pointerdown', () => Audio.initAudio());
   }
 
   // ================= HUD =================
@@ -86,6 +105,10 @@ export class UI {
     `;
     this.root.appendChild(hud);
     this.hud = hud;
+    if (this.game.input.touch) {
+      hud.querySelector('.help').textContent = 'Left thumb: move (push to the edge to sprint) · Right thumb: look · Hold FIRE and drag to aim while shooting';
+      hud.querySelector('.prompt .key').textContent = 'USE';
+    }
     const $ = (s) => hud.querySelector(s);
     this.h = {
       cross: $('.crosshair'), hit: $('.hitmarker'), dirs: $('.dmg-dirs'), reload: $('.reload-ring'),
@@ -294,6 +317,7 @@ export class UI {
   }
 
   closeMenus() {
+    this.closeSheet();
     this.open = null;
     this.lootTarget = null;
     this.menus.innerHTML = '';
@@ -354,11 +378,78 @@ export class UI {
       <span class="glyph" style="color:#${def.color.toString(16).padStart(6, '0')}">${TYPE_GLYPH[def.type] || '?'}</span>
       <span class="name">${def.name}</span>
       ${stack.n > 1 ? `<span class="count">${stack.n}</span>` : ''}${extra}`;
+    if (this.game.input.touch) {
+      // tap = main action, long-press = item info and every other action
+      let timer = null;
+      let long = false;
+      t.addEventListener('pointerdown', () => {
+        long = false;
+        timer = setTimeout(() => {
+          long = true;
+          this.showSheet(stack, opts);
+        }, 420);
+      });
+      for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) t.addEventListener(ev, () => clearTimeout(timer));
+      t.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (long) return;
+        if (opts.onClick) opts.onClick(e);
+      });
+      return t;
+    }
     t.addEventListener('mouseenter', () => this.showTooltip(stack, opts.hint));
     t.addEventListener('mouseleave', () => this.hideTooltip());
     if (opts.onClick) t.addEventListener('click', (e) => { e.stopPropagation(); opts.onClick(e); });
     if (opts.onRight) t.addEventListener('contextmenu', (e) => { e.preventDefault(); opts.onRight(e); });
     return t;
+  }
+
+  // Touch: item details plus buttons for the actions a mouse gets from
+  // click / shift-click / right-click.
+  showSheet(stack, opts) {
+    this.closeSheet();
+    const sheet = el('div', 'sheet');
+    this.showTooltip(stack, '');
+    sheet.innerHTML = `<div class="sheet-info">${this.tooltip.innerHTML}</div><div class="sheet-btns"></div>`;
+    this.hideTooltip();
+    const btns = sheet.querySelector('.sheet-btns');
+    const labels = opts.labels || {};
+    const add = (label, fn) => {
+      const b = el('button', 'btn', label);
+      b.onclick = (e) => {
+        e.stopPropagation();
+        this.closeSheet();
+        fn();
+      };
+      btns.appendChild(b);
+    };
+    if (opts.onClick && labels.tap) add(labels.tap, () => opts.onClick({ shiftKey: false }));
+    if (opts.onClick && labels.shift) add(labels.shift, () => opts.onClick({ shiftKey: true }));
+    if (opts.onRight && labels.right) add(labels.right, () => opts.onRight({}));
+    add('Close', () => {});
+    btns.lastChild.classList.add('ghost');
+    // the finger that long-pressed lifts onto the backdrop; ignore that first release
+    let armed = false;
+    document.addEventListener('pointerup', () => setTimeout(() => { armed = true; }, 150), { once: true });
+    sheet.addEventListener('click', (e) => {
+      if (e.target === sheet && armed) this.closeSheet();
+    });
+    this.root.appendChild(sheet);
+    this.sheet = sheet;
+  }
+
+  closeSheet() {
+    if (this.sheet) this.sheet.remove();
+    this.sheet = null;
+  }
+
+  // Panel header with a close button (Tab/M/Esc on keyboard).
+  titleBar(text, hint) {
+    const bar = el('div', 'panel-title', `<span>${text}</span><span class="close">${this.game.input.touch ? '' : hint}</span>`);
+    const x = el('button', 'x', '✕');
+    x.onclick = () => this.closeMenus();
+    bar.querySelector('.close').appendChild(x);
+    return bar;
   }
 
   showTooltip(stack, hint) {
@@ -402,7 +493,7 @@ export class UI {
     const lo = g.profile.loadout;
     this.menus.innerHTML = '';
     const panel = el('div', 'panel inventory');
-    panel.appendChild(el('div', 'panel-title', 'BACKPACK <span class="close">Tab to close</span>'));
+    panel.appendChild(this.titleBar('BACKPACK', 'Tab to close'));
     const body = el('div', 'panel-body two');
     body.appendChild(this.equipmentColumn(lo, {
       weapon: (i) => g.weapons.switchTo(i),
@@ -422,6 +513,7 @@ export class UI {
     lo.bag.forEach((s, i) => {
       grid.appendChild(this.tile(s, {
         hint: s ? this.bagHint(s) : '',
+        labels: s ? { tap: this.bagTapLabel(s), shift: 'Move to safe pocket', right: 'Drop' } : null,
         onClick: (e) => this.bagClick(i, e.shiftKey),
         onRight: () => {
           if (!lo.bag[i]) return;
@@ -436,6 +528,13 @@ export class UI {
     body.appendChild(bagCol);
     panel.appendChild(body);
     this.menus.appendChild(panel);
+  }
+
+  bagTapLabel(s) {
+    const t = ITEMS[s.id].type;
+    if (t === 'heal' || t === 'recharge') return 'Use';
+    if (t === 'weapon' || t === 'shield') return 'Equip';
+    return null;
   }
 
   bagHint(s) {
@@ -486,7 +585,7 @@ export class UI {
     const lo = g.profile.loadout;
     this.menus.innerHTML = '';
     const panel = el('div', 'panel loot');
-    panel.appendChild(el('div', 'panel-title', `${c.name.toUpperCase()} <span class="close">Tab to close · F take all</span>`));
+    panel.appendChild(this.titleBar(c.name.toUpperCase(), 'Tab to close · F take all'));
     const body = el('div', 'panel-body two');
     const left = el('div', 'container-col');
     left.appendChild(el('div', 'sect', 'CONTENTS'));
@@ -565,7 +664,7 @@ export class UI {
   renderMap() {
     this.menus.innerHTML = '';
     const panel = el('div', 'panel map-panel');
-    panel.appendChild(el('div', 'panel-title', 'TOPSIDE · RUST BELT <span class="close">M to close</span>'));
+    panel.appendChild(this.titleBar('TOPSIDE · RUST BELT', 'M to close'));
     const canvas = el('canvas', 'map');
     canvas.width = 640;
     canvas.height = 640;
@@ -650,28 +749,60 @@ export class UI {
       <div class="panel-title">PAUSED</div>
       <div class="panel-body col">
         <button class="btn big resume">Resume</button>
-        <label class="setting">Mouse sensitivity <input type="range" class="sens" min="0.0006" max="0.006" step="0.0001"></label>
-        <label class="setting">Volume <input type="range" class="vol" min="0" max="1" step="0.05"></label>
+        <div class="settings-slot"></div>
         <button class="btn danger abandon">Abandon raid (lose your loadout)</button>
       </div>`;
-    const sens = panel.querySelector('.sens');
-    sens.value = this.game.input.sensitivity;
-    sens.oninput = () => {
-      this.game.input.sensitivity = Number(sens.value);
-      try { localStorage.setItem('scrapfall_sens', sens.value); } catch (e) { /* ignore */ }
-    };
-    const vol = panel.querySelector('.vol');
-    vol.value = this.volume ?? 0.5;
-    vol.oninput = () => {
-      this.volume = Number(vol.value);
-      Audio.setVolume(this.volume);
-    };
+    panel.querySelector('.settings-slot').replaceWith(this.settingsBlock(true));
     panel.querySelector('.resume').onclick = () => this.game.setPaused(false);
     panel.querySelector('.abandon').onclick = () => {
       this.game.paused = false;
       this.game.endRaid(false, 'Abandoned the raid');
     };
     this.menus.appendChild(panel);
+  }
+
+  // Sensitivity, volume, graphics quality and fullscreen; used by pause and the hub.
+  settingsBlock(inRaid) {
+    const box = el('div', 'settings');
+    const q = getQualityName();
+    box.innerHTML = `
+      <label class="setting">${this.game.input.touch ? 'Look' : 'Mouse'} sensitivity <input type="range" class="sens" min="0.0006" max="0.006" step="0.0001"></label>
+      <label class="setting">Volume <input type="range" class="vol" min="0" max="1" step="0.05"></label>
+      <div class="setting">Graphics <span class="seg">${Object.entries(QUALITY).map(([k, v]) => `<button class="seg-b ${k === q ? 'on' : ''}" data-q="${k}">${v.label}</button>`).join('')}</span></div>
+      <div class="q-note hidden"></div>
+      <button class="btn ghost fs">Fullscreen</button>`;
+    const sens = box.querySelector('.sens');
+    sens.value = this.game.input.sensitivity;
+    sens.oninput = () => {
+      this.game.input.sensitivity = Number(sens.value);
+      try { localStorage.setItem('scrapfall_sens', sens.value); } catch (e) { /* ignore */ }
+    };
+    const vol = box.querySelector('.vol');
+    vol.value = this.volume ?? 0.5;
+    vol.oninput = () => {
+      this.volume = Number(vol.value);
+      Audio.setVolume(this.volume);
+      try { localStorage.setItem('scrapfall_vol', vol.value); } catch (e) { /* ignore */ }
+    };
+    const note = box.querySelector('.q-note');
+    for (const b of box.querySelectorAll('.seg-b')) {
+      b.onclick = () => {
+        setQualityName(b.dataset.q);
+        box.querySelectorAll('.seg-b').forEach((x) => x.classList.toggle('on', x === b));
+        note.classList.remove('hidden');
+        if (inRaid) {
+          note.textContent = 'Applies the next time the game starts (after this raid).';
+        } else {
+          note.innerHTML = 'Restart to apply. <button class="btn small reload">Restart now</button>';
+          note.querySelector('.reload').onclick = () => location.reload();
+        }
+      };
+    }
+    box.querySelector('.fs').onclick = () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else goFullscreen();
+    };
+    return box;
   }
 
   fadeOut(done) {
@@ -718,6 +849,7 @@ export class UI {
     const g = this.game;
     const p = g.profile;
     this.hideTooltip();
+    this.closeSheet();
     this.menus.innerHTML = '';
     const hub = el('div', 'hub');
     const need = g.xpForLevel(p.level);
@@ -725,7 +857,7 @@ export class UI {
       <div class="hub-top">
         <div class="logo">SCRAP<span>FALL</span><small>THE BURROW · UNDERGROUND</small></div>
         <div class="tabs">
-          ${['loadout', 'traders', 'workbench', 'log'].map((t) => `<button class="tab ${this.hubTab === t ? 'on' : ''}" data-t="${t}">${{ loadout: 'Loadout & Stash', traders: 'Traders', workbench: 'Workbench', log: 'Raider Log' }[t]}</button>`).join('')}
+          ${['loadout', 'traders', 'workbench', 'log', 'settings'].map((t) => `<button class="tab ${this.hubTab === t ? 'on' : ''}" data-t="${t}">${{ loadout: 'Loadout', traders: 'Traders', workbench: 'Workbench', log: 'Raider Log', settings: 'Settings' }[t]}</button>`).join('')}
         </div>
         <div class="wallet">
           <div class="lvl">LVL ${p.level}<div class="xp"><div style="width:${(p.xp / need) * 100}%"></div></div></div>
@@ -750,6 +882,13 @@ export class UI {
     if (this.hubTab === 'traders') this.renderTradersTab(body);
     if (this.hubTab === 'workbench') this.renderWorkbenchTab(body);
     if (this.hubTab === 'log') this.renderLogTab(body);
+    if (this.hubTab === 'settings') {
+      body.className = 'hub-body settings-tab';
+      const box = el('div', 'hub-col');
+      box.appendChild(el('div', 'col-title', 'SETTINGS'));
+      box.appendChild(this.settingsBlock(false));
+      body.appendChild(box);
+    }
     this.menus.appendChild(hub);
   }
 
@@ -773,6 +912,7 @@ export class UI {
       if (!confirm('You have no ammo for your weapon. Deploy anyway?')) return;
     }
     Audio.initAudio();
+    if (this.game.input.touch) goFullscreen();
     Audio.playLift();
     this.menus.innerHTML = '';
     this.fade.classList.add('on');
@@ -809,6 +949,7 @@ export class UI {
     const bag = el('div', 'grid');
     lo.bag.forEach((s, i) => bag.appendChild(this.tile(s, {
       hint: 'Click: move to stash · Shift-click: safe pocket',
+      labels: { tap: 'Move to stash', shift: 'Move to safe pocket' },
       onClick: (e) => {
         if (!lo.bag[i]) return;
         if (e.shiftKey) {
@@ -843,11 +984,12 @@ export class UI {
     left.appendChild(kitRow);
 
     const right = el('div', 'hub-col wide');
-    right.appendChild(el('div', 'col-title', `STASH <small>${freeSlots(p.stash)} / ${p.stash.length} free · click to load, right-click to sell</small>`));
+    right.appendChild(el('div', 'col-title', `STASH <small>${freeSlots(p.stash)} / ${p.stash.length} free · ${g.input.touch ? 'tap to load, hold for more' : 'click to load, right-click to sell'}</small>`));
     const stash = el('div', 'grid stash');
     p.stash.forEach((s, i) => stash.appendChild(this.tile(s, {
       hint: s ? `Click: load · Right-click: sell for ⌬ ${ITEMS[s.id].value * s.n}` : '',
       onClick: () => this.stashToLoadout(i),
+      labels: { tap: 'Load into loadout', right: 'Sell' },
       onRight: () => this.sellStash(i),
     })));
     right.appendChild(stash);
