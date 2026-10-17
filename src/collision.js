@@ -149,79 +149,78 @@ export class Collision {
   }
 
   // Ray vs world. dir must be normalized. Returns { dist, normal, tag } or null.
+  //
+  // Boxes: walk the grid cells the ray actually crosses (2D DDA), nearest
+  // first, and stop as soon as a hit is closer than the next cell boundary.
+  // Terrain: march with steps sized by the ray's height above the ground, so
+  // rays well above it take a handful of big steps instead of one per metre.
   raycast(ox, oy, oz, dx, dy, dz, maxDist) {
     let best = maxDist;
     let normal = null;
     let tag = null;
-    const ex = ox + dx * maxDist;
-    const ez = oz + dz * maxDist;
-    const boxes = this.queryRay(ox, oz, ex, ez);
-    for (const b of boxes) {
-      const t = rayBox(ox, oy, oz, dx, dy, dz, b, best);
-      if (t !== null && t < best) {
-        best = t;
-        normal = lastNormal.slice();
-        tag = b.tag;
+    this.stamp++;
+    const stamp = this.stamp;
+    let cx = Math.floor(ox / CELL);
+    let cz = Math.floor(oz / CELL);
+    const stepX = dx > 0 ? 1 : -1;
+    const stepZ = dz > 0 ? 1 : -1;
+    const tDeltaX = Math.abs(dx) > 1e-9 ? CELL / Math.abs(dx) : Infinity;
+    const tDeltaZ = Math.abs(dz) > 1e-9 ? CELL / Math.abs(dz) : Infinity;
+    let tMaxX = Math.abs(dx) > 1e-9 ? ((dx > 0 ? (cx + 1) * CELL : cx * CELL) - ox) / dx : Infinity;
+    let tMaxZ = Math.abs(dz) > 1e-9 ? ((dz > 0 ? (cz + 1) * CELL : cz * CELL) - oz) / dz : Infinity;
+    for (let guard = 0; guard < 4096; guard++) {
+      const cell = this.grid.get(cx * 100000 + cz);
+      if (cell) {
+        for (const b of cell) {
+          if (b.mark === stamp) continue;
+          b.mark = stamp;
+          const t = rayBox(ox, oy, oz, dx, dy, dz, b, best);
+          if (t !== null && t < best) {
+            best = t;
+            normal = lastNormal.slice();
+            tag = b.tag;
+          }
+        }
+      }
+      const tExit = Math.min(tMaxX, tMaxZ);
+      if (best <= tExit || tExit > maxDist) break;
+      if (tMaxX < tMaxZ) {
+        cx += stepX;
+        tMaxX += tDeltaX;
+      } else {
+        cz += stepZ;
+        tMaxZ += tDeltaZ;
       }
     }
-    // terrain: march then refine
-    const step = 1.0;
+
+    // terrain
+    const horiz = Math.hypot(dx, dz);
+    const descent = Math.max(0, -dy);
+    let t = 0;
     let prevT = 0;
-    for (let t = step; t <= best + step; t += step) {
-      const tt = Math.min(t, best);
-      const y = oy + dy * tt;
-      if (y < terrainHeight(ox + dx * tt, oz + dz * tt)) {
+    for (let guard = 0; guard < 512 && t <= best; guard++) {
+      const gap = oy + dy * t - terrainHeight(ox + dx * t, oz + dz * t);
+      if (gap < 0) {
         let lo = prevT;
-        let hi = tt;
-        for (let i = 0; i < 6; i++) {
+        let hi = t;
+        for (let i = 0; i < 7; i++) {
           const mid = (lo + hi) / 2;
           if (oy + dy * mid < terrainHeight(ox + dx * mid, oz + dz * mid)) hi = mid;
           else lo = mid;
         }
         if (hi < best) {
-          best = hi;
+          best = Math.max(0.01, hi);
           normal = [0, 1, 0];
           tag = 'ground';
         }
         break;
       }
-      prevT = tt;
-      if (tt >= best) break;
+      prevT = t;
+      // the ground rises at most ~2 m per metre, so this step can't skip a hill
+      t += Math.min(8, Math.max(0.25, gap / (2.4 * horiz + descent + 0.05)));
     }
     if (!normal) return null;
     return { dist: best, normal, tag };
-  }
-
-  // Boxes in the grid cells a 2D segment passes through.
-  queryRay(x0, z0, x1, z1) {
-    const out = this._rayOut || (this._rayOut = []);
-    out.length = 0;
-    this.stamp++;
-    const len = Math.hypot(x1 - x0, z1 - z0);
-    const steps = Math.max(1, Math.ceil(len / (CELL * 0.5)));
-    let lastKey = null;
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const cx = Math.floor((x0 + (x1 - x0) * t) / CELL);
-      const cz = Math.floor((z0 + (z1 - z0) * t) / CELL);
-      // check a 3x3 neighbourhood the first time we enter a cell, so diagonal moves don't skip cells
-      const key = cx * 100000 + cz;
-      if (key === lastKey) continue;
-      lastKey = key;
-      for (let ax = -1; ax <= 1; ax++) {
-        for (let az = -1; az <= 1; az++) {
-          const cell = this.grid.get((cx + ax) * 100000 + (cz + az));
-          if (!cell) continue;
-          for (const box of cell) {
-            if (box.mark !== this.stamp) {
-              box.mark = this.stamp;
-              out.push(box);
-            }
-          }
-        }
-      }
-    }
-    return out;
   }
 
   lineOfSight(a, b) {

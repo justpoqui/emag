@@ -170,6 +170,13 @@ export class Husk {
     this.hitFlash = 0;
     this.strafe = Math.random() < 0.5 ? 1 : -1;
     if (this.def.flying) this.pos.y = y + this.def.hover;
+    // only the big pieces cast shadows; legs, rotors and eyes aren't worth a shadow pass each
+    this.model.traverse((o) => {
+      if (!o.isMesh) return;
+      o.geometry.computeBoundingSphere();
+      o.castShadow = o.geometry.boundingSphere.radius * Math.max(o.scale.x, o.scale.y, o.scale.z) > 0.4;
+    });
+    this.small = this.def.radius < 1;
     this.syncModel();
   }
 

@@ -187,6 +187,7 @@ export class Game {
     };
     this.containerMats = mats;
     const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd27a });
+    const markerGeo = new THREE.OctahedronGeometry(0.08, 0);
     this.containers = this.world.containers.map((c, i) => {
       const g = new THREE.Group();
       const add = (sx, sy, sz, m, x = 0, y = 0, z = 0) => {
@@ -234,7 +235,8 @@ export class Game {
         default:
           break;
       }
-      const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.08, 0), glowMat);
+      if (lid) lid.castShadow = false;
+      const marker = new THREE.Mesh(markerGeo, glowMat);
       marker.position.y = (size ? size[1] : 1) + 0.35;
       g.add(marker);
       g.position.set(c.x, c.y, c.z);
@@ -697,7 +699,13 @@ export class Game {
   }
 
   updateInteraction(dt) {
-    const target = this.ui.menuOpen() ? null : this.findInteractable();
+    // looking for something to interact with is cheap but not free: 10x a second
+    this._interactTimer = (this._interactTimer || 0) - dt;
+    if (this._interactTimer <= 0) {
+      this._interactTimer = 0.1;
+      this._interactCache = this.ui.menuOpen() ? null : this.findInteractable();
+    }
+    const target = this.ui.menuOpen() ? null : this._interactCache;
     const holding = this.input.down('KeyE');
     const it = this.interact;
     if (!target || (it.target && (it.target.obj !== target.obj || it.target.kind !== target.kind))) {
@@ -919,11 +927,12 @@ export class Game {
     // ---- world ----
     const ctx = this.getHuskCtx();
     for (const e of this.enemies) {
-      // far-away Husks think less often
-      const far = e.pos.distanceTo(p.pos) > 120;
-      if (far) {
+      // far-away Husks think less often (5x a second past 60 m, 2x past 120 m)
+      const d = e.pos.distanceTo(p.pos);
+      const every = d > 120 ? 0.5 : d > 60 && e.state !== 'alert' ? 0.2 : d > 90 ? 0.1 : 0;
+      if (every) {
         e._skip = (e._skip || 0) + dt;
-        if (e._skip < 0.2) continue;
+        if (e._skip < every) continue;
         e.update(e._skip, ctx);
         e._skip = 0;
       } else {
@@ -940,9 +949,10 @@ export class Game {
     this.updateLifts(dt);
     // skip drawing far-away things (fog hides them anyway); big win on phones
     const drawDist = this.quality.drawDist;
-    for (const e of this.enemies) e.model.visible = e.pos.distanceTo(p.pos) < drawDist;
+    for (const e of this.enemies) e.model.visible = e.pos.distanceTo(p.pos) < (e.small ? drawDist * 0.6 : drawDist);
+    const lootDist = Math.min(70, drawDist * 0.45);
     for (const c of this.containers) {
-      c.group.visible = Math.abs(c.x - p.pos.x) < drawDist * 0.6 && Math.abs(c.z - p.pos.z) < drawDist * 0.6;
+      c.group.visible = Math.abs(c.x - p.pos.x) < lootDist && Math.abs(c.z - p.pos.z) < lootDist;
       c.marker.visible = !(c.searched && c.items.length === 0);
       c.marker.rotation.y += dt * 2;
     }

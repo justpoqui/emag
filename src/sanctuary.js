@@ -154,12 +154,17 @@ export class Sanctuary {
 
     // lights: warm bulb overhead, bedside lamp, window glow, cool fill
     scene.add(new THREE.HemisphereLight(0xffe2c0, 0x2a2018, 0.55));
-    const bulb = new THREE.PointLight(0xffc38a, 30, 9, 1.6);
+    // a spotlight shadow is one render pass; a point light's would be six
+    const bulb = new THREE.SpotLight(0xffc38a, 30, 9, 1.25, 0.7, 1.6);
     bulb.position.set(0, H - 0.7, 0.4);
+    bulb.target.position.set(0, 0, 0.4);
     bulb.castShadow = !!quality.shadows;
     bulb.shadow.mapSize.set(1024, 1024);
     bulb.shadow.bias = -0.002;
-    scene.add(bulb);
+    scene.add(bulb, bulb.target);
+    const bulbFill = new THREE.PointLight(0xffc38a, 8, 7, 1.8);
+    bulbFill.position.set(0, H - 0.75, 0.4);
+    scene.add(bulbFill);
     this.bulb = bulb;
     const bulbMesh = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffe0b0 }));
     bulbMesh.position.copy(bulb.position);
@@ -260,6 +265,7 @@ export class Sanctuary {
     const sway = Math.sin(t * 0.7) * 0.02;
     for (const p of this.bulbParts) p.position.x = sway;
     this.bulb.position.x = sway;
+    this.bulb.target.position.x = sway;
     this.dust.rotation.y = t * 0.01;
     this.dust.position.y = Math.sin(t * 0.2) * 0.05;
   }

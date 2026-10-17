@@ -12,9 +12,9 @@ export const IS_TOUCH = (() => {
 })();
 
 export const QUALITY = {
-  low: { label: 'Low', pixelRatio: 1, antialias: false, shadows: false, shadowMap: 1024, grass: 2500, drawDist: 140 },
-  medium: { label: 'Medium', pixelRatio: 1.25, antialias: true, shadows: true, shadowMap: 1024, grass: 5000, drawDist: 200 },
-  high: { label: 'High', pixelRatio: 1.5, antialias: true, shadows: true, shadowMap: 2048, grass: 9000, drawDist: 320 },
+  low: { label: 'Low', pixelRatio: 1, antialias: false, shadows: false, shadowMap: 1024, grass: 2500, drawDist: 110 },
+  medium: { label: 'Medium', pixelRatio: 1.25, antialias: true, shadows: true, shadowMap: 1024, grass: 5000, drawDist: 150 },
+  high: { label: 'High', pixelRatio: 1.5, antialias: true, shadows: true, shadowMap: 2048, grass: 9000, drawDist: 200 },
 };
 
 export function getQualityName() {

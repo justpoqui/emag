@@ -41,6 +41,28 @@ const TYPE_GLYPH = {
   weapon: '⌐', ammo: '⁝', shield: '◈', heal: '✚', recharge: '⚡', grenade: '●', material: '▣', valuable: '◆',
 };
 
+// The HUD updates every frame; only touch the page when a value changed.
+function css(node, prop, value) {
+  const key = `_c_${prop}`;
+  if (node[key] !== value) {
+    node[key] = value;
+    node.style[prop] = value;
+  }
+}
+function txt(node, value) {
+  const v = String(value);
+  if (node._t !== v) {
+    node._t = v;
+    node.textContent = v;
+  }
+}
+function cls(node, value) {
+  if (node._cls !== value) {
+    node._cls = value;
+    node.className = value;
+  }
+}
+
 function fmtTime(s) {
   s = Math.max(0, Math.ceil(s));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -240,34 +262,38 @@ export class UI {
     const hp = Math.max(0, p.health);
     this.healthLag += (hp - this.healthLag) * Math.min(1, dt * 2);
     if (this.healthLag < hp) this.healthLag = hp;
-    this.h.health.style.width = `${(hp / PLAYER.health) * 100}%`;
-    this.h.healthLag.style.width = `${(this.healthLag / PLAYER.health) * 100}%`;
-    this.h.healthNum.textContent = Math.ceil(hp);
+    css(this.h.health, 'width', `${(hp / PLAYER.health) * 100}%`);
+    css(this.h.healthLag, 'width', `${(this.healthLag / PLAYER.health) * 100}%`);
+    txt(this.h.healthNum, Math.ceil(hp));
     this.h.health.classList.toggle('low', hp < 30);
     const sh = g.profile.loadout.shield;
     if (sh) {
       const cap = ITEMS[sh.id].capacity;
-      this.h.shieldRow.style.display = 'flex';
-      this.h.shield.style.width = `${(sh.charge / cap) * 100}%`;
-      this.h.shieldNum.textContent = Math.ceil(sh.charge);
+      css(this.h.shieldRow, 'display', 'flex');
+      css(this.h.shield, 'width', `${(sh.charge / cap) * 100}%`);
+      txt(this.h.shieldNum, Math.ceil(sh.charge));
     } else {
-      this.h.shieldRow.style.display = 'none';
+      css(this.h.shieldRow, 'display', 'none');
     }
-    this.h.stamina.style.width = `${(p.stamina / PLAYER.stamina) * 100}%`;
+    css(this.h.stamina, 'width', `${(p.stamina / PLAYER.stamina) * 100}%`);
     this.h.stamina.parentElement.classList.toggle('locked', p.staminaLock > 0);
     const load = g.loadRatio || 0;
     this.h.load.classList.toggle('hidden', load <= 0.75);
     if (load > 0.75) {
-      this.h.load.textContent = load > 1 ? 'OVERLOADED · no sprinting' : 'HEAVY LOAD · slower';
+      txt(this.h.load, load > 1 ? 'OVERLOADED · no sprinting' : 'HEAVY LOAD · slower');
       this.h.load.classList.toggle('over', load > 1);
     }
     if (this._stance !== `${g.weapons.active}:${g.weapons.holstered}:${!!g.weapons.current()}`) this.refreshAmmo();
-    this.h.vignette.style.opacity = hp < 35 ? (1 - hp / 35) * 0.9 : Math.max(0, 0.5 - (g.time - p.lastDamage) * 1.5);
+    css(this.h.vignette, 'opacity', hp < 35 ? (1 - hp / 35) * 0.9 : Math.max(0, 0.5 - (g.time - p.lastDamage) * 1.5));
 
     // crosshair
     const spread = g.weapons.spread();
     const px = 6 + spread * 7;
-    this.h.cross.style.setProperty('--gap', `${px}px`);
+    const gap = `${px.toFixed(1)}px`;
+    if (this.h.cross._gap !== gap) {
+      this.h.cross._gap = gap;
+      this.h.cross.style.setProperty('--gap', gap);
+    }
     this.h.cross.classList.toggle('hidden', !g.weapons.current() || g.weapons.holstered || p.sprinting || this.menuOpen());
     this.h.cross.classList.toggle('ads', p.ads);
 
@@ -275,15 +301,15 @@ export class UI {
     const w = g.weapons;
     if (w.reloading > 0) {
       this.h.reload.classList.remove('hidden');
-      this.h.reload.querySelector('.fill').style.width = `${(1 - w.reloading / w.reloadTotal) * 100}%`;
+      css(this.h.reload.querySelector('.fill'), 'width', `${(1 - w.reloading / w.reloadTotal) * 100}%`);
     } else {
       this.h.reload.classList.add('hidden');
     }
     // using an item
     if (g.using) {
       this.h.use.classList.remove('hidden');
-      this.h.useText.textContent = `Using ${ITEMS[g.using.id].name}…`;
-      this.h.useFill.style.width = `${(g.using.t / g.using.total) * 100}%`;
+      txt(this.h.useText, `Using ${ITEMS[g.using.id].name}…`);
+      css(this.h.useFill, 'width', `${(g.using.t / g.using.total) * 100}%`);
     } else {
       this.h.use.classList.add('hidden');
     }
@@ -292,7 +318,7 @@ export class UI {
     if (cur && this.h.mag.textContent !== String(cur.mag)) this.refreshAmmo();
 
     // timer
-    this.h.timer.textContent = fmtTime(g.raidTime);
+    txt(this.h.timer, fmtTime(g.raidTime));
     this.h.timerBox.classList.toggle('urgent', g.raidTime < 120);
 
     // compass: yaw 0 faces +Z. Call +Z "south" and -Z "north", +X east.
@@ -302,8 +328,8 @@ export class UI {
       let diff = deg - heading;
       diff = ((diff + 540) % 360) - 180;
       const x = width / 2 + diff * 3.2;
-      node.style.display = Math.abs(diff) > 65 ? 'none' : 'block';
-      node.style.transform = `translateX(${x}px)`;
+      css(node, 'display', Math.abs(diff) > 65 ? 'none' : 'block');
+      css(node, 'transform', `translateX(${x}px)`);
     };
     for (const t of this.compassTicks) place(t.el, t.deg);
     // world markers for lifts
@@ -313,17 +339,17 @@ export class UI {
       const ex = li.ex;
       const deg = ((Math.atan2(ex.x - p.pos.x, -(ex.z - p.pos.z)) * 180) / Math.PI + 360) % 360;
       place(li.icon, deg);
-      li.icon.className = `lift-icon ${ex.state}`;
+      cls(li.icon, `lift-icon ${ex.state}`);
       const dist = Math.hypot(ex.x - p.pos.x, ex.z - p.pos.z);
       v.set(ex.x, ex.y + 5, ex.z).project(cam);
       const onScreen = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
       const show = onScreen && (ex.state !== 'idle' || dist < 90);
       li.marker.classList.toggle('hidden', !show);
       if (show) {
-        li.marker.className = `world-marker ${ex.state}`;
-        li.marker.style.transform = `translate(${(v.x * 0.5 + 0.5) * window.innerWidth}px, ${(-v.y * 0.5 + 0.5) * window.innerHeight}px)`;
+        cls(li.marker, `world-marker ${ex.state}`);
+        css(li.marker, 'transform', `translate(${(v.x * 0.5 + 0.5) * window.innerWidth}px, ${(-v.y * 0.5 + 0.5) * window.innerHeight}px)`);
         const status = ex.state === 'calling' ? ` · ${Math.ceil(ex.timer)}s` : ex.state === 'open' ? ` · OPEN ${Math.ceil(ex.timer)}s` : '';
-        li.marker.querySelector('.m-dist').textContent = `${Math.round(dist)}m${status}`;
+        txt(li.marker.querySelector('.m-dist'), `${Math.round(dist)}m${status}`);
       }
     }
     if (this.open === 'map') this.drawMap();
