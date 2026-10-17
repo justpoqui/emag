@@ -188,7 +188,7 @@ export class Weapons {
       const flat = Math.hypot(dx, dz);
       if (flat - e.def.radius > STICK.range || Math.abs(c.y - chest.y) > 1.6 + e.def.radius) continue;
       if (flat > 0.3 && (dx * fx + dz * fz) / flat < cosArc) continue;
-      const res = game.damageEnemy(e, STICK.damage, 0.3, 1, false, c);
+      const res = game.damageEnemy(e, STICK.damage, 0.3, 1, false, c, 'melee');
       hits++;
       if (res.killed) kills++;
       if (!e.dead) {

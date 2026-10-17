@@ -25,9 +25,10 @@ export function buildWorld(scene, opts = {}) {
   const unitBox = new THREE.BoxGeometry(1, 1, 1);
 
   const M = {
-    concrete: mat(0xb9ae9a),
-    concreteDark: mat(0x8f8676),
-    plaster: [mat(0xc9a27e), mat(0x8fb3a6), mat(0xd6c08a), mat(0xc27f6b), mat(0xa9b7bf), mat(0xe0d4bd)],
+    // weathered, washed-out tones: a town the Network has been running for years
+    concrete: mat(0xa8a397),
+    concreteDark: mat(0x7f7a70),
+    plaster: [mat(0xa8977f), mat(0x7f8e8a), mat(0xb3a586), mat(0x9a7b6d), mat(0x8d969b), mat(0xc4bcaa)],
     rust: mat(0x8a4a2a, { roughness: 0.8, metalness: 0.4 }),
     metal: mat(0x6b6f72, { roughness: 0.55, metalness: 0.6 }),
     darkMetal: mat(0x2e3236, { roughness: 0.5, metalness: 0.7 }),
@@ -313,14 +314,59 @@ export function buildWorld(scene, opts = {}) {
     box(M.stripe, x, ground(x, z) + 0.75, z, 0.72, 0.15, 3.02, { rotY: rot, collide: false });
   }
   // street lamps
+  const lampPole = new THREE.CylinderGeometry(0.07, 0.11, 5, 10);
+  lampPole.translate(0, 2.5, 0);
+  const lampArm = mergeGeometries([
+    new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, 4.9, 0), new THREE.Vector3(0, 5.6, 0.6), new THREE.Vector3(0, 5.25, 1.5)), 10, 0.05, 6).toNonIndexed(),
+    new THREE.SphereGeometry(0.22, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 5.1, 1.55).toNonIndexed(),
+  ]);
+  const boardLeg = new THREE.CylinderGeometry(0.08, 0.1, 3.4, 8);
+  boardLeg.translate(0, 1.7, 0);
   for (let t = -140; t <= 140; t += 22) {
     for (const [x, z] of [[TOWN.x + t, TOWN.z + 5.6], [TOWN.x - 5.6, TOWN.z + t]]) {
       if (Math.abs(t) < 8) continue;
       const g = ground(x, z);
-      box(M.darkMetal, x, g + 2.5, z, 0.18, 5, 0.18);
-      box(M.darkMetal, x, g + 5, z, 0.9, 0.12, 0.25, { collide: false, rotZ: rng.range(-0.3, 0.3) });
+      // a slim pole curving over the road into a hooded lamp
+      geoAt(M.darkMetal, lampPole, x, g, z);
+      col.addBox({ x: x - 0.1, y: g, z: z - 0.1 }, { x: x + 0.1, y: g + 5, z: z + 0.1 }, 'metal');
+      const toRoad = z === TOWN.z + 5.6 ? Math.PI : Math.PI / 2; // arm reaches out over the road
+      const arm = lampArm.clone();
+      arm.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, g, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, toRoad + rng.range(-0.2, 0.2), 0)), new THREE.Vector3(1, 1, 1)));
+      pushGeo(M.darkMetal, arm);
     }
   }
+
+  // ---------- Network notices ----------
+  // curved billboards along the main roads, in the Network's voice
+  const SLOGANS = [
+    ['THE NETWORK PROVIDES', 'REST · RATION · REMAIN'],
+    ['COMPLY · CONSERVE · CONTINUE', 'YOUR QUOTA KEEPS US ALL'],
+    ['CURFEW AT DUSK', 'WATCHERS KEEP YOU SAFE'],
+    ['REPORT UNREGISTERED SALVAGE', 'THE NETWORK REMEMBERS'],
+    ['DO NOT DISTURB THE CRADLES', 'GROWTH IS ORDER'],
+    ['RATION DAY: THURSDAY', 'GRATITUDE IS MANDATORY'],
+  ];
+  const boardSpots = [[-95, 'x'], [-40, 'x'], [55, 'x'], [110, 'x'], [-75, 'z'], [65, 'z']];
+  boardSpots.forEach(([t, axis], i) => {
+    const side = i % 2 ? 1 : -1;
+    const x = axis === 'x' ? TOWN.x + t : TOWN.x + side * 10;
+    const z = axis === 'x' ? TOWN.z + side * 10 : TOWN.z + t;
+    // skip if a building is in the way
+    const near = col.query(x - 3, z - 1.5, x + 3, z + 1.5, []);
+    if (near.some((b) => x + 3 > b.min.x && x - 3 < b.max.x && z + 1.5 > b.min.z && z - 1.5 < b.max.z)) return;
+    const g = ground(x, z);
+    // face the road
+    const fx = axis === 'x' ? 0 : -side;
+    const fz = axis === 'x' ? -side : 0;
+    networkBoard(scene, SLOGANS[i % SLOGANS.length], x, g, z, Math.atan2(fx, fz));
+    for (const o of [-2.2, 2.2]) {
+      // legs sit just behind the curve of the board
+      const px = x + (axis === 'x' ? o : 0) - fx * 0.45;
+      const pz = z + (axis === 'x' ? 0 : o) - fz * 0.45;
+      geoAt(M.darkMetal, boardLeg, px, g, pz);
+      col.addBox({ x: px - 0.12, y: g, z: pz - 0.12 }, { x: px + 0.12, y: g + 3.4, z: pz + 0.12 }, 'metal');
+    }
+  });
 
   // ---------- shipping-container yard (east) ----------
   const yard = { x: 110, z: -60 };
@@ -500,14 +546,15 @@ export function buildWorld(scene, opts = {}) {
     addContainer(['crate', 'medical', 'locker'], x, g, z);
   }
 
-  // ---------- rocks and trees ----------
   // Lifts and drop points stay clear so nothing spawns inside them.
   const KEEP_CLEAR = [[-40, -195], [195, 20], [30, 195], [-195, -20], [-170, 150], [170, -170], [-160, -170], [175, 175], [-200, 60], [80, 200]];
   const onRoad = (x, z, pad) => (Math.abs(z - TOWN.z) < 5 + pad && Math.abs(x - TOWN.x) < 175) || (Math.abs(x - TOWN.x) < 5 + pad && Math.abs(z - TOWN.z) < 175);
   const nearBox = [];
+  const infraSites = [];
   // true if (x,z) is free of other colliders (buildings, walls, earlier rocks) and loot
   const clearAt = (x, z, r) => {
     if (KEEP_CLEAR.some(([cx, cz]) => Math.hypot(x - cx, z - cz) < 9 + r)) return false;
+    if (infraSites.some((s) => Math.hypot(x - s.x, z - s.z) < 9 + r)) return false;
     if (containers.some((c) => Math.hypot(x - c.x, z - c.z) < 1.6 + r)) return false;
     const m = r + 0.8;
     for (const b of col.query(x - m, z - m, x + m, z + m, nearBox)) {
@@ -515,6 +562,23 @@ export function buildWorld(scene, opts = {}) {
     }
     return true;
   };
+  // ---------- Husk Network build sites ----------
+  // Open ground the network can build on between raids (see network.js):
+  // Bulwarks where the raider fights them, Cradles where they're left alone.
+  for (let i = 0; i < 600 && infraSites.length < 30; i++) {
+    const x = rng.range(-MAP_HALF + 30, MAP_HALF - 30);
+    const z = rng.range(-MAP_HALF + 30, MAP_HALF - 30);
+    if (Math.hypot(x - TOWN.x, z - TOWN.z) < 70 || onRoad(x, z, 5)) continue;
+    if (infraSites.some((s) => Math.hypot(s.x - x, s.z - z) < 38)) continue;
+    if (!clearAt(x, z, 7.5)) continue;
+    const index = infraSites.length;
+    infraSites.push({ x, z, y: ground(x, z), rot: rng.range(0, Math.PI * 2) });
+    // a Cradle's pods; only filled when the network builds one here
+    containers.push({ pool: ['husk_pod'], type: 'husk_pod', x: x + 3.4, y: 0, z: z + 1.2, rotY: 0, infra: index });
+    containers.push({ pool: ['husk_pod'], type: 'husk_pod', x: x - 2.6, y: 0, z: z - 2.6, rotY: 0, infra: index });
+  }
+
+  // ---------- rocks and trees ----------
   const rockGeo = new THREE.DodecahedronGeometry(1, 0);
   // the collider matches the rock: about 0.8 of its size around, as tall as it shows
   function rock(x, z, s) {
@@ -727,7 +791,53 @@ export function buildWorld(scene, opts = {}) {
     if (!c.y) c.y = col.groundHeight(c.x, c.z, 100, 0.3, 0);
   }
 
-  return { collision: col, containers, enemySpawns, extractions, insertions, lights, town: TOWN };
+  return { collision: col, containers, enemySpawns, extractions, insertions, lights, infraSites, town: TOWN };
+}
+
+// A curved Network billboard: a strip of a cylinder with a slogan on it.
+function networkBoard(scene, [line1, line2], x, y, z, facing) {
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#e9e3d6';
+  g.fillRect(0, 0, 1024, 256);
+  g.fillStyle = '#b8321f';
+  g.fillRect(0, 0, 1024, 22);
+  g.fillRect(0, 234, 1024, 22);
+  // the Network's eye
+  g.beginPath();
+  g.arc(120, 128, 70, 0, Math.PI * 2);
+  g.fillStyle = '#1d1c1a';
+  g.fill();
+  g.beginPath();
+  g.arc(120, 128, 26, 0, Math.PI * 2);
+  g.fillStyle = '#ff6a20';
+  g.fill();
+  g.fillStyle = '#1d1c1a';
+  g.textBaseline = 'middle';
+  g.font = '800 64px "Barlow Condensed", "Arial Narrow", sans-serif';
+  g.fillText(line1, 225, 100, 770);
+  g.fillStyle = '#5a554c';
+  g.font = '600 38px "Barlow Condensed", "Arial Narrow", sans-serif';
+  g.fillText(line2, 228, 172, 770);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  const R = 9;
+  const arc = 5.6 / R;
+  const geo = new THREE.CylinderGeometry(R, R, 1.6, 18, 1, true, -arc / 2, arc);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.12 }));
+  // the cylinder's axis sits behind the board so its outside faces the road
+  mesh.position.set(x - Math.sin(facing) * R, y + 3.1, z - Math.cos(facing) * R);
+  mesh.rotation.y = facing;
+  mesh.castShadow = true;
+  scene.add(mesh);
+  const backGeo = new THREE.CylinderGeometry(R - 0.06, R - 0.06, 1.75, 18, 1, true, -arc / 2 - 0.01, arc + 0.02);
+  const back = new THREE.Mesh(backGeo, new THREE.MeshStandardMaterial({ color: 0x2e3236, roughness: 0.6, metalness: 0.6, side: THREE.BackSide }));
+  back.position.copy(mesh.position);
+  back.rotation.y = facing;
+  scene.add(back);
 }
 
 function hash2(x, z) {

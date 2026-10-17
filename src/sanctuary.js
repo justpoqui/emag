@@ -11,6 +11,7 @@
 //   Lift           x 33..36.5,  z -6.6..-3.6  at the east end of the hallway
 
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { poseRig, buildRaiderModel } from './rig.js';
 import { Player, buildGunModel } from './player.js';
 import { Collision } from './collision.js';
@@ -90,8 +91,11 @@ export class Sanctuary {
     this.M = M;
 
     // ---------- helpers ----------
+    // furniture-sized boxes get rounded edges; walls and floors stay crisp
     const box = (material, x, y, z, sx, sy, sz, { collide = true, rot = [0, 0, 0], shadow = false } = {}) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), material);
+      const small = Math.max(sx, sy, sz) < 3 && Math.min(sx, sy, sz) > 0.05;
+      const geo = small ? new RoundedBoxGeometry(sx, sy, sz, 2, Math.min(0.05, Math.min(sx, sy, sz) * 0.3)) : new THREE.BoxGeometry(sx, sy, sz);
+      const m = new THREE.Mesh(geo, material);
       m.position.set(x, y, z);
       m.rotation.set(...rot);
       m.castShadow = shadow;

@@ -6,6 +6,9 @@ import * as Audio from './audio.js';
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _u = new THREE.Vector3();
+const _d = new THREE.Vector3();
+const _down = new THREE.Vector3(0, -1, 0);
 
 const shell = new THREE.MeshStandardMaterial({ color: 0xc9cbc6, roughness: 0.45, metalness: 0.7 });
 const plate = new THREE.MeshStandardMaterial({ color: 0x55595d, roughness: 0.5, metalness: 0.8 });
@@ -16,7 +19,7 @@ function eyeMaterial() {
   return new THREE.MeshStandardMaterial({ color: 0x331008, emissive: 0xff5020, emissiveIntensity: 1.2 });
 }
 
-function add(parent, geo, material, x, y, z) {
+function add(parent, geo, material, x = 0, y = 0, z = 0) {
   const m = new THREE.Mesh(geo, material);
   m.position.set(x, y, z);
   m.castShadow = true;
@@ -24,56 +27,122 @@ function add(parent, geo, material, x, y, z) {
   return m;
 }
 
-// Each builder returns { root, eye, parts, hitboxes:[{node, r, mult}] }
+// A smooth body of revolution: profile [[radius, y], ...] spun round the y axis.
+function lathe(profile, segments = 18) {
+  return new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), segments);
+}
+
+// A curved limb: a tube along a bend from `a` through `b` to `c`.
+function curvedLimb(a, b, c, radius) {
+  const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(...a), new THREE.Vector3(...b), new THREE.Vector3(...c));
+  return new THREE.TubeGeometry(curve, 8, radius, 6);
+}
+
+const thrustMat = new THREE.MeshBasicMaterial({ color: 0x2f9fff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+
+// soft round spot for the Watcher's searchlight on the ground
+let spotTexture = null;
+function spotTex() {
+  if (spotTexture) return spotTexture;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grad.addColorStop(0.7, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(0.92, 'rgba(255,255,255,0.8)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  spotTexture = new THREE.CanvasTexture(c);
+  return spotTexture;
+}
+
+// Each builder returns { root, eye, parts, hitboxes:[{node, r, mult, weak}] }.
+// The eye is each Husk's critical spot; everything else takes bodyMult damage.
 const BUILDERS = {
   skitter() {
     const root = new THREE.Group();
-    const body = add(root, new THREE.SphereGeometry(0.42, 10, 6), shell, 0, 0.45, 0);
-    body.scale.set(1, 0.55, 1.2);
-    add(root, new THREE.BoxGeometry(0.5, 0.12, 0.6), plate, 0, 0.62, -0.05);
-    const eye = add(root, new THREE.SphereGeometry(0.11, 8, 6), eyeMaterial(), 0, 0.5, 0.45);
+    const body = new THREE.Group();
+    body.position.y = 0.32;
+    root.add(body);
+    const carapace = add(body, new THREE.SphereGeometry(0.3, 18, 12), shell, 0, 0, 0);
+    carapace.scale.set(1, 0.58, 1.25);
+    const crest = add(body, new THREE.TorusGeometry(0.19, 0.03, 8, 24), plate, 0, 0.13, -0.04);
+    crest.rotation.x = Math.PI / 2;
+    crest.scale.set(1, 1.35, 1);
+    add(body, new THREE.SphereGeometry(0.16, 14, 10), dark, 0, 0.03, -0.37).scale.set(1, 0.7, 1.25); // abdomen
+    add(body, new THREE.TorusGeometry(0.07, 0.016, 6, 18), dark, 0, 0.03, 0.345); // lens ring
+    const eye = add(body, new THREE.SphereGeometry(0.05, 12, 10), eyeMaterial(), 0, 0.03, 0.36);
     const legs = [];
     for (let i = 0; i < 6; i++) {
       const side = i < 3 ? -1 : 1;
       const k = (i % 3) - 1;
       const leg = new THREE.Group();
-      leg.position.set(side * 0.3, 0.45, k * 0.3);
-      const g = new THREE.BoxGeometry(0.6, 0.06, 0.06);
-      g.translate(side * 0.3, 0, 0);
-      const m = new THREE.Mesh(g, dark);
-      m.rotation.z = side * -0.6;
-      m.castShadow = true;
+      leg.position.set(side * 0.2, 0.32, k * 0.2);
+      const m = new THREE.Mesh(curvedLimb([0, 0, 0], [side * 0.32, 0.18, k * 0.12], [side * 0.46, -0.32, k * 0.22], 0.022), dark);
       leg.add(m);
       root.add(leg);
       legs.push(leg);
     }
-    return { root, eye, legs, hitboxes: [{ node: body, r: 0.55, mult: 1 }] };
+    return { root, eye, body, legs, hitboxes: [{ node: body, r: 0.34, mult: 1 }, { node: eye, r: 0.085, mult: 2.2, weak: true }] };
   },
   buzzer() {
     const root = new THREE.Group();
-    const body = add(root, new THREE.BoxGeometry(0.6, 0.35, 0.9), shell, 0, 0, 0);
-    add(root, new THREE.BoxGeometry(0.4, 0.15, 0.5), plate, 0, 0.24, -0.05);
-    const eye = add(root, new THREE.SphereGeometry(0.12, 8, 6), eyeMaterial(), 0, -0.02, 0.47);
-    add(root, new THREE.CylinderGeometry(0.05, 0.05, 0.5, 6), dark, 0, -0.25, 0.25).rotation.x = Math.PI / 2;
-    const rotors = [];
-    for (const [x, z] of [[-0.65, 0.45], [0.65, 0.45], [-0.65, -0.45], [0.65, -0.45]]) {
-      add(root, new THREE.BoxGeometry(0.6, 0.06, 0.08), dark, x / 2, 0.08, z / 2).rotation.y = Math.atan2(z, x);
-      const rotor = add(root, new THREE.BoxGeometry(0.7, 0.02, 0.08), plate, x, 0.14, z);
-      rotors.push(rotor);
-      add(root, new THREE.CylinderGeometry(0.1, 0.12, 0.12, 8), dark, x, 0.08, z);
+    // teardrop hull, nose forward (+z)
+    const hullGeo = lathe([[0, -0.55], [0.1, -0.5], [0.22, -0.3], [0.3, -0.05], [0.31, 0.15], [0.25, 0.33], [0.13, 0.45], [0, 0.48]]);
+    hullGeo.rotateX(Math.PI / 2);
+    const body = add(root, hullGeo, shell, 0, 0, 0);
+    body.scale.set(1, 0.72, 1);
+    add(root, new THREE.TorusGeometry(0.22, 0.025, 8, 28), plate, 0, 0, 0.1).scale.set(1.25, 0.85, 1); // waist band
+    add(root, new THREE.TorusGeometry(0.075, 0.018, 6, 18), dark, 0, 0, 0.455); // lens ring
+    const eye = add(root, new THREE.SphereGeometry(0.055, 12, 10), eyeMaterial(), 0, 0, 0.47);
+    // vectoring thrusters instead of rotors
+    const thrusters = [];
+    for (const side of [-1, 1]) {
+      const pod = new THREE.Group();
+      pod.position.set(side * 0.42, -0.02, -0.05);
+      root.add(pod);
+      add(root, curvedLimb([side * 0.2, 0, 0.05], [side * 0.34, 0.08, 0], [side * 0.42, -0.02, -0.05], 0.035), plate);
+      const casing = add(pod, new THREE.CapsuleGeometry(0.09, 0.26, 6, 12), dark, 0, 0, 0);
+      casing.rotation.x = Math.PI / 2;
+      const nozzle = add(pod, new THREE.CylinderGeometry(0.07, 0.1, 0.1, 12, 1, true), plate, 0, -0.08, -0.12);
+      nozzle.rotation.x = 0.6;
+      const flameGeo = new THREE.ConeGeometry(0.06, 0.26, 10, 1, true);
+      flameGeo.rotateX(Math.PI); // wide end at the nozzle, tapering away
+      flameGeo.translate(0, -0.13, 0);
+      const flame = new THREE.Mesh(flameGeo, thrustMat);
+      flame.position.set(0, -0.12, -0.16);
+      flame.rotation.x = 0.6;
+      pod.add(flame);
+      thrusters.push({ pod, flame });
     }
-    return { root, eye, rotors, hitboxes: [{ node: body, r: 0.6, mult: 1 }, { node: eye, r: 0.2, mult: 2 }] };
+    add(root, new THREE.CylinderGeometry(0.03, 0.02, 0.32, 8), dark, 0, -0.2, 0.22).rotation.x = Math.PI / 2; // gun
+    return { root, eye, thrusters, hitboxes: [{ node: body, r: 0.46, mult: 1 }, { node: eye, r: 0.095, mult: 2.2, weak: true }] };
   },
   watcher() {
     const root = new THREE.Group();
-    const body = add(root, new THREE.CylinderGeometry(0.25, 0.4, 0.7, 8), shell, 0, 0, 0);
-    const ring = add(root, new THREE.TorusGeometry(0.8, 0.05, 6, 24), hazard, 0, 0.15, 0);
+    const body = add(root, lathe([[0, -0.45], [0.15, -0.43], [0.3, -0.27], [0.36, 0], [0.29, 0.24], [0.13, 0.4], [0.05, 0.55], [0, 0.6]], 20), shell, 0, 0, 0);
+    const ring = add(root, new THREE.TorusGeometry(0.72, 0.04, 8, 40), hazard, 0, 0.1, 0);
     ring.rotation.x = Math.PI / 2;
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      add(root, curvedLimb([Math.cos(a) * 0.3, 0.05, Math.sin(a) * 0.3], [Math.cos(a) * 0.55, 0.22, Math.sin(a) * 0.55], [Math.cos(a) * 0.72, 0.1, Math.sin(a) * 0.72], 0.022), plate);
+    }
     const eyeMat = eyeMaterial();
     eyeMat.emissive.setHex(0xffcc20);
-    const eye = add(root, new THREE.SphereGeometry(0.18, 10, 8), eyeMat, 0, -0.35, 0.15);
-    add(root, new THREE.CylinderGeometry(0.02, 0.02, 0.9, 4), dark, 0, 0.75, 0);
-    return { root, eye, ring, hitboxes: [{ node: body, r: 0.55, mult: 1 }, { node: eye, r: 0.22, mult: 2 }] };
+    add(root, new THREE.TorusGeometry(0.1, 0.022, 6, 18), dark, 0, -0.42, 0.06).rotation.x = Math.PI / 2 + 0.5;
+    const eye = add(root, new THREE.SphereGeometry(0.075, 12, 10), eyeMat, 0, -0.44, 0.07);
+    add(root, new THREE.CylinderGeometry(0.012, 0.02, 0.7, 6), dark, 0, 0.9, 0);
+    // searchlight: a faint beam and a bright spot on the ground (placed in world space each frame)
+    const coneGeo = new THREE.ConeGeometry(1, 1, 24, 1, true);
+    coneGeo.translate(0, -0.5, 0);
+    const beam = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.06, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const spotGeo = new THREE.CircleGeometry(1, 32);
+    spotGeo.rotateX(-Math.PI / 2);
+    const spot = new THREE.Mesh(spotGeo, new THREE.MeshBasicMaterial({ color: 0xffe08a, map: spotTex(), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+    beam.frustumCulled = false;
+    return { root, eye, ring, beam, spot, hitboxes: [{ node: body, r: 0.44, mult: 1 }, { node: eye, r: 0.11, mult: 2.2, weak: true }] };
   },
   pouncer() {
     const root = new THREE.Group();
@@ -132,6 +201,8 @@ const BUILDERS = {
 
 let nextId = 1;
 
+// States: 'idle' (going about its business), 'wary' (neutral Husks that have
+// noticed the raider: watching, keeping their distance) and 'alert' (hostile).
 export class Husk {
   constructor(type, x, y, z, home, scene) {
     this.id = nextId++;
@@ -144,6 +215,7 @@ export class Husk {
     this.parts = built;
     this.model = built.root;
     scene.add(this.model);
+    if (built.beam) scene.add(built.beam, built.spot);
     this.pos = new THREE.Vector3(x, y, z);
     this.vel = new THREE.Vector3();
     this.yaw = Math.random() * Math.PI * 2;
@@ -169,12 +241,24 @@ export class Husk {
     this.chirpTimer = 2 + Math.random() * 4;
     this.hitFlash = 0;
     this.strafe = Math.random() < 0.5 ? 1 : -1;
+    // what this Husk knows about the raider this raid (fed to the network)
+    this.noticed = false; // has seen the raider
+    this.wasHostile = false; // has fought them
+    this.peaceLogged = false;
+    this.tension = 0; // builds while crowded or aimed at
+    this.warned = false;
+    this.waryTimer = 0;
+    this.calmTimer = 0;
+    this.shutter = 0; // eye shutters (0 open .. 1 slit)
+    this.beamAt = new THREE.Vector3(x, y, z);
+    this.sweep = Math.random() * 6;
+    this.beamRadius = 3;
     if (this.def.flying) this.pos.y = y + this.def.hover;
-    // only the big pieces cast shadows; legs, rotors and eyes aren't worth a shadow pass each
+    // only the big pieces cast shadows; legs, thrusters and eyes aren't worth a shadow pass each
     this.model.traverse((o) => {
       if (!o.isMesh) return;
       o.geometry.computeBoundingSphere();
-      o.castShadow = o.geometry.boundingSphere.radius * Math.max(o.scale.x, o.scale.y, o.scale.z) > 0.4;
+      o.castShadow = o.material !== thrustMat && o.geometry.boundingSphere.radius * Math.max(o.scale.x, o.scale.y, o.scale.z) > 0.4;
     });
     this.small = this.def.radius < 1;
     this.syncModel();
@@ -182,26 +266,46 @@ export class Husk {
 
   get center() {
     if (this.def.flying) return this.pos;
-    const h = { skitter: 0.45, pouncer: 2.4, warden: 4.2 }[this.type] || 1;
+    const h = { skitter: 0.32, pouncer: 2.4, warden: 4.2 }[this.type] || 1;
     return _w.set(this.pos.x, this.pos.y + h, this.pos.z);
+  }
+
+  get hostile() {
+    return this.state === 'alert';
   }
 
   hitboxes() {
     this.model.updateMatrixWorld(true);
-    return this.parts.hitboxes.map((h) => ({ center: h.node.getWorldPosition(new THREE.Vector3()), r: h.r, mult: h.mult, weak: h.weak }));
+    // shutters narrow the eye, so it's harder to hit as well as hitting softer
+    return this.parts.hitboxes.map((h) => ({ center: h.node.getWorldPosition(new THREE.Vector3()), r: h.weak && this.def.neutral ? h.r * (1 - this.shutter * 0.35) : h.r, mult: h.mult, weak: h.weak }));
   }
 
+  // strong: an attack or a call for help (turns hostile). Otherwise a noise:
+  // neutral Husks only grow wary.
   alert(pos, strong = true) {
     if (this.dead) return;
-    if (this.state === 'idle' && strong) Audio.playHuskChirp(this.distTo);
+    if (this.def.neutral && !strong) {
+      if (this.state === 'idle') {
+        this.state = 'wary';
+        this.waryTimer = 6;
+        this.lastSeen.copy(pos);
+      }
+      return;
+    }
+    if (this.state !== 'alert') Audio.playHuskChirp(this.distTo);
     this.state = 'alert';
+    this.wasHostile = true;
     this.alertTimer = strong ? 12 : 6;
+    this.calmTimer = 0;
     this.lastSeen.copy(pos);
   }
 
-  damage(amount, ap, mult, weak) {
+  // weak hits are the eye; anywhere else takes bodyMult. guard: learned eye shutters (0..1).
+  damage(amount, ap, mult, weak, guard = 0) {
     const armor = weak ? 0 : this.def.armor * (1 - (ap || 0));
-    const dealt = amount * (1 - armor) * mult;
+    let dealt = amount * (1 - armor) * mult;
+    if (!weak) dealt *= this.def.bodyMult || 1;
+    else if (this.def.neutral) dealt *= 1 - guard * 0.35;
     this.hp -= dealt;
     this.hitFlash = 0.08;
     return dealt;
@@ -213,10 +317,11 @@ export class Husk {
     this.model.rotation.y = this.yaw;
   }
 
-  // ctx: { player, col, effects, time, damagePlayer, spawnEnemy, explode, enemies }
+  // ctx: { player, col, effects, mind (network traits), aimingAt, onSeen, onPeace, damagePlayer, spawnEnemy, ... }
   update(dt, ctx) {
     if (this.dead) return;
     const p = ctx.player;
+    const mind = ctx.mind;
     const playerPos = p.chest();
     const toPlayer = _v.subVectors(playerPos, this.center);
     const dist = toPlayer.length();
@@ -227,24 +332,26 @@ export class Husk {
     this.seeTimer -= dt;
     if (this.seeTimer <= 0) {
       this.seeTimer = 0.25;
-      this.canSee = false;
-      if (p.alive && dist < this.def.sight * (ctx.sightMul || 1) * (p.crouch ? 0.6 : 1)) {
-        const eye = this.center.clone();
-        if (ctx.col.lineOfSight(eye, playerPos)) {
-          this.canSee = true;
-          if (this.state === 'idle') Audio.playHuskChirp(dist);
-          this.state = 'alert';
-          this.alertTimer = 10;
-          this.lastSeen.copy(playerPos);
-        }
-      }
+      const could = this.canSee;
+      this.canSee = p.alive && this.perceive(ctx, playerPos, dist);
+      if (this.canSee) this.sighted(ctx, playerPos, dist, could);
     }
     if (this.canSee) this.lastSeen.copy(playerPos);
     if (this.state === 'alert') {
       this.alertTimer -= dt;
-      if (this.alertTimer <= 0 && !this.canSee) this.state = 'idle';
+      if (this.alertTimer <= 0 && !this.canSee) this.state = this.def.neutral ? 'wary' : 'idle';
+      // neutral Husks stand down once nothing's happened for a while
+      if (this.def.neutral) {
+        this.calmTimer += dt;
+        if (this.calmTimer > mind.calm && !(this.canSee && dist < mind.space)) {
+          this.state = 'wary';
+          this.tension = 0;
+          this.warned = false;
+          this.waryTimer = 8;
+        }
+      }
     }
-    if (!p.alive) this.state = 'idle';
+    if (!p.alive && this.state !== 'idle') this.state = this.def.neutral ? 'wary' : 'idle';
 
     this.chirpTimer -= dt;
     if (this.chirpTimer <= 0) {
@@ -252,12 +359,21 @@ export class Husk {
       if (dist < 40) Audio.playHuskChirp(dist);
     }
 
-    const handler = this[`think_${this.def.attack.kind}`];
-    if (handler) handler.call(this, dt, ctx, dist);
+    if (this.state === 'wary') this.think_wary(dt, ctx, dist);
+    else {
+      const handler = this[`think_${this.def.attack.kind}`];
+      if (handler) handler.call(this, dt, ctx, dist);
+    }
+    if (this.parts.thrusters) this.animateThrusters(dt);
+    if (this.parts.beam) this.updateSearchlight(dt, ctx);
 
-    // eye glows hotter while alert, flashes white when hit
+    // eye shutters close as the network learns raiders aim for the eye
+    const guard = this.def.neutral ? mind.eyeGuard : 0;
+    this.shutter += (guard * (this.state === 'alert' ? 1 : 0.6) - this.shutter) * Math.min(1, dt * 4);
+    this.parts.eye.scale.y = 1 - this.shutter * 0.7;
+    // eye glows hotter while hostile, pulses while wary, flashes white when hit
     const eye = this.parts.eye.material;
-    const target = this.state === 'alert' ? 3 : 1.1;
+    const target = this.state === 'alert' ? 3 : this.state === 'wary' ? 1.6 + Math.sin(this.anim * 5) * 0.5 + this.tension : 1.1;
     eye.emissiveIntensity += (target - eye.emissiveIntensity) * Math.min(1, dt * 5);
     if (this.hitFlash > 0) {
       this.hitFlash -= dt;
@@ -265,6 +381,103 @@ export class Husk {
     }
     if (this.parts.core) this.parts.core.material.emissiveIntensity = 1.6 + Math.sin(this.anim * 6) * 0.8;
     this.syncModel();
+  }
+
+  // Can this Husk see the raider right now?
+  perceive(ctx, playerPos, dist) {
+    const p = ctx.player;
+    // the Watcher only sees what its searchlight falls on (or right next to it)
+    if (this.parts.beam) {
+      const inSpot = Math.hypot(p.pos.x - this.beamAt.x, p.pos.z - this.beamAt.z) < this.beamRadius * 1.1;
+      if (!inSpot && dist > 8) return false;
+    } else if (dist >= this.def.sight * (ctx.sightMul || 1) * (p.crouch ? 0.6 : 1)) {
+      return false;
+    }
+    return ctx.col.lineOfSight(this.center.clone(), playerPos);
+  }
+
+  sighted(ctx, playerPos, dist, could) {
+    const mind = ctx.mind;
+    this.lastSeen.copy(playerPos);
+    if (!this.def.neutral) {
+      if (this.state === 'idle') Audio.playHuskChirp(dist);
+      this.state = 'alert';
+      this.alertTimer = 10;
+      return;
+    }
+    if (!this.noticed) {
+      this.noticed = true;
+      ctx.onSeen(this);
+    }
+    if (this.state === 'idle') {
+      if (mind.shootFirst && dist < this.def.sight * 0.6) {
+        // it has learned this raider shoots first
+        this.alert(playerPos, true);
+        return;
+      }
+      this.state = 'wary';
+      this.tension = 0;
+      this.warned = false;
+      if (!could) Audio.playHuskChirp(dist);
+    }
+    if (this.state === 'wary') this.waryTimer = 8;
+    else this.alertTimer = 10;
+  }
+
+  // Neutral but cautious: watch the raider, keep room, warn, and only attack
+  // if crowded (or aimed at) for too long.
+  think_wary(dt, ctx, dist) {
+    const p = ctx.player;
+    const mind = ctx.mind;
+    const flat = Math.hypot(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
+    const space = mind.space * (this.type === 'skitter' ? 1 + mind.keepAway * 0.6 : 1.5);
+    let crowd = this.canSee && flat < space ? 1 : 0;
+    if (this.canSee && ctx.aimingAt(this)) crowd += 0.6;
+    if (crowd) this.tension += dt * crowd;
+    else this.tension = Math.max(0, this.tension - dt * 0.6);
+    if (this.tension > mind.patience * 0.45 && !this.warned) {
+      // a warning: chirp and flare the eye
+      this.warned = true;
+      this.hitFlash = 0.25;
+      Audio.playHuskChirp(dist);
+    }
+    if (this.tension > mind.patience) {
+      this.alert(p.chest(), true);
+      return;
+    }
+    if (!this.canSee) {
+      this.waryTimer -= dt;
+      if (this.waryTimer <= 0) {
+        this.state = 'idle';
+        this.tension = 0;
+        if (this.noticed && !this.wasHostile && !this.peaceLogged) {
+          this.peaceLogged = true;
+          ctx.onPeace(this);
+        }
+      }
+    }
+    const look = this.canSee ? p.pos : this.lastSeen;
+    if (this.def.flying) {
+      // hold off at a distance, out of the way, watching
+      const keep = this.type === 'watcher' ? 24 : Math.max(14, space * 2.5);
+      const ang = Math.atan2(this.pos.x - look.x, this.pos.z - look.z) + dt * 0.15;
+      const tx = look.x + Math.sin(ang) * keep;
+      const tz = look.z + Math.cos(ang) * keep;
+      const ty = ctx.col.groundHeight(tx, tz, 200, 0.5, 0) + this.def.hover + Math.sin(this.anim * 0.7) * 1.2;
+      this.airMove(dt, ctx, tx, ty, tz, this.def.speed * 0.7);
+      this.faceTowards(look.x, look.z, dt, 3);
+      if (this.parts.ring) this.parts.ring.rotation.z += dt * 2.5;
+    } else {
+      this.animateLegs(dt);
+      if (flat < space * 1.5) {
+        // back away, facing the raider
+        const ax = this.pos.x - p.pos.x;
+        const az = this.pos.z - p.pos.z;
+        const l = Math.hypot(ax, az) || 1;
+        this.groundMove(dt, ctx, this.pos.x + (ax / l) * 4, this.pos.z + (az / l) * 4, this.def.speed * 0.55);
+      }
+      this.faceTowards(look.x, look.z, dt, 5);
+    }
   }
 
   // ---- movement helpers ----
@@ -337,6 +550,62 @@ export class Husk {
     if (this.pos.y < ground + 1.5) this.pos.y = ground + 1.5;
   }
 
+  // Buzzer thrusters swivel against the direction of travel and burn harder when moving.
+  animateThrusters(dt) {
+    const c = Math.cos(this.yaw);
+    const s = Math.sin(this.yaw);
+    const fwd = this.vel.x * s + this.vel.z * c; // speed along the nose
+    const side = this.vel.x * c - this.vel.z * s;
+    const thrust = Math.min(1, this.vel.length() / this.def.speed);
+    for (const t of this.parts.thrusters) {
+      t.pod.rotation.x += (Math.max(-0.7, Math.min(0.7, fwd * 0.09)) - t.pod.rotation.x) * Math.min(1, dt * 6);
+      t.pod.rotation.z += (Math.max(-0.5, Math.min(0.5, -side * 0.06)) - t.pod.rotation.z) * Math.min(1, dt * 6);
+      const flicker = 0.85 + Math.random() * 0.3;
+      t.flame.scale.set(1, (0.55 + thrust * 0.8) * flicker, 1);
+    }
+    // bank into turns
+    this.model.rotation.z = Math.max(-0.35, Math.min(0.35, -side * 0.04));
+    this.model.rotation.x = Math.max(-0.25, Math.min(0.25, fwd * 0.025));
+  }
+
+  // The Watcher's searchlight: sweeps the ground below it while idle, locks on
+  // to the raider while wary or hostile. Its pool of light is what it can see.
+  updateSearchlight(dt, ctx) {
+    const { beam, spot, eye } = this.parts;
+    const p = ctx.player;
+    let tx;
+    let tz;
+    if (this.state === 'idle') {
+      this.sweep += dt * 0.45;
+      const r = 8 + Math.sin(this.anim * 0.31) * 4;
+      tx = this.pos.x + Math.sin(this.sweep) * r;
+      tz = this.pos.z + Math.cos(this.sweep) * r;
+    } else {
+      const look = this.canSee ? p.pos : this.lastSeen;
+      tx = look.x;
+      tz = look.z;
+    }
+    const k = Math.min(1, dt * (this.state === 'idle' ? 2 : 4));
+    this.beamAt.x += (tx - this.beamAt.x) * k;
+    this.beamAt.z += (tz - this.beamAt.z) * k;
+    this.beamAt.y = ctx.col.groundHeight(this.beamAt.x, this.beamAt.z, this.pos.y, 0.3, 400);
+    this.model.updateMatrixWorld(true);
+    const from = eye.getWorldPosition(_u);
+    const dir = _d.subVectors(this.beamAt, from);
+    const len = Math.max(1, dir.length());
+    dir.divideScalar(len);
+    this.beamRadius = Math.max(2.5, len * Math.tan(0.24));
+    beam.position.copy(from);
+    beam.quaternion.setFromUnitVectors(_down, dir);
+    beam.scale.set(this.beamRadius, len, this.beamRadius);
+    spot.position.set(this.beamAt.x, this.beamAt.y + 0.06, this.beamAt.z);
+    spot.scale.setScalar(this.beamRadius);
+    const color = this.state === 'alert' ? 0xff4a2a : this.state === 'wary' ? 0xffa040 : 0xffe08a;
+    beam.material.color.setHex(color);
+    spot.material.color.setHex(color);
+    beam.visible = spot.visible = this.model.visible;
+  }
+
   patrolTarget() {
     if (!this.patrol || Math.random() < 0.003) {
       const a = Math.random() * Math.PI * 2;
@@ -346,7 +615,7 @@ export class Husk {
     return this.patrol;
   }
 
-  // ---- behaviours ----
+  // ---- behaviours (hostile, or idle patrols) ----
   think_leap(dt, ctx, dist) {
     const a = this.def.attack;
     const p = ctx.player;
@@ -355,8 +624,8 @@ export class Husk {
       this.leap.t += dt;
       const t = this.leap.t / this.leap.dur;
       this.pos.lerpVectors(this.leap.from, this.leap.to, Math.min(1, t));
-      this.pos.y += Math.sin(Math.min(1, t) * Math.PI) * 1.6;
-      if (!this.leap.hit && p.alive && this.pos.distanceTo(p.chest()) < 1.3) {
+      this.pos.y += Math.sin(Math.min(1, t) * Math.PI) * 1.2;
+      if (!this.leap.hit && p.alive && this.pos.distanceTo(p.chest()) < 1.1) {
         this.leap.hit = true;
         ctx.damagePlayer(a.damage, this.pos, this);
       }
@@ -374,13 +643,19 @@ export class Husk {
         // land just short of the player
         const to = p.pos.clone();
         const away = new THREE.Vector3(this.pos.x - to.x, 0, this.pos.z - to.z);
-        if (away.lengthSq() > 0.01) to.addScaledVector(away.normalize(), 0.9);
+        if (away.lengthSq() > 0.01) to.addScaledVector(away.normalize(), 0.8);
         to.y = ctx.col.groundHeight(to.x, to.z, to.y + 0.5, 0.3);
-        this.leap = { from: this.pos.clone(), to, t: 0, dur: 0.45, hit: false };
+        this.leap = { from: this.pos.clone(), to, t: 0, dur: 0.42, hit: false };
         Audio.playHuskChirp(dist);
         return;
       }
-      this.groundMove(dt, ctx, target.x, target.z, this.def.speed);
+      // learned to fear close fights: circle at leap range instead of closing in
+      if (ctx.mind.keepAway > 0.35 && dist < a.range * 0.8) {
+        const ang = Math.atan2(this.pos.x - p.pos.x, this.pos.z - p.pos.z) + this.strafe * 0.8;
+        this.groundMove(dt, ctx, p.pos.x + Math.sin(ang) * a.range * 0.9, p.pos.z + Math.cos(ang) * a.range * 0.9, this.def.speed);
+      } else {
+        this.groundMove(dt, ctx, target.x, target.z, this.def.speed);
+      }
     } else {
       const pt = this.patrolTarget();
       if (this.groundMove(dt, ctx, pt.x, pt.z, this.def.speed * 0.25) < 1) this.patrol = null;
@@ -392,18 +667,18 @@ export class Husk {
     const p = ctx.player;
     this.cooldown -= dt;
     if (this.def.flying) {
-      for (const r of this.parts.rotors) r.rotation.y += dt * 40;
       let tx;
       let tz;
       let ty;
       if (this.state === 'alert') {
-        // orbit the last seen position at mid range
-        const ang = Math.atan2(this.pos.x - this.lastSeen.x, this.pos.z - this.lastSeen.z) + this.strafe * dt * 0.6 * 6;
-        const r = 16;
+        // orbit the last seen position at mid range; jink harder against snipers
+        const jink = ctx.mind.jink;
+        const ang = Math.atan2(this.pos.x - this.lastSeen.x, this.pos.z - this.lastSeen.z) + this.strafe * dt * 3.6 * (1 + jink);
+        const r = 16 + ctx.mind.keepAway * 6;
         tx = this.lastSeen.x + Math.sin(ang) * r;
         tz = this.lastSeen.z + Math.cos(ang) * r;
-        ty = ctx.col.groundHeight(tx, tz, 200, 0.5, 0) + this.def.hover;
-        if (Math.random() < dt * 0.3) this.strafe *= -1;
+        ty = ctx.col.groundHeight(tx, tz, 200, 0.5, 0) + this.def.hover + Math.sin(this.anim * 2.3) * jink * 2.5;
+        if (Math.random() < dt * (0.3 + jink * 1.5)) this.strafe *= -1;
       } else {
         const pt = this.patrolTarget();
         tx = pt.x;
@@ -414,7 +689,6 @@ export class Husk {
       this.airMove(dt, ctx, tx, ty, tz, this.def.speed);
       if (this.state === 'alert') this.faceTowards(this.lastSeen.x, this.lastSeen.z, dt, 5);
       else this.faceTowards(tx, tz, dt, 2);
-      this.model.rotation.z = -this.vel.x * 0.03;
     } else {
       // Warden: stomp towards the player, stop at range
       const moving = this.state === 'alert' && dist > 25;
@@ -484,10 +758,10 @@ export class Husk {
     let tx;
     let tz;
     if (this.state === 'alert') {
-      // hang back and watch
+      // hang back, keep the light on the raider, and call for help
       const away = Math.atan2(this.pos.x - this.lastSeen.x, this.pos.z - this.lastSeen.z) + dt * 0.3;
-      tx = this.lastSeen.x + Math.sin(away) * 28;
-      tz = this.lastSeen.z + Math.cos(away) * 28;
+      tx = this.lastSeen.x + Math.sin(away) * 22;
+      tz = this.lastSeen.z + Math.cos(away) * 22;
       if (this.canSee && !this.called) {
         this.callTimer += dt;
         if (Math.floor(this.callTimer * 4) !== Math.floor((this.callTimer - dt) * 4)) Audio.playBeep(dist, 0.8);
@@ -579,6 +853,11 @@ export class Husk {
 
   destroy() {
     this.scene.remove(this.model);
+    if (this.parts.beam) {
+      this.scene.remove(this.parts.beam, this.parts.spot);
+      this.parts.beam.geometry.dispose();
+      this.parts.spot.geometry.dispose();
+    }
     this.model.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
     });

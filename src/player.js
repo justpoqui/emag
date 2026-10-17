@@ -1,6 +1,7 @@
 // The raider: model, third-person movement, stamina, dodge roll, health and shield.
 
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { PLAYER, ITEMS } from './config.js';
 import * as Audio from './audio.js';
 import { buildRaiderModel, poseRig } from './rig.js';
@@ -11,8 +12,14 @@ const RADIUS = 0.38;
 const STAND_H = 1.8;
 const CROUCH_H = 1.2;
 const GRAVITY = 22;
+const ROLL_PIVOT = 0.5;
+const _xAxis = new THREE.Vector3(1, 0, 0);
+const _pivot = new THREE.Vector3();
+const _box = new THREE.Box3();
+const _ground = [0, 0];
 
-// Simple blocky weapon models
+// Weapon models, built from rounded parts
+const rbox = (w, h, d) => new RoundedBoxGeometry(w, h, d, 2, Math.min(w, h, d) * 0.32);
 export function buildGunModel(id) {
   const item = ITEMS[id];
   const g = new THREE.Group();
@@ -29,38 +36,38 @@ export function buildGunModel(id) {
   let muzzle = 0.7;
   switch (item.shape) {
     case 'smg':
-      add(new THREE.BoxGeometry(0.09, 0.14, 0.42), body, 0, 0, 0.1);
-      add(new THREE.BoxGeometry(0.05, 0.05, 0.2), dark, 0, 0.02, 0.4);
-      add(new THREE.BoxGeometry(0.06, 0.2, 0.08), dark, 0, -0.14, 0.12);
-      add(new THREE.BoxGeometry(0.06, 0.08, 0.2), dark, 0, -0.02, -0.18);
+      add(rbox(0.09, 0.14, 0.42), body, 0, 0, 0.1);
+      add(rbox(0.05, 0.05, 0.2), dark, 0, 0.02, 0.4);
+      add(rbox(0.06, 0.2, 0.08), dark, 0, -0.14, 0.12);
+      add(rbox(0.06, 0.08, 0.2), dark, 0, -0.02, -0.18);
       muzzle = 0.5;
       break;
     case 'pistol':
-      add(new THREE.BoxGeometry(0.08, 0.13, 0.32), body, 0, 0, 0.12);
+      add(rbox(0.08, 0.13, 0.32), body, 0, 0, 0.12);
       add(new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8), dark, 0, 0, 0.08).rotation.x = Math.PI / 2;
-      add(new THREE.BoxGeometry(0.07, 0.17, 0.08), wood, 0, -0.12, -0.02);
+      add(rbox(0.07, 0.17, 0.08), wood, 0, -0.12, -0.02);
       muzzle = 0.3;
       break;
     case 'shotgun':
-      add(new THREE.BoxGeometry(0.1, 0.13, 0.5), body, 0, 0, 0.1);
+      add(rbox(0.1, 0.13, 0.5), body, 0, 0, 0.1);
       add(new THREE.CylinderGeometry(0.035, 0.035, 0.6, 8), dark, 0, 0.03, 0.55).rotation.x = Math.PI / 2;
-      add(new THREE.BoxGeometry(0.09, 0.08, 0.2), wood, 0, -0.04, 0.45);
-      add(new THREE.BoxGeometry(0.08, 0.14, 0.32), wood, 0, -0.05, -0.28);
+      add(rbox(0.09, 0.08, 0.2), wood, 0, -0.04, 0.45);
+      add(rbox(0.08, 0.14, 0.32), wood, 0, -0.05, -0.28);
       muzzle = 0.85;
       break;
     case 'long':
-      add(new THREE.BoxGeometry(0.08, 0.12, 0.5), body, 0, 0, 0.05);
+      add(rbox(0.08, 0.12, 0.5), body, 0, 0, 0.05);
       add(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 8), dark, 0, 0.02, 0.65).rotation.x = Math.PI / 2;
       add(new THREE.CylinderGeometry(0.045, 0.045, 0.3, 8), dark, 0, 0.12, 0.05).rotation.x = Math.PI / 2;
-      add(new THREE.BoxGeometry(0.07, 0.15, 0.36), wood, 0, -0.04, -0.34);
+      add(rbox(0.07, 0.15, 0.36), wood, 0, -0.04, -0.34);
       muzzle = 1.05;
       break;
     default: // rifle
-      add(new THREE.BoxGeometry(0.09, 0.14, 0.55), body, 0, 0, 0.1);
+      add(rbox(0.09, 0.14, 0.55), body, 0, 0, 0.1);
       add(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), dark, 0, 0.02, 0.58).rotation.x = Math.PI / 2;
-      add(new THREE.BoxGeometry(0.06, 0.2, 0.08), dark, 0, -0.15, 0.18);
-      add(new THREE.BoxGeometry(0.07, 0.13, 0.3), wood, 0, -0.03, -0.3);
-      add(new THREE.BoxGeometry(0.05, 0.06, 0.14), dark, 0, 0.1, 0.05);
+      add(rbox(0.06, 0.2, 0.08), dark, 0, -0.15, 0.18);
+      add(rbox(0.07, 0.13, 0.3), wood, 0, -0.03, -0.3);
+      add(rbox(0.05, 0.06, 0.14), dark, 0, 0.1, 0.05);
       muzzle = 0.8;
   }
   g.userData.muzzle = new THREE.Vector3(0, 0.02, muzzle);
@@ -289,12 +296,41 @@ export class Player {
       recoil: this.recoilKick,
       melee: this.melee,
       idle: this.idle,
+      ground: this.footGround(u),
+      tuck: this.roll > 0 ? 1 : 0,
     }, dt);
-    // roll: tumble the whole model
+    // roll: tumble forward round the hips (not the feet), curled up, and
+    // never dip below the ground
     if (this.roll > 0) {
       const t = 1 - this.roll / 0.55;
-      this.model.rotateOnAxis(new THREE.Vector3(1, 0, 0), t * Math.PI * 2);
+      this.model.rotateOnAxis(_xAxis, t * Math.PI * 2);
+      _pivot.set(0, ROLL_PIVOT, 0).applyQuaternion(this.model.quaternion);
+      this.model.position.set(this.pos.x, this.pos.y + ROLL_PIVOT, this.pos.z).sub(_pivot);
+      this.model.updateMatrixWorld(true);
+      _box.setFromObject(this.model);
+      if (_box.min.y < this.pos.y) this.model.position.y += this.pos.y - _box.min.y;
     }
+  }
+
+  // Height of the ground under each foot, relative to where the raider stands.
+  footGround(u) {
+    if (!this.onGround || this.roll > 0) return _ground.fill(0);
+    const c = Math.cos(this.bodyYaw);
+    const sn = Math.sin(this.bodyYaw);
+    u.legs.forEach((leg, i) => {
+      const a = leg.hip.rotation.x;
+      const fwd = -(0.47 * Math.sin(a) + 0.48 * Math.sin(a + leg.knee.rotation.x)) + 0.05;
+      const side = leg.hip.position.x;
+      // local (side, fwd) -> world, with the model's yaw
+      const x = this.pos.x + side * c + fwd * sn;
+      const z = this.pos.z - side * sn + fwd * c;
+      // bending the knee swings the foot back, so take the higher of here and just behind
+      const bx = x - sn * 0.18;
+      const bz = z - c * 0.18;
+      const g = Math.max(this.col.groundHeight(x, z, this.pos.y + 0.5, 0.08, 0.6), this.col.groundHeight(bx, bz, this.pos.y + 0.5, 0.08, 0.6)) - this.pos.y + 0.02;
+      _ground[i] = Math.max(-0.4, Math.min(0.5, g));
+    });
+    return _ground;
   }
 
   die() {

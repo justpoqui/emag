@@ -192,18 +192,20 @@ export const LOOT_TABLES = {
 
 // Husks. drops are rolled into the wreck's loot.
 export const ENEMIES = {
+  // neutral: leaves raiders alone until provoked or crowded (see network.js).
+  // bodyMult: damage taken anywhere but the critical spot (the eye).
   skitter: {
-    name: 'Skitter', hp: 30, armor: 0, speed: 8.5, radius: 0.5, flying: false, sight: 38,
-    attack: { kind: 'leap', range: 6, damage: 14, cooldown: 1.4 },
-    drops: { rolls: [1, 2], entries: [['husk_plating', 10, 1, 1], ['scrap', 20, 1, 2], ['wires', 8, 1, 1]] }, xp: 10,
+    name: 'Skitter', hp: 50, armor: 0, speed: 8.5, radius: 0.38, flying: false, sight: 38, neutral: true, bodyMult: 0.6,
+    attack: { kind: 'leap', range: 6, damage: 8, cooldown: 1.6 },
+    drops: { rolls: [1, 2], entries: [['husk_plating', 10, 1, 1], ['scrap', 20, 1, 2], ['wires', 8, 1, 1]] }, xp: 12,
   },
   buzzer: {
-    name: 'Buzzer', hp: 55, armor: 0.2, speed: 7, radius: 0.7, flying: true, hover: 7, sight: 60,
+    name: 'Buzzer', hp: 60, armor: 0.2, speed: 7, radius: 0.6, flying: true, hover: 7, sight: 60, neutral: true, bodyMult: 0.6,
     attack: { kind: 'gun', range: 55, damage: 5, burst: 5, rate: 0.09, cooldown: 2.0, spread: 2.2 },
     drops: { rolls: [1, 2], entries: [['husk_plating', 20, 1, 2], ['battery', 10, 1, 1], ['husk_circuit', 4, 1, 1]] }, xp: 20,
   },
   watcher: {
-    name: 'Watcher', hp: 40, armor: 0, speed: 6, radius: 0.6, flying: true, hover: 14, sight: 70,
+    name: 'Watcher', hp: 45, armor: 0, speed: 6, radius: 0.6, flying: true, hover: 14, sight: 70, neutral: true, bodyMult: 0.6,
     attack: { kind: 'alarm', range: 70, callTime: 3.5, calls: 2 },
     drops: { rolls: [1, 2], entries: [['husk_circuit', 10, 1, 1], ['wires', 20, 1, 2], ['battery', 10, 1, 1]] }, xp: 25,
   },

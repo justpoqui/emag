@@ -1,6 +1,7 @@
 // Slot-based inventory helpers, plus the saved profile (localStorage).
 
 import { ITEMS, BAG_SLOTS, SAFE_SLOTS, STASH_SLOTS, START_CREDITS, stackSize, FREE_KIT, MAX_DURABILITY, isDurable } from './config.js';
+import { cleanMemory } from './network.js';
 
 
 export function makeStack(id, n = 1) {
@@ -127,8 +128,9 @@ function sanitize(p) {
   lo.bag = lo.bag.map(cleanStack);
   lo.safe = lo.safe.map(cleanStack);
   p.inRaid = !!p.inRaid;
+  p.network = cleanMemory(p.network);
   // drop any keys the game doesn't use
-  for (const k of Object.keys(p)) if (!['credits', 'stash', 'loadout', 'stats', 'level', 'xp', 'inRaid'].includes(k)) delete p[k];
+  for (const k of Object.keys(p)) if (!['credits', 'stash', 'loadout', 'stats', 'level', 'xp', 'inRaid', 'network'].includes(k)) delete p[k];
   for (const k of Object.keys(lo)) if (!['weapons', 'shield', 'bag', 'safe'].includes(k)) delete lo[k];
 }
 

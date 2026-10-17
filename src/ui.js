@@ -12,6 +12,7 @@ import { MAP_HALF } from './collision.js';
 import * as Audio from './audio.js';
 import { QUALITY, getQualityName, setQualityName } from './settings.js';
 import { renderHome, renderLogin } from './home.js';
+import { describe as describeNetwork } from './network.js';
 import { signOut, currentUser, isAdmin, storageKind, changePassword, passwordProblem, adminData, adminSetBans, adminSetBulletin, adminName } from './accounts.js';
 
 // Fullscreen + landscape on phones (Android honours the orientation lock; on
@@ -1987,6 +1988,19 @@ export class UI {
     });
   }
 
+  // What the Husk Network has learned about this raider.
+  networkHtml() {
+    const d = describeNetwork(this.game.profile.network);
+    const bar = (label, v, color) => `<div class="net-bar"><span>${label}</span><div><i style="width:${Math.round(v * 100)}%;background:${color}"></i></div></div>`;
+    return `
+      <div class="col-title">HUSK NETWORK</div>
+      <div class="net-card">
+        <div class="net-mood">Disposition: <b>${d.mood}</b></div>
+        ${bar('Hostility', d.aggression, 'var(--red)')}${bar('Tolerance', d.trust, 'var(--teal)')}${bar('Build-up', d.growth, 'var(--orange)')}
+        <ul>${d.lines.map((l) => `<li>${l}</li>`).join('')}</ul>
+      </div>`;
+  }
+
   renderLogTab(body) {
     const p = this.game.profile;
     body.className = 'hub-body log-tab';
@@ -2001,6 +2015,7 @@ export class UI {
         <div><b>${s.deaths}</b><span>Deaths</span></div>
         <div><b>${s.kills}</b><span>Husks destroyed</span></div>
       </div>
+      ${this.networkHtml()}
       ${this.guideHtml()}
       <button class="btn danger reset">Wipe save and start over</button>`;
     body.querySelector('.reset').onclick = () => {

@@ -2,6 +2,7 @@
 // extraction, and the hand-off between the hub (menus) and raids.
 
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import {
   ITEMS, MAPS, CARRY_LIMIT, HOLSTER_SPEED_BONUS, SHIELD_WEAR, MAX_DURABILITY, isDurable, LOOT_TABLES, ENEMIES, RAID_SECONDS, EXTRACT_CALL_SECONDS, EXTRACT_OPEN_SECONDS, PLAYER,
 } from './config.js';
@@ -20,11 +21,17 @@ import * as Audio from './audio.js';
 import { getQuality, IS_TOUCH } from './settings.js';
 import { TouchControls } from './touch.js';
 import { Sanctuary } from './sanctuary.js';
+import { Infrastructure } from './infrastructure.js';
+import {
+  traits, startRaidMemory, planInfrastructure, recordSeen, recordPeace, recordProvoked, recordHit, recordKill, recordLoot,
+} from './network.js';
 
 const SEARCH_TIME = { crate: 1.2, locker: 1.0, medical: 1.0, weapon_case: 1.8, husk_pod: 2.0, car: 1.4, wreck: 0.9 };
 const MAX_HUSKS = 40;
 // share of loot spots that get a container each raid
 const CONTAINER_FILL = 0.6;
+const _aim = new THREE.Vector3();
+const _aimDir = new THREE.Vector3();
 
 export class Game {
   constructor(container) {
@@ -107,6 +114,8 @@ export class Game {
     this.sanctuary = new Sanctuary(quality);
     this.col = this.world.collision;
     this.buildContainers();
+    this.infra = new Infrastructure(scene, this.col, this.world.infraSites);
+    this.debris = [];
 
     this.player = new Player(scene, this.col);
     this.player.model.visible = false;
@@ -221,7 +230,7 @@ export class Game {
     const mats = this.containerMats;
     const g = new THREE.Group();
     const add = (sx, sy, sz, m, x = 0, y = 0, z = 0) => {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m);
+      const mesh = new THREE.Mesh(new RoundedBoxGeometry(sx, sy, sz, 2, Math.min(0.06, Math.min(sx, sy, sz) * 0.3)), m);
       mesh.position.set(x, y, z);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -254,8 +263,16 @@ export class Game {
         size = [1.5, 0.45, 0.55];
         break;
       case 'husk_pod':
-        add(0.9, 0.9, 0.9, mats.husk, 0, 0.45, 0).rotation.set(0.3, 0.6, 0.2);
-        lid = add(0.3, 0.3, 0.3, mats.podGlow, 0, 1.0, 0);
+      {
+        const pod = new THREE.Mesh(new THREE.SphereGeometry(0.5, 18, 14), mats.husk);
+        pod.position.y = 0.45;
+        pod.scale.set(1, 0.85, 1.1);
+        pod.castShadow = true;
+        g.add(pod);
+        lid = new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 10), mats.podGlow);
+        lid.position.y = 0.9;
+        g.add(lid);
+      }
         size = [1, 1, 1];
         break;
       case 'car':
@@ -290,8 +307,10 @@ export class Game {
     }
     for (const spot of this.containerSpots) if (spot.box) spot.box.off = true;
     this.containers = [];
+    const cradles = new Set(this.infra.active.filter((a) => a.kind === 'cradle').map((a) => a.site));
     for (const spot of this.containerSpots) {
-      if (Math.random() > CONTAINER_FILL) continue;
+      // a Cradle's pods are always stocked; without a Cradle they aren't there at all
+      if (spot.infra !== undefined ? !cradles.has(spot.infra) : Math.random() > CONTAINER_FILL) continue;
       const type = spot.pool[Math.floor(Math.random() * spot.pool.length)];
       const c = this.makeContainer(spot, type, this.containers.length);
       c.items = rollTable(LOOT_TABLES[type]);
@@ -306,6 +325,11 @@ export class Game {
       this.scene.remove(w.group);
     }
     this.wrecks = [];
+    for (const d of this.debris || []) {
+      this.scene.remove(d.mesh);
+      d.mesh.geometry.dispose();
+    }
+    this.debris = [];
   }
 
   openContainerVisual(c) {
@@ -324,12 +348,13 @@ export class Game {
     }
   }
 
-  spawnWreck(enemy) {
+  // pieces: false when the Husk's own parts fall as debris instead
+  spawnWreck(enemy, pieces = true) {
     const drops = rollTable(enemy.def.drops);
     const g = new THREE.Group();
     const m = new THREE.MeshStandardMaterial({ color: 0x5a5e62, roughness: 0.6, metalness: 0.7 });
     const scale = Math.max(0.5, enemy.def.radius);
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < (pieces ? 5 : 0); i++) {
       const piece = new THREE.Mesh(new THREE.BoxGeometry(0.4 * scale, 0.2 * scale, 0.3 * scale), m);
       piece.position.set((Math.random() - 0.5) * scale, 0.1 * scale, (Math.random() - 0.5) * scale);
       piece.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
@@ -468,6 +493,12 @@ export class Game {
     this.profile.inRaid = true; // if the tab closes mid-raid, the loadout is lost (like a real raid)
     saveProfile(this.profile);
 
+    // the Husk Network: what it remembers shapes how they act and what they've built
+    const mem = this.profile.network;
+    startRaidMemory(mem);
+    this.mind = traits(mem);
+    this.getHuskCtx().mind = this.mind;
+    this.infra.build(planInfrastructure(mem, this.world.infraSites));
     this.resetContainers();
     for (const e of this.enemies) e.destroy();
     this.enemies = [];
@@ -482,6 +513,19 @@ export class Game {
       for (let i = 0; i < n; i++) this.spawnEnemyAt(s.type, s.x + rng.range(-s.radius, s.radius) * 0.5, s.z + rng.range(-s.radius, s.radius) * 0.5, null, s);
     }
     this.respawnTimer = 45;
+    // its structures are manned: a Watcher over each Bulwark, Skitters tending each Cradle
+    for (const a of this.infra.active) {
+      if (a.kind === 'bulwark') {
+        this.spawnEnemyAt('watcher', a.x + 4, a.z, null, { x: a.x, z: a.z, radius: 22 });
+        if (this.mind.aggression > 0.5) this.spawnEnemyAt('buzzer', a.x - 4, a.z, null, { x: a.x, z: a.z, radius: 25 });
+      } else {
+        for (let i = 0; i < 2; i++) this.spawnEnemyAt('skitter', a.x + rng.range(-5, 5), a.z + rng.range(-5, 5), null, { x: a.x, z: a.z, radius: 9 });
+      }
+    }
+    // raiders who strip pods find them guarded
+    for (const c of this.containers) {
+      if (c.type === 'husk_pod' && rng.chance(this.mind.podGuard)) this.spawnEnemyAt('skitter', c.x + rng.range(-3, 3), c.z + rng.range(-3, 3), null, { x: c.x, z: c.z, radius: 6 });
+    }
 
     const ins = rng.pick(this.world.insertions);
     // face towards the map centre
@@ -506,6 +550,13 @@ export class Game {
     this.input.unlock();
     Audio.setWind(false);
     const p = this.profile;
+    // Husks that saw this raider and were never fought remember a peaceful meeting
+    for (const e of this.enemies) {
+      if (e.def.neutral && e.noticed && !e.wasHostile && !e.peaceLogged) {
+        e.peaceLogged = true;
+        recordPeace(p.network, e.pos.x, e.pos.z);
+      }
+    }
     const lostValue = loadoutValue(p.loadout);
     let summary;
     if (extracted) {
@@ -595,21 +646,37 @@ export class Game {
     return e;
   }
 
-  damageEnemy(enemy, amount, ap, mult, weak, at) {
-    const dealt = enemy.damage(amount, ap, mult, weak);
+  // how: 'gun' | 'melee' | 'nade' for the raider's attacks (the network learns
+  // from those), or null for anything else
+  damageEnemy(enemy, amount, ap, mult, weak, at, how = 'gun') {
+    const mem = this.profile.network;
+    const firstStrike = how && enemy.def.neutral && !enemy.hostile;
+    const dealt = enemy.damage(amount, ap, mult, weak, this.mind ? this.mind.eyeGuard : 0);
     this.effects.damageNumber(at, dealt, weak ? '#ffb030' : '#ffffff', weak);
     enemy.alert(this.player.pos, true);
     Audio.playHit(weak);
+    if (how) {
+      recordHit(mem, weak);
+      if (firstStrike) {
+        recordProvoked(mem, enemy.pos.x, enemy.pos.z);
+        // word spreads: neutral Husks nearby turn on the raider too
+        const rally = this.mind ? this.mind.rally : 40;
+        for (const e of this.enemies) {
+          if (e !== enemy && !e.dead && e.def.neutral && !e.hostile && e.pos.distanceTo(enemy.pos) < rally) e.alert(this.player.pos, true);
+        }
+      }
+    }
     let killed = false;
     if (enemy.hp <= 0 && !enemy.dead) {
       killed = true;
-      this.killEnemy(enemy);
+      this.killEnemy(enemy, how);
     }
     return { dealt, killed };
   }
 
-  killEnemy(enemy) {
+  killEnemy(enemy, how) {
     enemy.dead = true;
+    if (how) recordKill(this.profile.network, enemy.type, enemy.pos.x, enemy.pos.z, enemy.pos.distanceTo(this.player.pos), how);
     this.raidStats.kills++;
     this.profile.stats.kills++;
     this.raidStats.xp += enemy.def.xp;
@@ -617,7 +684,74 @@ export class Game {
     Audio.playExplosion(enemy.distTo);
     Audio.playKill();
     this.ui.notify(`${enemy.def.name} destroyed  +${enemy.def.xp} XP`);
-    this.spawnWreck(enemy);
+    if (enemy.def.neutral) {
+      this.spawnDebris(enemy);
+      this.spawnWreck(enemy, false);
+    } else {
+      this.spawnWreck(enemy);
+    }
+  }
+
+  // Break a Husk into its parts and let them fall and tumble to the ground.
+  spawnDebris(enemy) {
+    enemy.model.updateMatrixWorld(true);
+    const meshes = [];
+    enemy.model.traverse((o) => {
+      if (o.isMesh && !o.material.transparent) meshes.push(o);
+    });
+    const c = enemy.center.clone();
+    for (const m of meshes) {
+      const pos = new THREE.Vector3();
+      const quat = new THREE.Quaternion();
+      const scale = new THREE.Vector3();
+      m.matrixWorld.decompose(pos, quat, scale);
+      m.parent.remove(m);
+      m.position.copy(pos);
+      m.quaternion.copy(quat);
+      m.scale.copy(scale);
+      this.scene.add(m);
+      if (m.material.emissive && m === enemy.parts.eye) m.material.emissiveIntensity = 0.15;
+      const out = pos.clone().sub(c);
+      out.y = 0;
+      if (out.lengthSq() < 0.001) out.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+      out.normalize().multiplyScalar(1 + Math.random() * 3);
+      const vel = out.add(new THREE.Vector3(0, 1 + Math.random() * 3, 0)).addScaledVector(enemy.vel, 0.5);
+      m.geometry.computeBoundingSphere();
+      const r = m.geometry.boundingSphere.radius * Math.max(scale.x, scale.y, scale.z);
+      const spin = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(10);
+      this.debris.push({ mesh: m, vel, spin, r: Math.min(0.3, r * 0.5), rest: false, bounced: false });
+    }
+    // keep a lid on how much is lying about
+    while (this.debris.length > 260) {
+      const d = this.debris.shift();
+      this.scene.remove(d.mesh);
+      d.mesh.geometry.dispose();
+    }
+  }
+
+  updateDebris(dt) {
+    for (const d of this.debris) {
+      if (d.rest) continue;
+      const m = d.mesh;
+      d.vel.y -= 20 * dt;
+      m.position.addScaledVector(d.vel, dt);
+      m.rotation.x += d.spin.x * dt;
+      m.rotation.y += d.spin.y * dt;
+      m.rotation.z += d.spin.z * dt;
+      const ground = this.col.groundHeight(m.position.x, m.position.z, m.position.y + 0.3, 0.1, 0.6);
+      if (m.position.y - d.r <= ground) {
+        m.position.y = ground + d.r;
+        if (d.vel.y < -3 && !d.bounced) {
+          // one bounce with a scatter of sparks
+          d.bounced = true;
+          d.vel.set(d.vel.x * 0.45, -d.vel.y * 0.3, d.vel.z * 0.45);
+          d.spin.multiplyScalar(0.4);
+          if (m.position.distanceTo(this.player.pos) < 60) this.effects.impact(m.position.clone(), [0, 1, 0], 'metal');
+        } else {
+          d.rest = true;
+        }
+      }
+    }
   }
 
   explode(pos, radius, damage, source) {
@@ -635,7 +769,7 @@ export class Game {
       if (e.dead || e === source) continue;
       const d = pos.distanceTo(e.center);
       if (d < radius + e.def.radius) {
-        const res = this.damageEnemy(e, damage * (1 - Math.min(1, d / (radius + e.def.radius)) * 0.6), 0.5, 1, false, e.center.clone());
+        const res = this.damageEnemy(e, damage * (1 - Math.min(1, d / (radius + e.def.radius)) * 0.6), 0.5, 1, false, e.center.clone(), source === 'player' ? 'nade' : null);
         if (res.killed && source === 'player') this.ui.hitMarker(false, true);
       }
     }
@@ -891,6 +1025,14 @@ export class Game {
         c.searchedAt = this.time;
         this.openContainerVisual(c);
         this.noise(this.player.pos, 12);
+        recordLoot(this.profile.network, c.type);
+        if (c.type === 'husk_pod') {
+          // Husks nearby don't like their pods being stripped
+          const angry = this.mind.podGuard > 0.3 || this.mind.aggression > 0.5;
+          for (const e of this.enemies) {
+            if (!e.dead && e.def.neutral && e.pos.distanceTo(this.player.pos) < 25) e.alert(this.player.pos, angry);
+          }
+        }
       }
       this.ui.showLoot(c);
     } else if (target.kind === 'callLift') {
@@ -997,6 +1139,18 @@ export class Game {
       explode: (pos, r, dmg, src) => this.explode(pos, r, dmg, src),
       notify: (t) => this.ui.notify(t),
       shake: (a) => this.shake(a),
+      mind: this.mind || traits(this.profile.network),
+      onSeen: () => recordSeen(this.profile.network),
+      onPeace: (e) => recordPeace(this.profile.network, e.pos.x, e.pos.z),
+      // is the raider aiming down sights at this Husk?
+      aimingAt: (e) => {
+        if (!this.player.ads) return false;
+        const to = _aim.subVectors(e.center, this.camera.position);
+        const d = to.length();
+        if (d > 80) return false;
+        this.camera.getWorldDirection(_aimDir);
+        return to.dot(_aimDir) / d > 0.995;
+      },
     });
   }
 
@@ -1096,6 +1250,7 @@ export class Game {
       }
     }
     this.updateGrenades(dt);
+    this.updateDebris(dt);
     this.updateLifts(dt);
     // skip drawing far-away things (fog hides them anyway); big win on phones
     const drawDist = this.quality.drawDist;

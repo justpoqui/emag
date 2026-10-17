@@ -89,13 +89,41 @@ loadout screen show your total.
 
 ## Husks
 
-| Husk | Behaviour | Tip |
-| --- | --- | --- |
-| **Skitter** | Small crawler, leaps at you | Strafe or dodge-roll the leap |
-| **Buzzer** | Armed drone that circles and fires bursts | Its eye is a weak spot |
-| **Watcher** | Scout drone; if it watches you for a few seconds it calls in Buzzers | Kill it fast or break line of sight |
-| **Pouncer** | Armored jumper that slams down with a shockwave | Glowing core on top takes extra damage |
-| **Warden** | Walking fortress with twin miniguns, guards the plaza | Core on its back takes triple damage; bring heavy ammo |
+Skitters, Buzzers and Watchers are **neutral but cautious**. They watch you,
+keep their distance and warn you (a chirp and a flare of the eye) if you crowd
+them or aim at them. Push it, or shoot one, and they fight, and word spreads
+to the Husks nearby. Leave them be and they stand down. Pouncers and Wardens
+attack on sight.
+
+Every Husk has one critical spot, its eye. Hits anywhere else do 60% damage.
+
+| Husk | HP | Behaviour | Tip |
+| --- | --- | --- | --- |
+| **Skitter** | 50 | Small crawler; backs off if you get close, leaps if provoked | The small eye at the front |
+| **Buzzer** | 60 | Drone on vectoring thrusters; circles and fires bursts when hostile | The small eye on the nose |
+| **Watcher** | 45 | Sweeps a searchlight. It only sees what the light falls on; when hostile it calls in Buzzers | Stay out of the light; the eye is underneath |
+| **Pouncer** | 420 | Armored jumper that slams down with a shockwave | Glowing core on top takes extra damage |
+| **Warden** | 1400 | Walking fortress with twin miniguns, guards the plaza | Core on its back takes triple damage; bring heavy ammo |
+
+Destroyed Buzzers and Watchers break apart and their pieces fall to the ground.
+
+## The Husk Network
+
+The Husks learn. Every raid they remember what you did to them and where
+(`src/network.js`, saved with your account), and it changes them:
+
+- **Disposition:** start fights and they give you more room, lose patience
+  faster and stay angry longer; strike first often enough and they shoot on
+  sight. Leave them alone and they let you pass closer.
+- **Counters:** go for the eye a lot and they fit eye shutters (smaller eye,
+  softer crits). Fight up close or with the stick and they keep out of reach.
+  Snipe and Buzzers jink. Strip their pods and Skitters guard them.
+- **Infrastructure:** over time the network builds topside. **Bulwarks** (a
+  sentinel spire inside curved barricades, with a Watcher) go up where you
+  fight them; **Cradles** (pod nurseries tended by Skitters, with pods to loot)
+  where you don't.
+
+The Raider Log tab shows what the network has learned about you.
 
 ## Phone controls
 
@@ -151,7 +179,9 @@ shooter/
     rig.js         the raider model (knees and elbows) and its animation
     sanctuary.js   the walkable Patron's Sanctuary (quarters, hallway, Trade Hall, Workshop, Checkout, Lift)
     weapons.js     firing, spread/bloom, recoil, reloads, hit resolution
-    enemies.js     Husk models and AI
+    enemies.js     Husk models and AI (neutral / wary / hostile)
+    network.js     the Husk Network: what they learn about the raider, and what they build
+    infrastructure.js  Bulwarks and Cradles topside
     inventory.js   slot inventory helpers and the saved profile
     ui.js          HUD, backpack/loot/map/pause menus, hub tabs, results screen
     effects.js     tracers, sparks, explosions, damage numbers
