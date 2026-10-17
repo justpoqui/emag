@@ -115,6 +115,30 @@ export const ITEMS = {
   golden_relay: { name: 'Gilded Relay', type: 'valuable', rarity: 'legendary', value: 2200, stack: 1, color: 0xffcc33, desc: 'A Husk component plated in gold. Why?' },
 };
 
+// Weight in kg per unit. Ammo is per round.
+const WEIGHTS = {
+  mule: 3.2, sparrow: 2.6, badger: 3.8, hammerhead: 2.0, boar: 4.2, heron: 5.5,
+  ammo_light: 0.02, ammo_medium: 0.03, ammo_heavy: 0.06, ammo_shotgun: 0.05,
+  shield_light: 3.0, shield_medium: 4.5, shield_heavy: 6.5,
+  bandage: 0.15, med_kit: 0.5, shield_cell: 0.4, frag: 0.45,
+  scrap: 0.25, rubber: 0.15, plastic: 0.1, fabric: 0.08, chemicals: 0.2, wires: 0.1, battery: 0.4,
+  husk_plating: 0.5, husk_circuit: 0.15, husk_heart: 1.2,
+  rusted_gear: 0.6, old_radio: 1.5, pocket_watch: 0.1, film_camera: 0.8, music_box: 1.2, golden_relay: 0.5,
+};
+for (const [id, w] of Object.entries(WEIGHTS)) if (ITEMS[id]) ITEMS[id].weight = w;
+for (const item of Object.values(ITEMS)) if (item.weight === undefined) item.weight = 0.5;
+
+// What you can carry before slowing down. Over 75% of it you slow a little;
+// over 100% you slow a lot and can't sprint.
+export const CARRY_LIMIT = 35;
+export const HOLSTER_SPEED_BONUS = 1.12;
+
+// The stick: always on your back, never dropped, no slot.
+export const STICK = {
+  name: 'Stick', damage: 24, range: 2.4, arc: 70, cooldown: 0.65, hitAt: 0.42, swing: 0.55,
+  stamina: 10, knockback: 2.2, stagger: 0.7,
+};
+
 export function stackSize(id) {
   const item = ITEMS[id];
   return item.stack || 1;

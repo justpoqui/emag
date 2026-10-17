@@ -32,6 +32,7 @@ export class TouchControls {
         <button class="t-btn" data-key="Space">JUMP</button>
         <button class="t-btn" data-key="KeyC">CROUCH</button>
         <button class="t-btn" data-key="KeyV">ROLL</button>
+        <button class="t-btn melee" data-key="KeyF">STICK</button>
         <button class="t-btn interact hidden" data-key="KeyE">USE</button>
       </div>
       <div class="t-items">
@@ -39,6 +40,7 @@ export class TouchControls {
         <button class="t-btn small" data-key="Digit3">✚ HEAL</button>
         <button class="t-btn small" data-key="Digit4">⚡ SHIELD</button>
         <button class="t-btn small" data-key="KeyG">● NADE</button>
+        <button class="t-btn small" data-key="KeyH">⇣ HOLSTER</button>
       </div>`;
     document.body.appendChild(root);
     this.root = root;
@@ -197,7 +199,7 @@ export class TouchControls {
     input.stick = null;
     input.mouse.left = false;
     input.mouse.right = false;
-    for (const k of ['ShiftLeft', 'KeyE', 'Space', 'KeyR', 'KeyC', 'KeyV', 'Digit3', 'Digit4', 'KeyG']) input.keys.delete(k);
+    for (const k of ['ShiftLeft', 'KeyE', 'Space', 'KeyR', 'KeyC', 'KeyV', 'Digit3', 'Digit4', 'KeyG', 'KeyF', 'KeyH']) input.keys.delete(k);
     this.stickEl.classList.add('hidden');
     for (const b of this.root.querySelectorAll('.t-btn.down')) b.classList.remove('down');
   }

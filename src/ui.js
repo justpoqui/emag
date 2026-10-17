@@ -3,10 +3,10 @@
 
 import * as THREE from 'three';
 import {
-  ITEMS, RARITY, AMMO, TRADERS, BUY_MARKUP, RECIPES, BENCH_SECTIONS, PLAYER, RAID_SECONDS, MAX_DURABILITY, REPAIR, isDurable,
+  ITEMS, RARITY, AMMO, CARRY_LIMIT, TRADERS, BUY_MARKUP, RECIPES, BENCH_SECTIONS, PLAYER, RAID_SECONDS, MAX_DURABILITY, REPAIR, isDurable,
 } from './config.js';
 import {
-  addToSlots, durability, stackValue, countIn, moveStack, freeSlots, loadoutIsEmpty, applyFreeKit, countOwned, removeOwned, saveProfile, resetProfile, makeStack,
+  addToSlots, loadoutWeight, stackWeight, durability, stackValue, countIn, moveStack, freeSlots, loadoutIsEmpty, applyFreeKit, countOwned, removeOwned, saveProfile, resetProfile, makeStack,
 } from './inventory.js';
 import { MAP_HALF } from './collision.js';
 import * as Audio from './audio.js';
@@ -91,10 +91,12 @@ export class UI {
         <div class="shield-row"><div class="bar shield"><div class="fill"></div></div><span class="num s"></span></div>
         <div class="health-row"><div class="bar health"><div class="lag"></div><div class="fill"></div></div><span class="num h"></span></div>
         <div class="bar stamina"><div class="fill"></div></div>
+        <div class="load-chip hidden"></div>
       </div>
       <div class="weapon-panel">
         <div class="slots"><div class="wslot" data-i="0"></div><div class="wslot" data-i="1"></div></div>
         <div class="ammo"><span class="mag">0</span><span class="reserve">/ 0</span></div>
+        <div class="stance"></div>
         <div class="quick">
           <div class="q" data-q="heal"><b>3</b><span></span></div>
           <div class="q" data-q="recharge"><b>4</b><span></span></div>
@@ -103,7 +105,7 @@ export class UI {
       </div>
       <div class="markers"></div>
       <div class="vignette"></div>
-      <div class="help">WASD move · Shift sprint · Space jump · C crouch · V dodge roll · RMB aim · R reload · E interact · Tab inventory · M map</div>
+      <div class="help">WASD move · Shift sprint · Space jump · C crouch · V roll · RMB aim · R reload · F stick · H holster · E interact · Tab bag · M map</div>
     `;
     this.root.appendChild(hud);
     this.hud = hud;
@@ -121,6 +123,7 @@ export class UI {
       health: $('.bar.health .fill'), healthLag: $('.bar.health .lag'), healthNum: $('.num.h'), stamina: $('.bar.stamina .fill'),
       wslots: hud.querySelectorAll('.wslot'), mag: $('.ammo .mag'), reserve: $('.ammo .reserve'),
       quick: hud.querySelectorAll('.q'), markers: $('.markers'), vignette: $('.vignette'),
+      stance: $('.stance'), load: $('.load-chip'),
     };
     // compass ticks
     const strip = this.h.compass;
@@ -196,14 +199,21 @@ export class UI {
       if (stack) s.style.borderColor = RARITY[ITEMS[stack.id].rarity].color;
     });
     const cur = w.current();
-    if (cur) {
+    const key = (k) => (this.game.input.touch ? '' : ` · ${k}`);
+    if (cur && !w.holstered) {
       this.h.mag.textContent = cur.mag;
       this.h.mag.classList.toggle('low', cur.mag <= Math.ceil(ITEMS[cur.id].mag * 0.25));
       this.h.reserve.textContent = `/ ${w.reserve()}`;
+      this.h.stance.textContent = `Stick${key('F')}`;
     } else {
-      this.h.mag.textContent = '—';
+      this.h.mag.textContent = cur ? 'HOLSTERED' : 'STICK';
+      this.h.mag.classList.remove('low');
+      this.h.mag.classList.add('word');
       this.h.reserve.textContent = '';
+      this.h.stance.textContent = cur ? `Faster on foot${key('H to draw')}` : `Swing${key('F or click')}`;
     }
+    if (cur && !w.holstered) this.h.mag.classList.remove('word');
+    this._stance = `${w.active}:${w.holstered}:${!!cur}`;
   }
 
   refreshInventory() {
@@ -245,13 +255,20 @@ export class UI {
     }
     this.h.stamina.style.width = `${(p.stamina / PLAYER.stamina) * 100}%`;
     this.h.stamina.parentElement.classList.toggle('locked', p.staminaLock > 0);
+    const load = g.loadRatio || 0;
+    this.h.load.classList.toggle('hidden', load <= 0.75);
+    if (load > 0.75) {
+      this.h.load.textContent = load > 1 ? 'OVERLOADED · no sprinting' : 'HEAVY LOAD · slower';
+      this.h.load.classList.toggle('over', load > 1);
+    }
+    if (this._stance !== `${g.weapons.active}:${g.weapons.holstered}:${!!g.weapons.current()}`) this.refreshAmmo();
     this.h.vignette.style.opacity = hp < 35 ? (1 - hp / 35) * 0.9 : Math.max(0, 0.5 - (g.time - p.lastDamage) * 1.5);
 
     // crosshair
     const spread = g.weapons.spread();
     const px = 6 + spread * 7;
     this.h.cross.style.setProperty('--gap', `${px}px`);
-    this.h.cross.classList.toggle('hidden', !g.weapons.current() || p.sprinting || this.menuOpen());
+    this.h.cross.classList.toggle('hidden', !g.weapons.current() || g.weapons.holstered || p.sprinting || this.menuOpen());
     this.h.cross.classList.toggle('ads', p.ads);
 
     // reload
@@ -635,6 +652,7 @@ export class UI {
       <div class="tt-rarity">${r.name} · ${def.type}</div>
       <div class="tt-desc">${def.desc || ''}</div>${stats}
       ${isDurable(stack.id) ? `<div class="tt-dur">Durability ${Math.ceil(durability(stack))} / ${MAX_DURABILITY}${durability(stack) <= 0 ? ' · BROKEN' : ''}</div>` : ''}
+      <div class="tt-weight">Weight ${def.weight < 0.1 ? `${(def.weight * 1000).toFixed(0)} g` : `${def.weight} kg`}${stack.n > 1 ? ` (${stackWeight(stack).toFixed(1)} kg total)` : ''}</div>
       <div class="tt-value">Value ⌬ ${isDurable(stack.id) ? stackValue(stack) : def.value}${stack.n > 1 ? ` (⌬ ${stackValue(stack)} total)` : ''}</div>
       ${hint ? `<div class="tt-hint">${hint}</div>` : ''}`;
     this.tooltip.classList.remove('hidden');
@@ -689,6 +707,7 @@ export class UI {
     }));
     const bagCol = el('div', 'bag');
     bagCol.appendChild(el('div', 'sect', `BAG <small>${freeSlots(lo.bag)} free</small>`));
+    bagCol.appendChild(this.weightBar(lo));
     const grid = el('div', 'grid');
     lo.bag.forEach((s, i) => {
       grid.appendChild(this.tile(s, {
@@ -718,6 +737,15 @@ export class UI {
     body.appendChild(bagCol);
     panel.appendChild(body);
     this.menus.appendChild(panel);
+  }
+
+  // Carried weight against the limit (everything in the loadout counts).
+  weightBar(lo) {
+    const w = loadoutWeight(lo);
+    const ratio = w / CARRY_LIMIT;
+    const bar = el('div', `weight ${ratio > 1 ? 'over' : ratio > 0.75 ? 'heavy' : ''}`);
+    bar.innerHTML = `<div class="weight-bar"><i style="width:${Math.min(100, ratio * 100)}%"></i><s style="left:75%"></s></div><span>${w.toFixed(1)} / ${CARRY_LIMIT} kg${ratio > 1 ? ' · overloaded, no sprinting' : ratio > 0.75 ? ' · heavy, slower' : ''}</span>`;
+    return bar;
   }
 
   bagTapLabel(s) {
@@ -796,6 +824,7 @@ export class UI {
     body.appendChild(left);
     const bagCol = el('div', 'bag');
     bagCol.appendChild(el('div', 'sect', `YOUR BAG <small>${freeSlots(lo.bag)} free</small>`));
+    bagCol.appendChild(this.weightBar(lo));
     const grid = el('div', 'grid');
     lo.bag.forEach((s, i) => grid.appendChild(this.tile(s, {
       hint: 'Click: put in container',
@@ -1198,6 +1227,7 @@ export class UI {
     }));
     const bagTitle = el('div', 'sect', `BAG <small>${freeSlots(lo.bag)} free</small>`);
     left.appendChild(bagTitle);
+    left.appendChild(this.weightBar(lo));
     const bag = el('div', 'grid');
     lo.bag.forEach((s, i) => bag.appendChild(this.tile(s, {
       hint: 'Click: move to stash · Right-click: more',
@@ -1505,8 +1535,8 @@ export class UI {
   guideHtml() {
     const touch = this.game.input.touch;
     const controls = touch
-      ? 'Left thumb: move (push to the edge to sprint) · Right thumb: look · FIRE (hold and drag to aim) · AIM · RELOAD · JUMP · CROUCH · ROLL · USE appears near loot and lifts · SWAP, HEAL, SHIELD and NADE on the left · tap an item to use it, hold it for more'
-      : 'WASD move · Shift sprint · Space jump · C crouch · V dodge roll · Mouse aim/fire · RMB aim down sights · R reload · 1/2 or wheel swap weapon · 3 heal · 4 recharge shield · G grenade · E interact (hold) · Tab backpack · M map · Esc pause';
+      ? 'Left thumb: move (push to the edge to sprint) · Right thumb: look · FIRE (hold and drag to aim) · AIM · STICK swings your melee stick · RELOAD · JUMP · CROUCH · ROLL · USE appears near loot and lifts · SWAP, HOLSTER, HEAL, SHIELD and NADE on the left · tap an item to use it, hold it for more'
+      : 'WASD move · Shift sprint · Space jump · C crouch · V dodge roll · Mouse aim/fire · RMB aim down sights · R reload · 1/2 or wheel swap weapon · F swing your stick · H holster (move faster) · 3 heal · 4 recharge shield · G grenade · E interact (hold) · Tab backpack · M map · Esc pause';
     return `
       <div class="guide">
         <h3>How a raid works</h3>
@@ -1514,6 +1544,8 @@ export class UI {
         <p>Die, or still be topside when the ${Math.round(RAID_SECONDS / 60)}-minute raid clock runs out, and you lose everything you carried except your <b>safe pocket</b>.</p>
         <h3>Between raids</h3>
         <p>In the Burrow, move gear between your stash and loadout, buy from Tobias and Nia, sell loot, and craft at the Workbench. Broke? Take the free kit.</p>
+        <h3>Stick, holster and weight</h3>
+        <p>You always carry a <b>stick</b> on your back. It takes no slot and can't be dropped. Swing it at close range to hit and knock back Husks; it costs a little stamina. <b>Holster</b> your gun to move about 12% faster, and the trigger swings the stick instead. Everything you carry has a <b>weight</b>: past 75% of your ${CARRY_LIMIT} kg limit you slow down, and overloaded you can't sprint.</p>
         <h3>Husk field notes</h3>
         <p><b>Skitter</b>: small crawler that leaps at you. <b>Buzzer</b>: armed drone that strafes; its eye is a weak spot. <b>Watcher</b>: scout drone; if it sees you for a few seconds it calls Buzzers. <b>Pouncer</b>: armored jumper; aim for the glowing core on top. <b>Warden</b>: walking fortress in the plaza; its core is on its back.</p>
         <h3>Controls</h3>

@@ -175,6 +175,10 @@ export function playDeny() {
   tone(220, 0.15, { type: 'square', gain: 0.1 });
 }
 
+export function playSwing() {
+  noise(0.22, { freq: 900, sweepTo: 2600, type: 'bandpass', q: 1.5, gain: 0.35, attack: 0.04 });
+}
+
 export function playRoll() {
   noise(0.3, { freq: 600, sweepTo: 200, gain: 0.3 });
 }

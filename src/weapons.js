@@ -1,7 +1,7 @@
 // Player weapons: firing, spread, recoil, reloading, and hit resolution.
 
 import * as THREE from 'three';
-import { ITEMS, AMMO } from './config.js';
+import { ITEMS, AMMO, STICK } from './config.js';
 import { countIn, removeFrom, durability } from './inventory.js';
 import { raySphere } from './enemies.js';
 import * as Audio from './audio.js';
@@ -15,6 +15,9 @@ export class Weapons {
     this.reloadTotal = 0;
     this.bloom = 0;
     this.switching = 0;
+    this.holstered = false;
+    this.meleeCd = 0;
+    this.meleeHit = false;
   }
 
   get loadout() {
@@ -36,6 +39,9 @@ export class Weapons {
   }
 
   reset() {
+    this.holstered = false;
+    this.meleeCd = 0;
+    this.game.player.melee = -1;
     this.fireCd = 0;
     this.reloading = 0;
     this.bloom = 0;
@@ -43,8 +49,23 @@ export class Weapons {
     if (!this.current() && this.loadout.weapons[1 - this.active]) this.active = 1 - this.active;
   }
 
+  // Put the gun on your back (faster movement) or draw it again.
+  toggleHolster() {
+    if (!this.current()) return;
+    this.holstered = !this.holstered;
+    this.reloading = 0;
+    if (!this.holstered) this.switching = 0.35;
+    Audio.playReload(0);
+  }
+
+  draw() {
+    if (this.holstered && this.current()) this.toggleHolster();
+  }
+
   switchTo(i) {
-    if (i === this.active || !this.loadout.weapons[i]) return;
+    if (!this.loadout.weapons[i]) return;
+    if (i === this.active) return this.draw();
+    this.holstered = false;
     this.active = i;
     this.reloading = 0;
     this.switching = 0.45;
@@ -85,8 +106,14 @@ export class Weapons {
     if (this.switching > 0) this.switching -= dt;
     const w = this.current();
     const d = this.def();
-    p.setGun(w ? w.id : null);
-    if (!w) return;
+    p.setGun(w ? w.id : null, this.holstered);
+    this.updateMelee(dt);
+    // no gun in hand: the trigger swings the stick
+    if (!w || this.holstered) {
+      if (input.firePressed) this.melee();
+      return;
+    }
+    if (p.melee >= 0) return;
 
     if (this.reloading > 0) {
       this.reloading -= dt;
@@ -99,7 +126,7 @@ export class Weapons {
       }
       return;
     }
-    const blocked = p.sprinting || p.roll > 0 || this.switching > 0 || this.game.using;
+    const blocked = p.sprinting || p.roll > 0 || this.switching > 0 || this.game.using || p.melee >= 0;
     if (blocked) return;
     const wantFire = d.auto ? input.fire : input.firePressed;
     if (wantFire && this.fireCd <= 0) {
@@ -117,6 +144,73 @@ export class Weapons {
       }
       this.fire(w, d);
     }
+  }
+
+  // ---- the stick ----
+  melee() {
+    const p = this.game.player;
+    if (this.meleeCd > 0 || p.melee >= 0 || p.roll > 0 || !p.alive || this.game.using) return;
+    if (p.stamina < STICK.stamina * 0.5) return;
+    p.stamina = Math.max(0, p.stamina - STICK.stamina);
+    this.reloading = 0;
+    this.meleeCd = STICK.cooldown;
+    this.meleeHit = false;
+    p.melee = 0;
+    Audio.playSwing();
+  }
+
+  updateMelee(dt) {
+    const p = this.game.player;
+    this.meleeCd -= dt;
+    if (p.melee < 0) return;
+    p.melee += dt / STICK.swing;
+    if (!this.meleeHit && p.melee >= STICK.hitAt) {
+      this.meleeHit = true;
+      this.meleeStrike();
+    }
+    if (p.melee >= 1) p.melee = -1;
+  }
+
+  meleeStrike() {
+    const game = this.game;
+    const p = game.player;
+    const fx = Math.sin(p.yaw);
+    const fz = Math.cos(p.yaw);
+    const chest = p.chest();
+    const cosArc = Math.cos(((STICK.arc / 2) * Math.PI) / 180);
+    let hits = 0;
+    let kills = 0;
+    for (const e of game.enemies) {
+      if (e.dead) continue;
+      const c = e.center.clone();
+      const dx = c.x - chest.x;
+      const dz = c.z - chest.z;
+      const flat = Math.hypot(dx, dz);
+      if (flat - e.def.radius > STICK.range || Math.abs(c.y - chest.y) > 1.6 + e.def.radius) continue;
+      if (flat > 0.3 && (dx * fx + dz * fz) / flat < cosArc) continue;
+      const res = game.damageEnemy(e, STICK.damage, 0.3, 1, false, c);
+      hits++;
+      if (res.killed) kills++;
+      if (!e.dead) {
+        // knock small Husks back and interrupt whatever they were doing
+        if (!e.def.flying && e.def.radius < 1) {
+          const n = Math.max(0.3, flat);
+          e.pos.x += (dx / n) * STICK.knockback;
+          e.pos.z += (dz / n) * STICK.knockback;
+          game.col.resolveCylinder(e.pos, e.def.radius, 1.5);
+        }
+        e.leap = null;
+        e.burstLeft = 0;
+        e.cooldown = Math.max(e.cooldown, STICK.stagger);
+      }
+      game.effects.impact(c, [-fx, 0.3, -fz], 'metal');
+    }
+    if (hits) {
+      Audio.playMetalHit(0);
+      game.shake(0.15);
+      game.ui.hitMarker(false, kills > 0);
+    }
+    game.noise(p.pos, 15);
   }
 
   fire(w, d) {

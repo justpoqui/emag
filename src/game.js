@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import {
-  ITEMS, SHIELD_WEAR, MAX_DURABILITY, isDurable, LOOT_TABLES, ENEMIES, RAID_SECONDS, EXTRACT_CALL_SECONDS, EXTRACT_OPEN_SECONDS, PLAYER,
+  ITEMS, CARRY_LIMIT, HOLSTER_SPEED_BONUS, SHIELD_WEAR, MAX_DURABILITY, isDurable, LOOT_TABLES, ENEMIES, RAID_SECONDS, EXTRACT_CALL_SECONDS, EXTRACT_OPEN_SECONDS, PLAYER,
 } from './config.js';
 import { buildWorld } from './world.js';
 import { Player } from './player.js';
@@ -14,11 +14,12 @@ import { Input } from './input.js';
 import { UI } from './ui.js';
 import { rollTable, makeRng } from './rng.js';
 import {
-  blankProfile, durability, saveProfile, addToSlots, removeFrom, loadoutValue, emptyLoadout, countIn,
+  blankProfile, loadoutWeight, durability, saveProfile, addToSlots, removeFrom, loadoutValue, emptyLoadout, countIn,
 } from './inventory.js';
 import * as Audio from './audio.js';
 import { getQuality, IS_TOUCH } from './settings.js';
 import { TouchControls } from './touch.js';
+import { Sanctuary } from './sanctuary.js';
 
 const SEARCH_TIME = { crate: 1.2, locker: 1.0, medical: 1.0, weapon_case: 1.8, husk_pod: 2.0, car: 1.4, wreck: 0.9 };
 const MAX_HUSKS = 40;
@@ -91,6 +92,7 @@ export class Game {
 
     // ---- world ----
     this.world = buildWorld(scene, { grass: quality.grass });
+    this.sanctuary = new Sanctuary(quality);
     this.col = this.world.collision;
     this.buildContainers();
 
@@ -138,7 +140,6 @@ export class Game {
     window.addEventListener('resize', () => this.resize());
     this.clock = new THREE.Clock();
     this.player.alive = false; // keeps menu-scene Husks from noticing the hidden player
-    this.spawnAmbient();
     this.ui.showLogin();
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
@@ -321,7 +322,6 @@ export class Game {
     saveProfile(this.profile);
 
     this.resetContainers();
-    this.ambient = false;
     for (const e of this.enemies) e.destroy();
     this.enemies = [];
     this.grenades = [];
@@ -400,7 +400,6 @@ export class Game {
     this.effects.clear();
     this.player.model.visible = false;
     this.player.alive = false;
-    this.spawnAmbient();
     this.enterHub();
   }
 
@@ -429,19 +428,6 @@ export class Game {
   goHome() {
     this.mode = 'home';
     this.ui.showHome();
-  }
-
-  // A few idle Husks wandering the plaza behind the menus.
-  spawnAmbient() {
-    if (this.ambient) return;
-    this.ambient = true;
-    const t = this.world.town;
-    const px = t.x + 32;
-    const pz = t.z + 32;
-    this.spawnEnemyAt('warden', px, pz + 6, null, { x: px, z: pz, radius: 10 });
-    for (let i = 0; i < 3; i++) this.spawnEnemyAt('buzzer', px + (i - 1) * 10, pz - 8, null, { x: px, z: pz, radius: 26 });
-    this.spawnEnemyAt('watcher', px - 10, pz + 12, null, { x: px, z: pz, radius: 34 });
-    for (let i = 0; i < 2; i++) this.spawnEnemyAt('skitter', px + 12, pz + i * 4, null, { x: px, z: pz, radius: 14 });
   }
 
   setPaused(on) {
@@ -814,6 +800,7 @@ export class Game {
 
   // ---------- frame ----------
   resize() {
+    this.sanctuary.resize();
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -823,11 +810,17 @@ export class Game {
     requestAnimationFrame(this.loop);
     const dt = Math.min(0.05, this.clock.getDelta());
     this.time += dt;
-    if (this.mode === 'raid' && !this.paused) this.updateRaid(dt);
-    else if (this.mode !== 'raid') this.updateMenuScene(dt);
-    this.effects.update(dt);
-    this.updateSun();
-    this.renderer.render(this.scene, this.camera);
+    if (this.mode === 'raid') {
+      if (!this.paused) this.updateRaid(dt);
+      this.effects.update(dt);
+      this.updateSun();
+      this.renderer.render(this.scene, this.camera);
+    } else {
+      // menus show the Patron's Sanctuary with the raider and their gear
+      this.sanctuary.refresh(this.mode === 'login' ? null : this.profile);
+      this.sanctuary.update(dt, this.mode);
+      this.renderer.render(this.sanctuary.scene, this.sanctuary.camera);
+    }
     this.input.endFrame();
   }
 
@@ -836,36 +829,6 @@ export class Game {
     this.sun.position.copy(focus).addScaledVector(this.sunDir, 200);
     this.sun.target.position.copy(focus);
     this.sky.position.copy(this.camera.position);
-  }
-
-  // Camera and ambient Husks behind the title screen, hub and results.
-  updateMenuScene(dt) {
-    const town = this.world.town;
-    if (this.mode === 'home' || this.mode === 'login') {
-      // low, slow drift around the Warden's plaza
-      const px = town.x + 32;
-      const pz = town.z + 32;
-      const t = this.time * 0.045;
-      const r = 34;
-      const camX = px + Math.cos(t) * r;
-      const camZ = pz + Math.sin(t) * r;
-      this.hubFocus = new THREE.Vector3(px, 0, pz);
-      this.camera.position.set(camX, this.col.groundHeight(camX, camZ, 200, 0.3, 300) + 11, camZ);
-      this.camera.lookAt(px, 3, pz);
-    } else {
-      const t = this.time * 0.03;
-      const r = 120;
-      this.hubFocus = new THREE.Vector3(town.x, 0, town.z);
-      this.camera.position.set(town.x + Math.cos(t) * r, 48, town.z + Math.sin(t) * r);
-      this.camera.lookAt(town.x, 6, town.z);
-    }
-    if (this.camera.fov !== 60) {
-      this.camera.fov = 60;
-      this.camera.updateProjectionMatrix();
-    }
-    for (const ex of this.world.extractions) ex.lamp.material.emissiveIntensity = 1.5;
-    const ctx = this.getHuskCtx();
-    for (const e of this.enemies) e.update(dt, ctx);
   }
 
   getHuskCtx() {
@@ -897,6 +860,9 @@ export class Game {
       if (input.hit('Digit3')) this.useQuick('heal');
       if (input.hit('Digit4')) this.useQuick('recharge');
       if (input.hit('KeyG')) this.throwGrenade();
+      if (input.hit('KeyF')) this.weapons.melee();
+      if (input.hit('KeyH') || input.hit('KeyX')) this.weapons.toggleHolster();
+      if (input.mouse.right && this.weapons.holstered) this.weapons.draw();
       if (input.hit('KeyC')) p.crouch = !p.crouch;
       if (input.hit('KeyV') || input.hit('AltLeft')) {
         if (p.tryRoll(input.axis())) this.cancelUse();
@@ -923,7 +889,14 @@ export class Game {
 
     // ---- move ----
     const axis = p.alive ? input.axis() : { x: 0, y: 0 };
-    p.ads = p.alive && !menu && input.mouse.right && p.roll <= 0 && !!this.weapons.current();
+    p.ads = p.alive && !menu && input.mouse.right && p.roll <= 0 && p.armed;
+    // carried weight and holstering change how fast you move
+    const load = loadoutWeight(this.profile.loadout) / CARRY_LIMIT;
+    this.loadRatio = load;
+    let mul = load > 1 ? 0.7 : load > 0.75 ? 1 - (load - 0.75) * 0.6 : 1;
+    if (this.weapons.holstered || !this.weapons.current()) mul *= HOLSTER_SPEED_BONUS;
+    p.speedMul = mul;
+    p.canSprint = load <= 1;
     if (this.using) {
       p.slow = 1;
       this.using.t += dt;

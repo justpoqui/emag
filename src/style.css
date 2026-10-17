@@ -207,7 +207,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .chip { --rarity: #888; border: 1px solid var(--line); border-left: 3px solid var(--rarity); padding: 3px 8px; font-family: var(--font); font-size: 15px; }
 
 /* ---------------- hub ---------------- */
-.hub { position: absolute; inset: 0; display: flex; flex-direction: column; background: linear-gradient(180deg, rgba(29, 28, 26, 0.55), rgba(29, 28, 26, 0.88) 40%); }
+.hub { position: absolute; inset: 0; display: flex; flex-direction: column; background: linear-gradient(180deg, rgba(29, 28, 26, 0.35), rgba(29, 28, 26, 0.6) 45%, rgba(29, 28, 26, 0.75)); }
 .hub-top { display: flex; align-items: center; gap: 30px; padding: 14px 28px; background: var(--cream); color: var(--ink); }
 .logo { font-size: 38px; line-height: 0.9; }
 .logo small { display: block; font-size: 12px; letter-spacing: 0.3em; font-weight: 600; color: #6a5f4f; }
@@ -298,7 +298,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .t-right [data-key='Space'] { right: 22px; bottom: 122px; }
 .t-right [data-key='KeyC'] { right: 160px; bottom: 34px; }
 .t-right [data-key='KeyV'] { right: 84px; bottom: 132px; }
-.t-right .interact { right: 150px; bottom: 120px; width: 70px; height: 70px; font-size: 15px; border-color: var(--yellow); background: rgba(242, 193, 78, 0.35); }
+.t-right .interact { right: 160px; bottom: 165px; width: 70px; height: 70px; font-size: 15px; border-color: var(--yellow); background: rgba(242, 193, 78, 0.35); }
 .t-top { position: absolute; left: calc(12px + env(safe-area-inset-left)); top: 10px; display: flex; gap: 6px; }
 .t-items { position: absolute; left: calc(12px + env(safe-area-inset-left)); top: 54px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 
@@ -535,3 +535,19 @@ body.touch .use-bar { bottom: 140px; }
 .bulletin-form .btn, .ban-form .btn { margin-top: 0; }
 .ban-form input { flex: 1; }
 .tab { white-space: nowrap; padding: 8px 12px; }
+
+/* stick, holster, weight */
+.weapon-panel .mag.word { font-size: 30px; letter-spacing: 0.08em; }
+.weapon-panel .stance { font-size: 14px; color: var(--cream-dim); letter-spacing: 0.05em; margin-bottom: 4px; }
+.load-chip { align-self: flex-start; font-family: var(--font); font-weight: 700; font-size: 13px; letter-spacing: 0.08em; padding: 2px 8px; background: rgba(242, 193, 78, 0.85); color: var(--ink); }
+.load-chip.over { background: var(--red); color: #fff; }
+.weight { display: flex; flex-direction: column; gap: 3px; margin: 2px 0 8px; font-family: var(--font); font-size: 13px; color: var(--cream-dim); }
+.weight-bar { position: relative; height: 6px; background: rgba(0, 0, 0, 0.4); }
+.weight-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--teal); }
+.weight-bar s { position: absolute; top: -2px; bottom: -2px; width: 1px; background: rgba(244, 234, 216, 0.5); }
+.weight.heavy .weight-bar i { background: var(--yellow); }
+.weight.heavy span { color: var(--yellow); }
+.weight.over .weight-bar i { background: var(--red); }
+.weight.over span { color: var(--red); }
+.tt-weight { font-size: 13px; color: var(--cream-dim); }
+.t-right .melee { right: 160px; bottom: 98px; }

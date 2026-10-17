@@ -56,6 +56,12 @@ level) is saved in the browser's localStorage.
 5. **Die, or still be topside when the 20-minute clock ends**, and your
    loadout is gone. Closing the game mid-raid counts as dying.
 
+## Weight
+
+Every item has a weight (see its tooltip). Past 75% of the 35 kg carry limit
+you slow down; over the limit you slow a lot and can't sprint. The bag and the
+loadout screen show your total.
+
 ## Husks
 
 | Husk | Behaviour | Tip |
@@ -75,6 +81,7 @@ level) is saved in the browser's localStorage.
 | FIRE | Shoot. Keep your thumb down and drag to aim while firing |
 | AIM | Toggle aim down sights |
 | RELOAD / JUMP / CROUCH / ROLL | As on PC |
+| STICK / HOLSTER | Swing the stick / put your gun away to move faster |
 | USE | Appears near something you can search or a lift; hold it |
 | SWAP / HEAL / SHIELD / NADE | Left column |
 | ❚❚ / MAP / BAG | Top left |
@@ -93,6 +100,8 @@ graphics; change it under **Settings** in the hub or in the pause menu.
 | V or Left Alt | Dodge roll (costs stamina, halves damage taken) |
 | Mouse / RMB | Shoot / aim down sights |
 | R | Reload |
+| F | Swing your stick (always carried, no slot, can't be dropped) |
+| H or X | Holster / draw your gun (holstered: ~12% faster, and the trigger swings the stick) |
 | 1 / 2 / wheel | Switch weapon |
 | 3 / 4 | Heal / recharge shield |
 | G | Throw a frag grenade |
@@ -113,7 +122,9 @@ shooter/
     game.js        renderer, lighting, raid lifecycle, damage, explosions, interaction, lifts, camera
     world.js       procedural Dustline map (ruined town, container yard, Husk hull, pylons, lifts…)
     collision.js   heightfield terrain + AABB grid: movement, line of sight, bullet raycasts
-    player.js      raider model, movement, stamina, dodge roll, weapon models
+    player.js      movement, stamina, dodge roll, holstering, weapon models
+    rig.js         the raider model (knees and elbows) and its animation
+    sanctuary.js   the Patron's Sanctuary room shown behind the menus
     weapons.js     firing, spread/bloom, recoil, reloads, hit resolution
     enemies.js     Husk models and AI
     inventory.js   slot inventory helpers and the saved profile

@@ -214,6 +214,20 @@ export function moveStack(stack, slots) {
   return { ...stack, n: left };
 }
 
+export function stackWeight(stack) {
+  return stack ? ITEMS[stack.id].weight * stack.n : 0;
+}
+
+// Everything you carry: weapons, shield, bag and safe pocket.
+export function loadoutWeight(loadout) {
+  let total = 0;
+  loadout.weapons.forEach((s) => { total += stackWeight(s); });
+  total += stackWeight(loadout.shield);
+  loadout.bag.forEach((s) => { total += stackWeight(s); });
+  loadout.safe.forEach((s) => { total += stackWeight(s); });
+  return total;
+}
+
 export function loadoutValue(loadout) {
   let total = 0;
   const add = (s) => { if (s) total += ITEMS[s.id].value * s.n; };
