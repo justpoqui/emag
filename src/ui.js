@@ -565,6 +565,18 @@ export class UI {
         },
       });
     }
+    // shields don't refill on their own: top them up with a Shield Cell
+    const cell = ITEMS.shield_cell;
+    const target = ITEMS[s.id].type === 'shield' ? s : s.id === 'shield_cell' ? lo.shield : null;
+    if (target && target.charge < ITEMS[target.id].capacity) {
+      const owned = countOwned(p, 'shield_cell');
+      items.unshift({
+        label: s === target ? 'Recharge with a Shield Cell' : 'Recharge equipped shield',
+        note: `${Math.ceil(target.charge)}/${ITEMS[target.id].capacity} charge · +${cell.recharge} · ${owned} cell${owned === 1 ? '' : 's'} owned`,
+        disabled: owned < 1,
+        fn: () => this.rechargeShield(target),
+      });
+    }
     if (SALVAGE[s.id]) {
       const y = salvageYield(s, 1);
       items.push({ label: 'Dismantle', note: y ? `Gives ${this.yieldText(y)}` : 'Too worn to give anything', disabled: !y, fn: () => this.dismantle(slot, 1) });
@@ -610,6 +622,16 @@ export class UI {
       });
     }
     return items;
+  }
+
+  rechargeShield(shield) {
+    const p = this.game.profile;
+    if (countOwned(p, 'shield_cell') < 1) return Audio.playDeny();
+    removeOwned(p, 'shield_cell', 1);
+    shield.charge = Math.min(ITEMS[shield.id].capacity, shield.charge + ITEMS.shield_cell.recharge);
+    Audio.playPickup();
+    this.notifyHub(`${ITEMS[shield.id].name} recharged to ${Math.ceil(shield.charge)}.`);
+    this.afterHubChange();
   }
 
   yieldText(y) {

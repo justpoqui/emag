@@ -232,7 +232,15 @@ export class Sanctuary {
     wallZ(M.hall, -5, -6.6, -3.6);
     // stripe along the walls, pipes overhead
     box(M.orange, 18.5, 1.05, -3.72, 29, 0.12, 0.03, { collide: false });
-    box(M.orange, 14, 1.05, -6.48, 38, 0.12, 0.03, { collide: false });
+    // the north stripe stops at each doorway
+    {
+      let cur = -5;
+      for (const at of [4, 14, 23.75, 33]) {
+        const end = at === 33 ? 33 : at - 0.9;
+        if (end > cur) box(M.orange, (cur + end) / 2, 1.05, -6.48, end - cur, 0.12, 0.03, { collide: false });
+        cur = at + 0.9;
+      }
+    }
     box(M.metal, 14, H - 0.25, -6.3, 38, 0.12, 0.12, { collide: false });
     box(M.metal, 14, H - 0.4, -6.3, 38, 0.08, 0.08, { collide: false });
     lamp(0, -5.1);
@@ -263,12 +271,14 @@ export class Sanctuary {
       const z = -13.2;
       box(M.wood, st.x, 0.55, z + 1.3, 2.2, 1.1, 0.6, { shadow: true }); // counter
       box(M.darkWood, st.x, 1.12, z + 1.3, 2.3, 0.06, 0.7, { collide: false });
-      box(st.awning, st.x, 2.55, z + 0.9, 2.4, 0.08, 1.6, { collide: false, rot: [0.25, 0, 0] });
+      // awning high enough that the name board hangs below it, above the trader's head
+      box(st.awning, st.x, 3.05, z + 0.9, 2.4, 0.08, 1.6, { collide: false, rot: [0.25, 0, 0] });
       box(M.darkWood, st.x, 1.4, z - 0.85, 2.3, 2.8, 0.3); // shelves behind
-      for (let i = 0; i < 6; i++) box(i % 2 ? M.metal : M.orange, st.x - 0.8 + i * 0.32, 1.7 + (i % 3) * 0.35, z - 0.65, 0.22, 0.18, 0.15, { collide: false });
+      for (let k = 0; k < 3; k++) box(M.darkWood, st.x, 1.59 + k * 0.35, z - 0.55, 2.2, 0.04, 0.3, { collide: false });
+      for (let i = 0; i < 6; i++) box(i % 2 ? M.metal : M.orange, st.x - 0.8 + i * 0.32, 1.7 + (i % 3) * 0.35, z - 0.55, 0.22, 0.18, 0.15, { collide: false });
       const name = st.id === 'sell' ? 'PELL' : TRADERS[st.id].name.toUpperCase();
       const title = st.id === 'sell' ? 'SCRAP BUYER' : TRADERS[st.id].title.toUpperCase();
-      sign([{ text: name, size: 64, y: 62 }, { text: title, size: 30, weight: 600, y: 118, color: '#cfc3ad' }], st.x, 2.2, z + 1.66, 1.4, 0.44, 0, { w: 360, h: 160 });
+      sign([{ text: name, size: 64, y: 62 }, { text: title, size: 30, weight: 600, y: 118, color: '#cfc3ad' }], st.x, 2.6, z + 1.75, 1.4, 0.44, 0, { w: 360, h: 160 });
       const npc = buildRaiderModel(st.colors);
       npc.position.set(st.x, 0, z + 0.2);
       scene.add(npc);
@@ -467,7 +477,7 @@ export class Sanctuary {
     const eye = p.eye();
     const look = new THREE.Vector3(Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch));
     const right = new THREE.Vector3(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
-    const pivot = eye.clone().addScaledVector(right, 0.5).add(new THREE.Vector3(0, 0.2, 0));
+    const pivot = eye.clone().addScaledVector(right, 0.45).add(new THREE.Vector3(0, 0.2, 0));
     const toPivot = pivot.clone().sub(eye);
     const pd = toPivot.length();
     const side = this.col.raycast(eye.x, eye.y, eye.z, toPivot.x / pd, toPivot.y / pd, toPivot.z / pd, pd + 0.15);
@@ -478,7 +488,8 @@ export class Sanctuary {
     const cam = pivot.clone().addScaledVector(back, dist);
     this.camera.position.copy(cam);
     this.camera.lookAt(cam.clone().add(look));
-    p.model.visible = dist > 0.6;
+    // too close in a tight corridor: hide the raider rather than fill the screen with them
+    p.model.visible = dist > 1.0;
   }
 
   // ---------- idle (behind the menus) ----------

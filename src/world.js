@@ -89,8 +89,11 @@ export function buildWorld(scene, opts = {}) {
 
   const ground = (x, z) => terrainHeight(x, z);
 
-  function addContainer(type, x, y, z, rotY = 0) {
-    containers.push({ type, x, y, z, rotY });
+  // A spot where loot can appear. Each raid picks a random set of spots and a
+  // random container type from the spot's pool, so caches move between raids.
+  function addContainer(pool, x, y, z, rotY = 0) {
+    const types = Array.isArray(pool) ? pool : [pool];
+    containers.push({ pool: types, type: types[0], x, y, z, rotY });
   }
 
   // ---------- terrain ----------
@@ -199,13 +202,11 @@ export function buildWorld(scene, opts = {}) {
         }
       }
       // loot inside
-      if (rng.chance(0.75)) {
-        const lx = cx + rng.range(-w / 2 + 2, w / 2 - 1.2);
-        const lz = cz + rng.range(-d / 2 + 3, d / 2 - 1.2);
-        addContainer(rng.pick(['crate', 'crate', 'locker', 'medical', 'locker', 'weapon_case']), lx, y0, lz, rng.pick([0, Math.PI / 2]));
-      }
-      if (w * d > 120 && rng.chance(0.5)) {
-        addContainer(rng.pick(['crate', 'locker']), cx + rng.range(-w / 2 + 2, w / 2 - 1.2), y0, cz + rng.range(-d / 2 + 3, d / 2 - 1.2));
+      const lx = cx + rng.range(-w / 2 + 2, w / 2 - 1.2);
+      const lz = cz + rng.range(-d / 2 + 3, d / 2 - 1.2);
+      addContainer(['crate', 'crate', 'locker', 'medical', 'locker', 'weapon_case'], lx, y0, lz, rng.pick([0, Math.PI / 2]));
+      if (w * d > 120) {
+        addContainer(['crate', 'locker', 'medical'], cx + rng.range(-w / 2 + 2, w / 2 - 1.2), y0, cz + rng.range(-d / 2 + 3, d / 2 - 1.2));
       }
     }
     // roof
@@ -262,8 +263,8 @@ export function buildWorld(scene, opts = {}) {
     box(M.concrete, plaza.x, g + 1.4, plaza.z, 1.2, 2.8, 1.2);
     box(M.metal, plaza.x, g + 3.2, plaza.z, 0.6, 1.2, 0.6, { collide: false });
     enemySpawns.push({ type: 'warden', x: plaza.x, z: plaza.z + 10, radius: 20 });
-    addContainer('weapon_case', plaza.x + 2, g, plaza.z - 2);
-    addContainer('husk_pod', plaza.x - 3, g, plaza.z + 3);
+    addContainer(['weapon_case', 'crate'], plaza.x + 2, g, plaza.z - 2);
+    addContainer(['husk_pod', 'weapon_case'], plaza.x - 3, g, plaza.z + 3);
   }
 
   // ---------- road props: cars, barriers, lamp posts ----------
@@ -280,7 +281,7 @@ export function buildWorld(scene, opts = {}) {
       const s = Math.sin(rotY);
       box(M.darkMetal, x + wx * c + wz * s, g + 0.35, z - wx * s + wz * c, 0.3, 0.7, 0.7, { rotY, collide: false });
     }
-    if (rng.chance(0.55)) addContainer('car', x - Math.sin(rotY) * 2.4, g, z - Math.cos(rotY) * 2.4, rotY);
+    addContainer('car', x - Math.sin(rotY) * 2.4, g, z - Math.cos(rotY) * 2.4, rotY);
   }
   for (let i = 0; i < 26; i++) {
     const alongX = rng.chance(0.5);
@@ -335,7 +336,7 @@ export function buildWorld(scene, opts = {}) {
         const rot = rng.range(-0.06, 0.06);
         box(m, x + rng.range(-0.3, 0.3), g + 1.3 + s * 2.6, z, 6, 2.6, 2.5, { rotY: rot, tag: 'metal' });
       }
-      if (rng.chance(0.35)) addContainer(rng.pick(['crate', 'weapon_case', 'husk_pod']), x, g, z + 2.2);
+      if (rng.chance(0.6)) addContainer(['crate', 'weapon_case', 'husk_pod', 'locker'], x, g, z + 2.2);
     }
   }
   enemySpawns.push({ type: 'pouncer', x: yard.x + 14, z: yard.z + 15, radius: 22 });
@@ -365,8 +366,8 @@ export function buildWorld(scene, opts = {}) {
       box(M.stripe, x + px, g + 1.6, z + 0.41, 0.8, 0.3, 0.02, { collide: false });
     }
     building(x, z + 16, 12, 8, 1, { ruin: 0.1 });
-    addContainer('medical', x + 3, g + 0.25, z - 2);
-    addContainer('crate', x - 6, g + 0.25, z + 3);
+    addContainer(['medical', 'crate'], x + 3, g + 0.25, z - 2);
+    addContainer(['crate', 'locker', 'weapon_case'], x - 6, g + 0.25, z + 3);
     enemySpawns.push({ type: 'skitter', x, z, radius: 18, count: 3 });
   }
 
@@ -470,7 +471,7 @@ export function buildWorld(scene, opts = {}) {
     beacon.position.set(x, g + 36.5, z);
     scene.add(beacon);
     building(x + 10, z - 6, 8, 8, 1, { ruin: 0.05 });
-    addContainer('weapon_case', x + 10, g, z - 6);
+    addContainer(['weapon_case', 'crate', 'locker'], x + 10, g, z - 6);
     enemySpawns.push({ type: 'buzzer', x, z, radius: 30, count: 2 });
     enemySpawns.push({ type: 'watcher', x: x - 30, z: z - 20, radius: 30 });
   }
@@ -484,7 +485,7 @@ export function buildWorld(scene, opts = {}) {
     // probe pod half-buried
     box(M.huskHull, x, g + 0.5, z, 1.4, 1.4, 2.2, { rotY: rng.range(0, 3), rotX: 0.3, tag: 'metal' });
     box(M.huskGlow, x, g + 1.3, z, 0.25, 0.25, 0.25, { collide: false });
-    addContainer('husk_pod', x + 1.6, g, z);
+    addContainer(['husk_pod', 'husk_pod', 'crate'], x + 1.6, g, z);
     if (rng.chance(0.6)) enemySpawns.push({ type: rng.pick(['skitter', 'skitter', 'buzzer']), x, z, radius: 16, count: rng.int(1, 3) });
   }
   // raider camps with tarps
@@ -496,39 +497,92 @@ export function buildWorld(scene, opts = {}) {
     const tarp = rng.pick(M.tarp);
     for (const [dx, dz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) box(M.wood, x + dx, g + 1.2, z + dz, 0.15, 2.4, 0.15);
     box(tarp, x, g + 2.5, z, 4.6, 0.08, 4.6, { rotZ: 0.12, collide: false });
-    addContainer(rng.pick(['crate', 'medical', 'locker']), x, g, z);
+    addContainer(['crate', 'medical', 'locker'], x, g, z);
   }
 
   // ---------- rocks and trees ----------
+  // Lifts and drop points stay clear so nothing spawns inside them.
+  const KEEP_CLEAR = [[-40, -195], [195, 20], [30, 195], [-195, -20], [-170, 150], [170, -170], [-160, -170], [175, 175], [-200, 60], [80, 200]];
+  const onRoad = (x, z, pad) => (Math.abs(z - TOWN.z) < 5 + pad && Math.abs(x - TOWN.x) < 175) || (Math.abs(x - TOWN.x) < 5 + pad && Math.abs(z - TOWN.z) < 175);
+  const nearBox = [];
+  // true if (x,z) is free of other colliders (buildings, walls, earlier rocks) and loot
+  const clearAt = (x, z, r) => {
+    if (KEEP_CLEAR.some(([cx, cz]) => Math.hypot(x - cx, z - cz) < 9 + r)) return false;
+    if (containers.some((c) => Math.hypot(x - c.x, z - c.z) < 1.6 + r)) return false;
+    const m = r + 0.8;
+    for (const b of col.query(x - m, z - m, x + m, z + m, nearBox)) {
+      if (x + m > b.min.x && x - m < b.max.x && z + m > b.min.z && z - m < b.max.z) return false;
+    }
+    return true;
+  };
   const rockGeo = new THREE.DodecahedronGeometry(1, 0);
-  for (let i = 0; i < 120; i++) {
-    const x = rng.range(-MAP_HALF + 10, MAP_HALF - 10);
-    const z = rng.range(-MAP_HALF + 10, MAP_HALF - 10);
-    if (Math.hypot(x - TOWN.x, z - TOWN.z) < 105) continue;
-    const s = rng.range(0.8, 3.5);
+  // the collider matches the rock: about 0.8 of its size around, as tall as it shows
+  function rock(x, z, s) {
     const g = ground(x, z);
     geoAt(M.rock, rockGeo, x, g + s * 0.3, z, rng.range(0, 6), s);
-    if (s > 1.2) col.addBox({ x: x - s * 0.7, y: g - 1, z: z - s * 0.7 }, { x: x + s * 0.7, y: g + s * 1.0, z: z + s * 0.7 }, 'rock');
+    const r = s * 0.8;
+    col.addBox({ x: x - r, y: g - 1, z: z - r }, { x: x + r, y: g + s * 1.05, z: z + r }, 'rock');
   }
+  const rockSpots = [];
+  for (let i = 0, placed = 0; i < 900 && placed < 260; i++) {
+    const x = rng.range(-MAP_HALF + 10, MAP_HALF - 10);
+    const z = rng.range(-MAP_HALF + 10, MAP_HALF - 10);
+    const inTown = Math.hypot(x - TOWN.x, z - TOWN.z) < 105;
+    if (inTown && rng.chance(0.65)) continue;
+    if (onRoad(x, z, 1.5)) continue;
+    const s = inTown ? rng.range(0.6, 1.6) : rng.range(0.8, 3.6);
+    if (!clearAt(x, z, s)) continue;
+    rock(x, z, s);
+    placed++;
+    if (s > 1.6) rockSpots.push({ x, z, s });
+    // boulder fields: a few smaller rocks huddled around the big ones
+    if (s > 2.2 && rng.chance(0.6)) {
+      for (let k = rng.int(1, 3); k > 0; k--) {
+        const a = rng.range(0, Math.PI * 2);
+        const s2 = rng.range(0.7, 1.6);
+        const x2 = x + Math.cos(a) * (s + s2) * 0.85;
+        const z2 = z + Math.sin(a) * (s + s2) * 0.85;
+        if (!onRoad(x2, z2, 1) && clearAt(x2, z2, s2 * 0.5)) rock(x2, z2, s2);
+      }
+    }
+  }
+  // caches stashed in the lee of big boulders
+  for (const r of rockSpots) {
+    if (!rng.chance(0.3)) continue;
+    const a = rng.range(0, Math.PI * 2);
+    const x = r.x + Math.cos(a) * (r.s * 0.8 + 1.1);
+    const z = r.z + Math.sin(a) * (r.s * 0.8 + 1.1);
+    if (clearAt(x, z, 0.6)) addContainer(['crate', 'crate', 'medical', 'locker', 'husk_pod'], x, 0, z, rng.pick([0, Math.PI / 2]));
+  }
+
   const coneGeo = new THREE.ConeGeometry(1, 1, 7);
   const blobGeo = new THREE.IcosahedronGeometry(1, 0);
-  for (let i = 0; i < 260; i++) {
+  for (let i = 0, placed = 0; i < 1400 && placed < 480; i++) {
     const x = rng.range(-MAP_HALF + 5, MAP_HALF - 5);
     const z = rng.range(-MAP_HALF + 5, MAP_HALF - 5);
     const inTown = Math.abs(x - TOWN.x) < 110 && Math.abs(z - TOWN.z) < 110;
-    if (inTown && rng.chance(0.8)) continue;
-    if (Math.abs(z - TOWN.z) < 7 || Math.abs(x - TOWN.x) < 7) continue;
+    if (inTown && rng.chance(0.75)) continue;
+    if (onRoad(x, z, 2)) continue;
+    if (!clearAt(x, z, 0.8)) continue;
+    placed++;
     const g = ground(x, z);
     const h = rng.range(5, 11);
-    box(M.trunk, x, g + h * 0.3, z, 0.4, h * 0.6, 0.4, { tag: 'wood' });
+    box(M.trunk, x, g + h * 0.3, z, 0.5, h * 0.6, 0.5, { tag: 'wood', collide: false });
+    col.addBox({ x: x - 0.35, y: g - 1, z: z - 0.35 }, { x: x + 0.35, y: g + h * 0.6, z: z + 0.35 }, 'wood');
     const leaves = rng.pick(M.leaves);
+    // foliage that hangs below head height is solid too
+    const canopy = (cx, cz, bottom, top, r) => {
+      if (bottom - g < 2.3) col.addBox({ x: cx - r, y: bottom, z: cz - r }, { x: cx + r, y: top, z: cz + r }, 'wood');
+    };
     if (rng.chance(0.5)) {
       const c = coneGeo.clone();
       c.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, g + h * 0.65, z), new THREE.Quaternion(), new THREE.Vector3(h * 0.32, h * 0.8, h * 0.32)));
       pushGeo(leaves, c);
+      canopy(x, z, g + h * 0.25, g + h * 0.55, h * 0.32 * 0.6);
     } else {
       geoAt(leaves, blobGeo, x, g + h * 0.7, z, rng.range(0, 6), h * 0.32);
       geoAt(leaves, blobGeo, x + 0.8, g + h * 0.55, z + 0.5, rng.range(0, 6), h * 0.22);
+      canopy(x + 0.8, z + 0.5, g + h * 0.55 - h * 0.22 * 0.8, g + h * 0.55, h * 0.22 * 0.65);
     }
   }
 

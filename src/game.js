@@ -23,6 +23,8 @@ import { Sanctuary } from './sanctuary.js';
 
 const SEARCH_TIME = { crate: 1.2, locker: 1.0, medical: 1.0, weapon_case: 1.8, husk_pod: 2.0, car: 1.4, wreck: 0.9 };
 const MAX_HUSKS = 40;
+// share of loot spots that get a container each raid
+const CONTAINER_FILL = 0.6;
 
 export class Game {
   constructor(container) {
@@ -190,8 +192,10 @@ export class Game {
   }
 
   // ---------- containers ----------
+  // The world lists every spot loot can appear at. Each raid a random share of
+  // them gets a container, of a random type from the spot's pool.
   buildContainers() {
-    const mats = {
+    this.containerMats = {
       wood: new THREE.MeshStandardMaterial({ color: 0x8a6a40, roughness: 0.9 }),
       olive: new THREE.MeshStandardMaterial({ color: 0x55603a, roughness: 0.7, metalness: 0.3 }),
       locker: new THREE.MeshStandardMaterial({ color: 0x5f7f86, roughness: 0.6, metalness: 0.5 }),
@@ -200,90 +204,103 @@ export class Game {
       case: new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.5, metalness: 0.6 }),
       husk: new THREE.MeshStandardMaterial({ color: 0x9aa2a8, roughness: 0.4, metalness: 0.8 }),
       trunk: new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.7 }),
+      podGlow: new THREE.MeshStandardMaterial({ color: 0x40ffd0, emissive: 0x30ffc0, emissiveIntensity: 1.5 }),
+      marker: new THREE.MeshBasicMaterial({ color: 0xffd27a }),
     };
-    this.containerMats = mats;
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd27a });
-    const markerGeo = new THREE.OctahedronGeometry(0.08, 0);
-    this.containers = this.world.containers.map((c, i) => {
-      const g = new THREE.Group();
-      const add = (sx, sy, sz, m, x = 0, y = 0, z = 0) => {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m);
-        mesh.position.set(x, y, z);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        g.add(mesh);
-        return mesh;
-      };
-      let size = [1, 1, 1];
-      let lid = null;
-      switch (c.type) {
-        case 'crate':
-          add(1.1, 0.7, 0.8, mats.wood, 0, 0.35, 0);
-          lid = add(1.14, 0.1, 0.84, mats.olive, 0, 0.75, 0);
-          size = [1.1, 0.8, 0.8];
-          break;
-        case 'locker':
-          add(0.8, 1.9, 0.55, mats.locker, 0, 0.95, 0);
-          lid = add(0.76, 1.8, 0.04, mats.locker, 0, 0.95, 0.29);
-          size = [0.8, 1.9, 0.55];
-          break;
-        case 'medical':
-          add(0.9, 0.55, 0.5, mats.white, 0, 0.28, 0);
-          add(0.3, 0.1, 0.02, mats.red, 0, 0.3, 0.26);
-          add(0.1, 0.3, 0.02, mats.red, 0, 0.3, 0.26);
-          lid = add(0.92, 0.08, 0.52, mats.white, 0, 0.6, 0);
-          size = [0.9, 0.6, 0.5];
-          break;
-        case 'weapon_case':
-          add(1.5, 0.35, 0.55, mats.case, 0, 0.18, 0);
-          lid = add(1.52, 0.1, 0.57, mats.olive, 0, 0.4, 0);
-          size = [1.5, 0.45, 0.55];
-          break;
-        case 'husk_pod':
-          add(0.9, 0.9, 0.9, mats.husk, 0, 0.45, 0).rotation.set(0.3, 0.6, 0.2);
-          lid = add(0.3, 0.3, 0.3, new THREE.MeshStandardMaterial({ color: 0x40ffd0, emissive: 0x30ffc0, emissiveIntensity: 1.5 }), 0, 1.0, 0);
-          size = [1, 1, 1];
-          break;
-        case 'car':
-          lid = add(1.2, 0.08, 0.6, mats.trunk, 0, 1.0, 0);
-          size = null; // the car already collides
-          break;
-        default:
-          break;
-      }
-      if (lid) lid.castShadow = false;
-      const marker = new THREE.Mesh(markerGeo, glowMat);
-      marker.position.y = (size ? size[1] : 1) + 0.35;
-      g.add(marker);
-      g.position.set(c.x, c.y, c.z);
-      g.rotation.y = c.rotY || 0;
-      this.scene.add(g);
-      if (size) {
-        const half = Math.max(size[0], size[2]) / 2;
-        const rotated = Math.abs(Math.sin(c.rotY || 0)) > 0.5;
-        const hx = rotated ? size[2] / 2 : size[0] / 2;
-        const hz = rotated ? size[0] / 2 : size[2] / 2;
-        this.col.addBox({ x: c.x - hx, y: c.y, z: c.z - hz }, { x: c.x + hx, y: c.y + size[1] * (c.type === 'locker' ? 1 : 0.95), z: c.z + hz }, 'metal');
-        void half;
-      }
-      return { ...c, id: i, group: g, lid, marker, items: [], searched: false, name: LOOT_TABLES[c.type].name, height: size ? size[1] : 1 };
-    });
+    this.markerGeo = new THREE.OctahedronGeometry(0.08, 0);
+    // one collider per spot, sized for the biggest container and switched off
+    // until a raid puts something there
+    this.containerSpots = this.world.containers.map((c) => ({
+      ...c,
+      box: c.pool.includes('car') ? null : Object.assign(this.col.addBox({ x: c.x - 0.8, y: c.y, z: c.z - 0.8 }, { x: c.x + 0.8, y: c.y + 1.9, z: c.z + 0.8 }, 'metal'), { off: true }),
+    }));
+    this.containers = [];
+  }
+
+  makeContainer(spot, type, id) {
+    const mats = this.containerMats;
+    const g = new THREE.Group();
+    const add = (sx, sy, sz, m, x = 0, y = 0, z = 0) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      g.add(mesh);
+      return mesh;
+    };
+    let size = [1, 1, 1];
+    let lid = null;
+    switch (type) {
+      case 'crate':
+        add(1.1, 0.7, 0.8, mats.wood, 0, 0.35, 0);
+        lid = add(1.14, 0.1, 0.84, mats.olive, 0, 0.75, 0);
+        size = [1.1, 0.8, 0.8];
+        break;
+      case 'locker':
+        add(0.8, 1.9, 0.55, mats.locker, 0, 0.95, 0);
+        lid = add(0.76, 1.8, 0.04, mats.locker, 0, 0.95, 0.29);
+        size = [0.8, 1.9, 0.55];
+        break;
+      case 'medical':
+        add(0.9, 0.55, 0.5, mats.white, 0, 0.28, 0);
+        add(0.3, 0.1, 0.02, mats.red, 0, 0.3, 0.26);
+        add(0.1, 0.3, 0.02, mats.red, 0, 0.3, 0.26);
+        lid = add(0.92, 0.08, 0.52, mats.white, 0, 0.6, 0);
+        size = [0.9, 0.6, 0.5];
+        break;
+      case 'weapon_case':
+        add(1.5, 0.35, 0.55, mats.case, 0, 0.18, 0);
+        lid = add(1.52, 0.1, 0.57, mats.olive, 0, 0.4, 0);
+        size = [1.5, 0.45, 0.55];
+        break;
+      case 'husk_pod':
+        add(0.9, 0.9, 0.9, mats.husk, 0, 0.45, 0).rotation.set(0.3, 0.6, 0.2);
+        lid = add(0.3, 0.3, 0.3, mats.podGlow, 0, 1.0, 0);
+        size = [1, 1, 1];
+        break;
+      case 'car':
+        lid = add(1.2, 0.08, 0.6, mats.trunk, 0, 1.0, 0);
+        size = null; // the car already collides
+        break;
+      default:
+        break;
+    }
+    if (lid) lid.castShadow = false;
+    const marker = new THREE.Mesh(this.markerGeo, mats.marker);
+    marker.position.y = (size ? size[1] : 1) + 0.35;
+    g.add(marker);
+    g.position.set(spot.x, spot.y, spot.z);
+    g.rotation.y = spot.rotY || 0;
+    this.scene.add(g);
+    if (spot.box && size) {
+      const rotated = Math.abs(Math.sin(spot.rotY || 0)) > 0.5;
+      const hx = rotated ? size[2] / 2 : size[0] / 2;
+      const hz = rotated ? size[0] / 2 : size[2] / 2;
+      Object.assign(spot.box.min, { x: spot.x - hx, y: spot.y, z: spot.z - hz });
+      Object.assign(spot.box.max, { x: spot.x + hx, y: spot.y + size[1] * (type === 'locker' ? 1 : 0.95), z: spot.z + hz });
+      spot.box.off = false;
+    }
+    return { ...spot, type, id, group: g, lid, marker, items: [], searched: false, name: LOOT_TABLES[type].name, height: size ? size[1] : 1 };
   }
 
   resetContainers() {
     for (const c of this.containers) {
-      c.items = rollTable(LOOT_TABLES[c.type]);
+      this.scene.remove(c.group);
+      c.group.traverse((o) => o.geometry && o.geometry !== this.markerGeo && o.geometry.dispose());
+    }
+    for (const spot of this.containerSpots) if (spot.box) spot.box.off = true;
+    this.containers = [];
+    for (const spot of this.containerSpots) {
+      if (Math.random() > CONTAINER_FILL) continue;
+      const type = spot.pool[Math.floor(Math.random() * spot.pool.length)];
+      const c = this.makeContainer(spot, type, this.containers.length);
+      c.items = rollTable(LOOT_TABLES[type]);
       // richer conditions roll extra stacks
       const extra = (this.map ? this.map.loot : 1) - 1;
-      if (extra > 0 && Math.random() < extra) c.items.push(...rollTable(LOOT_TABLES[c.type]).slice(0, 1));
+      if (extra > 0 && Math.random() < extra) c.items.push(...rollTable(LOOT_TABLES[type]).slice(0, 1));
       // gear found topside is used
       for (const it of c.items) if (isDurable(it.id)) it.dur = Math.round(MAX_DURABILITY * (0.35 + Math.random() * 0.55));
-      c.searched = false;
-      c.marker.visible = true;
-      if (c.lid) {
-        c.lid.position.copy(c.lid.userData.home || (c.lid.userData.home = c.lid.position.clone()));
-        c.lid.rotation.set(0, 0, 0);
-      }
+      this.containers.push(c);
     }
     for (const w of this.wrecks || []) {
       this.scene.remove(w.group);

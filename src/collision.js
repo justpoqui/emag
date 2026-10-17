@@ -50,6 +50,8 @@ export class Collision {
   }
 
   // min/max: {x,y,z}. Returns the box. tag lets bullets react (e.g. 'metal').
+  // A box can later be switched off (box.off = true) or shrunk in place, as
+  // long as it stays inside the area it was added with.
   addBox(min, max, tag) {
     const box = { min: { ...min }, max: { ...max }, tag, mark: 0 };
     this.boxes.push(box);
@@ -85,7 +87,7 @@ export class Collision {
         for (const box of cell) {
           if (box.mark !== this.stamp) {
             box.mark = this.stamp;
-            out.push(box);
+            if (!box.off) out.push(box);
           }
         }
       }
@@ -176,6 +178,7 @@ export class Collision {
         for (const b of cell) {
           if (b.mark === stamp) continue;
           b.mark = stamp;
+          if (b.off) continue;
           const t = rayBox(ox, oy, oz, dx, dy, dz, b, best);
           if (t !== null && t < best) {
             best = t;

@@ -58,6 +58,9 @@ stash and loadout on the left and your raider on the right. Press
 
 Tab opens your stash & loadout anywhere; Esc opens the Sanctuary menu.
 
+**Shields** don't refill on their own. Use a Shield Cell: key 4 in a raid, or
+right-click your shield (or a cell) in the stash or loadout and pick *Recharge*.
+
 **Dismantling:** right-click (or hold on a phone) an item for *Dismantle*, or use
 the Salvage bench. Weapons, shields, consumables, valuables and the rarer
 materials break down into basic materials (worn gear gives less).
@@ -70,7 +73,8 @@ materials break down into basic materials (worn gear gives less).
 2. **Deploy topside**: everything in your loadout comes with you.
 3. **Loot**: hold **E** to search supply crates, lockers, med cabinets, weapon
    cases, car trunks and Husk pods. Items are revealed one at a time. Destroyed
-   Husks leave wrecks you can loot too.
+   Husks leave wrecks you can loot too. Each raid puts containers in a random
+   set of spots (with a random container type), so caches move between raids.
 4. **Extract**: find one of the four lifts (cyan ▲ on the compass, **M** for
    the map). Hold **E** at the call panel. The lift takes 20 seconds to arrive
    and the noise draws Husks in. Once the doors open, step inside and hold **E**.
