@@ -732,24 +732,30 @@ export class UI {
   // equipment column used by both raid inventory and hub loadout
   equipmentColumn(lo, handlers) {
     const col = el('div', 'equip');
-    col.appendChild(el('div', 'sect', 'WEAPONS'));
     const menu = (slot) => (handlers.menu ? () => handlers.menu(slot) : undefined);
-    lo.weapons.forEach((w, i) => col.appendChild(this.tile(w, {
+    // a labelled cell, so pieces can sit side by side
+    const cell = (title, ...tiles) => {
+      const c = el('div', 'equip-cell');
+      c.appendChild(el('div', 'sect', title));
+      const row = el('div', 'equip-row');
+      row.append(...tiles);
+      c.appendChild(row);
+      return c;
+    };
+    col.appendChild(cell('WEAPONS', ...lo.weapons.map((w, i) => this.tile(w, {
       cls: 'wide', label: `Weapon ${i + 1}`, onClick: () => handlers.weapon(i), hint: handlers.weaponHint,
       menu: menu({ where: 'weapon', get: () => lo.weapons[i], set: (v) => { lo.weapons[i] = v; } }),
-    })));
-    col.appendChild(el('div', 'sect', 'SHIELD'));
-    col.appendChild(this.tile(lo.shield, {
+    }))));
+    const gear = el('div', 'equip-row');
+    gear.appendChild(cell('SHIELD', this.tile(lo.shield, {
       cls: 'wide', label: 'Shield', onClick: () => handlers.shield(), hint: handlers.shieldHint,
       menu: menu({ where: 'shield', get: () => lo.shield, set: (v) => { lo.shield = v; } }),
-    }));
-    col.appendChild(el('div', 'sect', 'SAFE POCKET <small>(kept if you die)</small>'));
-    const safe = el('div', 'grid small');
-    lo.safe.forEach((s, i) => safe.appendChild(this.tile(s, {
+    })));
+    gear.appendChild(cell('SAFE <small>kept if you die</small>', ...lo.safe.map((s, i) => this.tile(s, {
       label: 'Safe', onClick: () => handlers.safe(i), hint: handlers.safeHint,
       menu: menu({ where: 'safe', get: () => lo.safe[i], set: (v) => { lo.safe[i] = v; } }),
-    })));
-    col.appendChild(safe);
+    }))));
+    col.appendChild(gear);
     return col;
   }
 
@@ -775,7 +781,7 @@ export class UI {
     const bagCol = el('div', 'bag');
     bagCol.appendChild(el('div', 'sect', `BAG <small>${freeSlots(lo.bag)} free</small>`));
     bagCol.appendChild(this.weightBar(lo));
-    const grid = el('div', 'grid');
+    const grid = el('div', 'grid bag-grid');
     lo.bag.forEach((s, i) => {
       grid.appendChild(this.tile(s, {
         hint: s ? this.bagHint(s) : '',
@@ -892,7 +898,7 @@ export class UI {
     const bagCol = el('div', 'bag');
     bagCol.appendChild(el('div', 'sect', `YOUR BAG <small>${freeSlots(lo.bag)} free</small>`));
     bagCol.appendChild(this.weightBar(lo));
-    const grid = el('div', 'grid');
+    const grid = el('div', 'grid bag-grid');
     lo.bag.forEach((s, i) => grid.appendChild(this.tile(s, {
       hint: 'Click: put in container',
       onClick: () => {
@@ -1338,7 +1344,7 @@ export class UI {
     const bagTitle = el('div', 'sect', `BAG <small>${freeSlots(lo.bag)} free</small>`);
     left.appendChild(bagTitle);
     left.appendChild(this.weightBar(lo));
-    const bag = el('div', 'grid');
+    const bag = el('div', 'grid bag-grid');
     lo.bag.forEach((s, i) => bag.appendChild(this.tile(s, {
       hint: 'Click: move to stash · Right-click: more',
       menu: () => this.hubItemMenu({ where: 'bag', get: () => lo.bag[i], set: (v) => { lo.bag[i] = v; } }),
@@ -1375,8 +1381,9 @@ export class UI {
     kitRow.append(kit, empty);
     left.appendChild(kitRow);
 
-    const right = el('div', 'hub-col wide');
-    right.appendChild(el('div', 'col-title', `STASH <small>${freeSlots(p.stash)} / ${p.stash.length} free · click to load, right-click for more</small>`));
+    const right = el('div', 'hub-col wide stash-col');
+    right.appendChild(el('div', 'col-title', `STASH <small>${freeSlots(p.stash)} / ${p.stash.length} free</small>`));
+    right.appendChild(el('div', 'col-hint', 'Click to load · right-click for more'));
     const stash = el('div', 'grid stash');
     p.stash.forEach((s, i) => stash.appendChild(this.tile(s, {
       hint: s ? 'Click: move to loadout · Right-click: sell, move, repair' : '',
