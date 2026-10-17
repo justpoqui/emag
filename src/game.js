@@ -1283,6 +1283,7 @@ export class Game {
       mind: this.mind || traits(this.profile.network),
       onSeen: () => recordSeen(this.profile.network),
       latch: (e) => this.latchOn(e),
+      cover: this.world.sightCover,
       onPeace: (e) => recordPeace(this.profile.network, e.pos.x, e.pos.z),
       // is the raider aiming down sights at this Husk?
       aimingAt: (e) => {

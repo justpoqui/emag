@@ -185,7 +185,7 @@ export class Player {
   flashlightPos(out) {
     const u = this.model.userData;
     this.model.updateMatrixWorld();
-    return u.torch.localToWorld(out.set(0, 0.11, 0));
+    return u.torch.localToWorld(out.set(0, 0.068, 0.06));
   }
 
   get armed() {

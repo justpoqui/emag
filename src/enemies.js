@@ -9,6 +9,7 @@ const _w = new THREE.Vector3();
 const _u = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _down = new THREE.Vector3(0, -1, 0);
+const BEAM_HALF_ANGLE = 0.24; // radians, the Watcher's lamp
 // where latched Skitters cling, in the raider model's space: back, shoulders, thigh, calf
 const LATCH_SPOTS = [
   new THREE.Vector3(0, 1.3, -0.42),
@@ -161,8 +162,9 @@ const BUILDERS = {
     }
     const eyeMat = eyeMaterial();
     eyeMat.emissive.setHex(0xffcc20);
-    add(root, new THREE.TorusGeometry(0.1, 0.022, 6, 18), dark, 0, -0.42, 0.06).rotation.x = Math.PI / 2 + 0.5;
-    const eye = add(root, new THREE.SphereGeometry(0.075, 12, 10), eyeMat, 0, -0.44, 0.07);
+    // the eye (and its lamp) faces forward, so the light comes from the Watcher itself
+    add(root, new THREE.TorusGeometry(0.1, 0.022, 6, 18), dark, 0, -0.05, 0.345);
+    const eye = add(root, new THREE.SphereGeometry(0.075, 12, 10), eyeMat, 0, -0.05, 0.35);
     add(root, new THREE.CylinderGeometry(0.012, 0.02, 0.7, 6), dark, 0, 0.9, 0);
     // searchlight: a faint beam and a bright spot on the ground (placed in world space each frame)
     const coneGeo = new THREE.ConeGeometry(1, 1, 24, 1, true);
@@ -464,8 +466,13 @@ export class Husk {
     const p = ctx.player;
     // the Watcher only sees what its searchlight falls on (or right next to it)
     if (this.parts.beam) {
-      const inSpot = Math.hypot(p.pos.x - this.beamAt.x, p.pos.z - this.beamAt.z) < this.beamRadius * 1.1;
-      if (!inSpot && dist > 8) return false;
+      // inside the cone of its light (and not far past where it lands)
+      if (dist > SENSE_RADIUS && this.beamDir) {
+        const eye = this.parts.eye.getWorldPosition(_u);
+        _d.subVectors(playerPos, eye);
+        const d = _d.length();
+        if (d > this.beamLen + 2.5 || _d.dot(this.beamDir) / d < Math.cos(BEAM_HALF_ANGLE * 1.15)) return false;
+      }
     } else {
       if (dist >= this.def.sight * (ctx.sightMul || 1) * (p.crouch ? 0.6 : 1)) return false;
       // only what's in front of it, unless the raider is right on top of it
@@ -476,7 +483,13 @@ export class Husk {
         if (facing < Math.cos(((this.def.fov / 2) * Math.PI) / 180)) return false;
       }
     }
-    return ctx.col.lineOfSight(this.center.clone(), playerPos);
+    // Skitters rear up to look (their bodies sit so low that any bump in the ground would blind them)
+    const eye = this.center.clone();
+    if (this.type === 'skitter') eye.y += 0.35;
+    if (!ctx.col.lineOfSight(eye, playerPos)) return false;
+    // foliage hides the raider (unless they're practically touching)
+    if (dist > SENSE_RADIUS && ctx.cover && ctx.cover.blocks(eye, playerPos)) return false;
+    return true;
   }
 
   sighted(ctx, playerPos, dist, could) {
@@ -542,7 +555,7 @@ export class Husk {
     const look = this.canSee ? p.pos : this.lastSeen;
     if (this.def.flying) {
       // hold off at a distance, out of the way, watching
-      const keep = this.type === 'watcher' ? 24 : Math.max(14, space * 2.5);
+      const keep = this.type === 'watcher' ? 13 : Math.max(14, space * 2.5);
       const ang = Math.atan2(this.pos.x - look.x, this.pos.z - look.z) + dt * 0.15;
       const tx = look.x + Math.sin(ang) * keep;
       const tz = look.z + Math.cos(ang) * keep;
@@ -659,10 +672,12 @@ export class Husk {
     let tx;
     let tz;
     if (this.state === 'idle') {
-      this.sweep += dt * 0.45;
-      const r = 8 + Math.sin(this.anim * 0.31) * 4;
-      tx = this.pos.x + Math.sin(this.sweep) * r;
-      tz = this.pos.z + Math.cos(this.sweep) * r;
+      // sweep the ground ahead of it, side to side, like someone with a torch
+      this.sweep += dt * 0.6;
+      const a = this.yaw + Math.sin(this.sweep) * 0.7;
+      const r = 9 + Math.sin(this.anim * 0.31) * 3;
+      tx = this.pos.x + Math.sin(a) * r;
+      tz = this.pos.z + Math.cos(a) * r;
     } else {
       const look = this.canSee ? p.pos : this.lastSeen;
       tx = look.x;
@@ -677,7 +692,9 @@ export class Husk {
     const dir = _d.subVectors(this.beamAt, from);
     const len = Math.max(1, dir.length());
     dir.divideScalar(len);
-    this.beamRadius = Math.max(2.5, len * Math.tan(0.24));
+    this.beamDir = (this.beamDir || new THREE.Vector3()).copy(dir);
+    this.beamLen = len;
+    this.beamRadius = Math.max(1.8, len * Math.tan(BEAM_HALF_ANGLE));
     beam.position.copy(from);
     beam.quaternion.setFromUnitVectors(_down, dir);
     beam.scale.set(this.beamRadius, len, this.beamRadius);
@@ -860,8 +877,8 @@ export class Husk {
     if (this.state === 'alert') {
       // hang back, keep the light on the raider, and call for help
       const away = Math.atan2(this.pos.x - this.lastSeen.x, this.pos.z - this.lastSeen.z) + dt * 0.3;
-      tx = this.lastSeen.x + Math.sin(away) * 22;
-      tz = this.lastSeen.z + Math.cos(away) * 22;
+      tx = this.lastSeen.x + Math.sin(away) * 11;
+      tz = this.lastSeen.z + Math.cos(away) * 11;
       if (this.canSee && !this.called) {
         this.callTimer += dt;
         if (Math.floor(this.callTimer * 4) !== Math.floor((this.callTimer - dt) * 4)) Audio.playBeep(dist, 0.8);

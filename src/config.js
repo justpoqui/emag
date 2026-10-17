@@ -195,27 +195,27 @@ export const ENEMIES = {
   // neutral: leaves raiders alone until provoked or crowded (see network.js).
   // bodyMult: damage taken anywhere but the critical spot (the eye).
   skitter: {
-    name: 'Skitter', hp: 40, armor: 0, speed: 8.5, radius: 0.3, flying: false, sight: 24, fov: 110, neutral: true, bodyMult: 0.6,
+    name: 'Skitter', hp: 40, armor: 0, speed: 8.5, radius: 0.3, flying: false, sight: 16, fov: 110, neutral: true, bodyMult: 0.6,
     attack: { kind: 'leap', range: 6, damage: 8, cooldown: 1.6 },
     drops: { rolls: [1, 2], entries: [['husk_plating', 10, 1, 1], ['scrap', 20, 1, 2], ['wires', 8, 1, 1]] }, xp: 12,
   },
   buzzer: {
-    name: 'Buzzer', hp: 60, armor: 0.2, speed: 7, radius: 0.6, flying: true, hover: 7, sight: 40, fov: 120, neutral: true, bodyMult: 0.6,
+    name: 'Buzzer', hp: 60, armor: 0.2, speed: 7, radius: 0.6, flying: true, hover: 7, sight: 26, fov: 120, neutral: true, bodyMult: 0.6,
     attack: { kind: 'gun', range: 55, damage: 5, burst: 5, rate: 0.09, cooldown: 2.0, spread: 2.2 },
     drops: { rolls: [1, 2], entries: [['husk_plating', 20, 1, 2], ['battery', 10, 1, 1], ['husk_circuit', 4, 1, 1]] }, xp: 20,
   },
   watcher: {
-    name: 'Watcher', hp: 45, armor: 0, speed: 6, radius: 0.6, flying: true, hover: 14, sight: 70, neutral: true, bodyMult: 0.6,
+    name: 'Watcher', hp: 45, armor: 0, speed: 6, radius: 0.6, flying: true, hover: 14, sight: 18, neutral: true, bodyMult: 0.6,
     attack: { kind: 'alarm', range: 70, callTime: 3.5, calls: 2 },
     drops: { rolls: [1, 2], entries: [['husk_circuit', 10, 1, 1], ['wires', 20, 1, 2], ['battery', 10, 1, 1]] }, xp: 25,
   },
   pouncer: {
-    name: 'Pouncer', hp: 420, armor: 0.45, speed: 6.5, radius: 1.6, flying: false, sight: 38, fov: 120,
+    name: 'Pouncer', hp: 420, armor: 0.45, speed: 6.5, radius: 1.6, flying: false, sight: 26, fov: 120,
     attack: { kind: 'slam', range: 22, damage: 34, radius: 6, cooldown: 3.5 },
     drops: { rolls: [3, 4], entries: [['husk_plating', 20, 2, 4], ['husk_circuit', 14, 1, 2], ['husk_heart', 5, 1, 1], ['golden_relay', 0.8, 1, 1]] }, xp: 120,
   },
   warden: {
-    name: 'Warden', hp: 1400, armor: 0.6, speed: 2.2, radius: 2.6, flying: false, sight: 55, fov: 140,
+    name: 'Warden', hp: 1400, armor: 0.6, speed: 2.2, radius: 2.6, flying: false, sight: 38, fov: 140,
     attack: { kind: 'gun', range: 75, damage: 7, burst: 18, rate: 0.07, cooldown: 3.2, spread: 3.0 },
     drops: { rolls: [4, 6], entries: [['husk_plating', 20, 3, 6], ['husk_circuit', 18, 2, 3], ['husk_heart', 14, 1, 2], ['golden_relay', 3, 1, 1]] }, xp: 400,
   },
@@ -224,7 +224,7 @@ export const ENEMIES = {
 // Husk sight: they see within `sight` metres and `fov` degrees of where they
 // face, plus anything this close in any direction. Blocked sight confuses them:
 // they search round where they last saw the raider, then give up.
-export const SENSE_RADIUS = 4;
+export const SENSE_RADIUS = 3;
 export const SEARCH_SECONDS = 7;
 
 // Skitters can latch on: a leap that connects has this chance to attach. Each

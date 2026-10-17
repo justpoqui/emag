@@ -109,8 +109,11 @@ them or aim at them. Push it, or shoot one, and they fight, and word spreads
 to the Husks nearby. Leave them be and they stand down. Pouncers and Wardens
 attack on sight.
 
-Husks see a limited distance and only in front of them (anything right next
-to them they sense). Break line of sight and they lose you: a **?** shows over
+Husks see a short distance (Skitters 16 m, Buzzers 26 m, Pouncers 26 m,
+Wardens 38 m; less when you crouch) and only in front of them (anything within
+3 m they sense). **Bushes** come in three sizes: low scrub hides you crouched,
+shrubs and thickets hide you standing. You can walk and shoot through them,
+but Husks can't see through them. Break line of sight and they lose you: a **?** shows over
 them while they search round where they last saw you, and after a few seconds
 they give up.
 
@@ -125,7 +128,7 @@ to leave poison as it lets go (10 damage over 5 seconds).
 | --- | --- | --- | --- |
 | **Skitter** | 40 | Knee-high crawler; backs off if you get close, leaps (and may latch on) if provoked | Generous hitbox; the eye at the front crits |
 | **Buzzer** | 60 | Drone on vectoring thrusters; circles and fires bursts when hostile | The small eye on the nose |
-| **Watcher** | 45 | Sweeps a searchlight. It only sees what the light falls on; when hostile it calls in Buzzers | Stay out of the light; the eye is underneath |
+| **Watcher** | 45 | Sweeps a lamp ahead of itself. It only sees what's in the beam; when hostile it calls in Buzzers | Stay out of the light; the eye is the lamp |
 | **Pouncer** | 420 | Armored jumper that slams down with a shockwave | Glowing core on top takes extra damage |
 | **Warden** | 1400 | Walking fortress with twin miniguns, guards the plaza | Core on its back takes triple damage; bring heavy ammo |
 
@@ -159,7 +162,7 @@ The Raider Log tab shows what the network has learned about you.
 | Mouse / RMB | Shoot / aim down sights |
 | R | Reload |
 | Q | Swing your stick (always carried, no slot, can't be dropped) |
-| F | Flashlight on/off (clipped to your hip when off, your chest when on; starts on for night drops) |
+| F | Flashlight on/off (a GI angle-head clipped to the front of your belt; starts on for night drops) |
 | H or X | Holster / draw your gun (holstered: ~12% faster, and the trigger swings the stick) |
 | 1 / 2 / wheel | Switch weapon |
 | 3 / 4 | Heal / recharge shield |

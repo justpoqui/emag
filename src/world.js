@@ -650,6 +650,33 @@ export function buildWorld(scene, opts = {}) {
     }
   }
 
+  // ---------- bushes ----------
+  // Cover for stealth: you can walk and shoot through them, but Husks can't see
+  // through them. Three sizes: low scrub (hides you crouched), shrubs (hide you
+  // standing) and thickets.
+  const BUSH_SIZES = [
+    { r: 0.75, h: 0.55, count: 320 },
+    { r: 1.2, h: 0.95, count: 240 },
+    { r: 2.0, h: 1.45, count: 90 },
+  ];
+  const bushes = [];
+  for (const size of BUSH_SIZES) {
+    for (let i = 0, placed = 0; i < size.count * 6 && placed < size.count; i++) {
+      const x = rng.range(-MAP_HALF + 8, MAP_HALF - 8);
+      const z = rng.range(-MAP_HALF + 8, MAP_HALF - 8);
+      const inTown = Math.hypot(x - TOWN.x, z - TOWN.z) < 100;
+      if (inTown && rng.chance(0.5)) continue;
+      if (onRoad(x, z, 1)) continue;
+      const r = size.r * rng.range(0.8, 1.25);
+      if (!clearAt(x, z, r * 0.6)) continue;
+      // keep them from piling into each other
+      if (bushes.some((b) => Math.hypot(b.x - x, b.z - z) < (b.r + r) * 0.8)) continue;
+      bushes.push({ x, y: ground(x, z), z, r, h: size.h * rng.range(0.85, 1.2) });
+      placed++;
+    }
+  }
+  buildBushes(scene, bushes, rng);
+
   // ---------- extraction lifts ----------
   const liftSpots = [
     { name: 'North Lift', x: -40, z: -195 },
@@ -791,7 +818,97 @@ export function buildWorld(scene, opts = {}) {
     if (!c.y) c.y = col.groundHeight(c.x, c.z, 100, 0.3, 0);
   }
 
-  return { collision: col, containers, enemySpawns, extractions, insertions, lights, infraSites, town: TOWN };
+  return { collision: col, containers, enemySpawns, extractions, insertions, lights, infraSites, sightCover: new SightCover(bushes), town: TOWN };
+}
+
+// Bushes are drawn as clumps of a few leafy blobs, all in one instanced mesh.
+function buildBushes(scene, bushes, rng) {
+  const geo = new THREE.IcosahedronGeometry(1, 1);
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true });
+  const mesh = new THREE.InstancedMesh(geo, mat, bushes.length * 3);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const e = new THREE.Euler();
+  const col = new THREE.Color();
+  let n = 0;
+  for (const b of bushes) {
+    // one main blob plus two smaller ones offset to the sides
+    const blobs = [[0, 0, 1, 1], [0.55, 0.35, 0.62, 0.8], [-0.5, -0.4, 0.58, 0.72]];
+    for (const [ox, oz, rs, hs] of blobs) {
+      const a = rng.range(0, Math.PI * 2);
+      const px = b.x + (ox * Math.cos(a) - oz * Math.sin(a)) * b.r;
+      const pz = b.z + (ox * Math.sin(a) + oz * Math.cos(a)) * b.r;
+      e.set(0, rng.range(0, 6), 0);
+      m.compose(new THREE.Vector3(px, b.y + b.h * hs * 0.75, pz), q.setFromEuler(e), new THREE.Vector3(b.r * rs, b.h * hs, b.r * rs));
+      mesh.setMatrixAt(n, m);
+      mesh.setColorAt(n, col.setHSL(0.25 + rng.range(-0.04, 0.03), 0.5, rng.range(0.14, 0.21)));
+      n++;
+    }
+  }
+  mesh.count = n;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+}
+
+// Line-of-sight cover that isn't solid: Husks can't see through it, but
+// bullets and the raider pass straight through. Each bush is an ellipsoid.
+const COVER_CELL = 16;
+class SightCover {
+  constructor(bushes) {
+    this.bushes = bushes;
+    this.grid = new Map();
+    for (const b of bushes) {
+      for (let ix = Math.floor((b.x - b.r) / COVER_CELL); ix <= Math.floor((b.x + b.r) / COVER_CELL); ix++) {
+        for (let iz = Math.floor((b.z - b.r) / COVER_CELL); iz <= Math.floor((b.z + b.r) / COVER_CELL); iz++) {
+          const k = ix * 10000 + iz;
+          if (!this.grid.has(k)) this.grid.set(k, []);
+          this.grid.get(k).push(b);
+        }
+      }
+    }
+    this.stamp = 0;
+  }
+
+  // Does foliage hide b from a? (both {x,y,z})
+  blocks(a, b) {
+    this.stamp++;
+    const x0 = Math.floor(Math.min(a.x, b.x) / COVER_CELL);
+    const x1 = Math.floor(Math.max(a.x, b.x) / COVER_CELL);
+    const z0 = Math.floor(Math.min(a.z, b.z) / COVER_CELL);
+    const z1 = Math.floor(Math.max(a.z, b.z) / COVER_CELL);
+    for (let ix = x0; ix <= x1; ix++) {
+      for (let iz = z0; iz <= z1; iz++) {
+        const cell = this.grid.get(ix * 10000 + iz);
+        if (!cell) continue;
+        for (const bush of cell) {
+          if (bush.mark === this.stamp) continue;
+          bush.mark = this.stamp;
+          if (segmentHitsBush(a, b, bush)) return true;
+        }
+      }
+    }
+    return false;
+  }
+}
+
+// Segment vs ellipsoid: squash y so the bush becomes a sphere, then test.
+// The leafy part sits from the ground up to about 1.5x its half-height.
+function segmentHitsBush(a, b, bush) {
+  const sy = bush.r / bush.h;
+  const cy = bush.y + bush.h * 0.75;
+  const ax = a.x - bush.x;
+  const ay = (a.y - cy) * sy;
+  const az = a.z - bush.z;
+  const dx = b.x - a.x;
+  const dy = (b.y - a.y) * sy;
+  const dz = b.z - a.z;
+  const len2 = dx * dx + dy * dy + dz * dz;
+  const t = len2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy + az * dz) / len2)) : 0;
+  const px = ax + dx * t;
+  const py = ay + dy * t;
+  const pz = az + dz * t;
+  return px * px + py * py + pz * pz < bush.r * bush.r * 0.8;
 }
 
 // A curved Network billboard: a strip of a cylinder with a slogan on it.

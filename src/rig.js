@@ -138,28 +138,28 @@ export function buildRaiderModel(colors = {}) {
   backSocket.rotation.set(0.15, Math.PI / 2, -0.95);
   body.add(backSocket);
 
-  // flashlight: clipped to the hip when off, to the chest strap (shining ahead) when on
+  // flashlight: a GI angle-head torch (olive drab, head bent forward) clipped
+  // to the front of the belt; it shines from there when switched on
+  const od = new THREE.MeshStandardMaterial({ color: 0x4b5320, roughness: 0.75 });
   const torch = new THREE.Group();
   body.add(torch);
-  part(new THREE.CylinderGeometry(0.022, 0.019, 0.13, 12), gear, 0, 0, 0, torch);
-  part(new THREE.CylinderGeometry(0.03, 0.022, 0.04, 14), tape, 0, 0.08, 0, torch);
+  part(rounded(0.05, 0.12, 0.04, 0.012), od, 0, 0, 0, torch); // body
+  part(new THREE.CylinderGeometry(0.008, 0.008, 0.05, 6), gear, 0.031, 0.012, 0, torch); // switch rail
+  part(rounded(0.034, 0.03, 0.012, 0.004), gear, 0, 0.0, -0.024, torch); // belt clip
+  const torchHead = part(new THREE.CylinderGeometry(0.027, 0.024, 0.05, 14), od, 0, 0.068, 0.018, torch); // angle head
+  torchHead.rotation.x = Math.PI / 2;
   const torchLens = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, emissive: 0xfff2cc, emissiveIntensity: 0, roughness: 0.3 });
-  part(new THREE.CylinderGeometry(0.026, 0.026, 0.006, 14), torchLens, 0, 0.101, 0, torch);
-  setTorch({ torch, torchLens }, false);
+  const torchGlass = part(new THREE.CylinderGeometry(0.022, 0.022, 0.004, 14), torchLens, 0, 0.068, 0.045, torch);
+  torchGlass.rotation.x = Math.PI / 2;
+  // sits on the belt, just left of the buckle, facing forward
+  torch.position.set(-0.075, 0.035, 0.13);
 
   root.userData = { body, head, torso, legs, arms, backStick, handStick, gunSocket, backSocket, torch, torchLens };
   return root;
 }
 
-// Flashlight on (chest strap, lens forward and lit) or off (hip, lens down).
+// Flashlight on or off: the lens lights up (it stays clipped to the belt).
 export function setTorch(u, on) {
-  if (on) {
-    u.torch.position.set(-0.11, 0.43, 0.145);
-    u.torch.rotation.set(Math.PI / 2, 0, 0);
-  } else {
-    u.torch.position.set(-0.178, -0.06, 0.07);
-    u.torch.rotation.set(Math.PI, 0, 0.12);
-  }
   u.torchLens.emissiveIntensity = on ? 3 : 0;
 }
 
