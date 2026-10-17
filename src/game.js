@@ -20,6 +20,7 @@ import {
 import * as Audio from './audio.js';
 import { getQuality, getFpsCap, getResScale, getShowFps } from './settings.js';
 import { Sanctuary } from './sanctuary.js';
+import { wind } from './foliage.js';
 import { Infrastructure } from './infrastructure.js';
 import {
   traits, startRaidMemory, planInfrastructure, recordSeen, recordPeace, recordProvoked, recordHit, recordKill, recordLoot,
@@ -1220,6 +1221,10 @@ export class Game {
     if (this.mode === 'raid') {
       if (!this.paused) this.updateRaid(dt);
       this.effects.update(dt);
+      // the breeze picks up and dies down over a minute or two
+      wind.time.value += dt;
+      wind.strength.value = 0.8 + Math.sin(this.time * 0.05) * 0.3 + Math.sin(this.time * 0.13) * 0.15;
+      for (const f of this.world.foliage) f.update(this.player.pos);
       this.updateSun();
       t1 = performance.now();
       this.renderer.render(this.scene, this.camera);

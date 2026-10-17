@@ -35,7 +35,7 @@ If the game uses a lot of CPU:
 2. **Settings → Frame-rate cap.** 60 by default; 30 halves the work again.
    *Off* draws as fast as your monitor refreshes (144 Hz = 144 frames a second).
 3. **Settings → Resolution.** 75% or 60% draws far fewer pixels.
-4. **Settings → Graphics.** Low turns off shadows and grass.
+4. **Settings → Graphics.** Low turns off shadows and thins the grass.
 
 Menus and the pause screen always run at 30 fps. *Show FPS* puts a frame
 counter in the corner.
@@ -85,6 +85,17 @@ you still need for a pin is marked in containers.
 the Salvage bench. Weapons, shields, consumables, valuables and the rarer
 materials break down into basic materials (worn gear gives less).
 
+## The Dustline
+
+A ruined town on a crossroads, with a container yard, a crashed Husk hull,
+farmland, a burnt-out gas station, an oil refinery and the Crucible Works
+factory. Mountains rise in the north west. Buildings are cracked and stained,
+with rubble and junk heaped round them, boarded-up windows and fallen roofs.
+Cars are rusted wrecks, some burnt out. Dirt trails worn between places fade
+out at their ends. Meadows of long grass, wildflowers and ferns sway with the
+wind, and so do the bushes, tree crowns and camp tarps. The wind picks up and
+dies down over a minute or two.
+
 ## The loop
 
 1. **The Burrow (hub)**: manage your **loadout** and **stash**, buy from
@@ -108,8 +119,9 @@ materials break down into basic materials (worn gear gives less).
    with a cache. Raider camps out in the open always have a cache under the
    tarp too, among their gas cans, tyres, carts and broken-down cars.
 
-   The gold orb over a container only shows while there's something in it. (cyan ▲ on the compass, **M** for
-   the map). Hold **E** at the call panel. The lift takes 20 seconds to arrive
+   The gold orb over a container only shows while there's something in it.
+
+   The lifts show as a cyan ▲ on the compass (**M** for the map). Hold **E** at the call panel. The lift takes 20 seconds to arrive
    and the noise draws Husks in. Once the doors open, step inside and hold **E**.
 5. **Die, or still be topside when the 20-minute clock ends**, and your
    loadout is gone. Closing the game mid-raid counts as dying.
@@ -213,6 +225,7 @@ shooter/
     main.js        boot
     game.js        renderer, lighting, raid lifecycle, damage, explosions, interaction, lifts, camera
     world.js       procedural Dustline map (ruined town, container yard, Husk hull, pylons, lifts…)
+    foliage.js     grass and ferns that follow the raider, and the wind that sways the foliage
     collision.js   heightfield terrain + AABB grid: movement, line of sight, bullet raycasts
     player.js      movement, stamina, dodge roll, holstering, weapon models
     rig.js         the raider model (knees and elbows) and its animation

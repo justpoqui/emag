@@ -31,6 +31,22 @@ export function terrainHeight(x, z) {
   // flatten the town and the roads so buildings sit nicely
   const town = Math.max(0, 1 - Math.hypot(x + 20, z + 10) / 95);
   h *= 1 - Math.min(1, town * 1.8) * 0.85;
+  // a mountain range in the north west: ridges and peaks rising towards the
+  // corner, with valleys between, easing off round the farmhouse and the
+  // north-west drop point so neither ends up on a cliff
+  const corner = Math.hypot(x + 235, z + 235);
+  let mask = Math.max(0, Math.min(1, 1 - (corner - 70) / 170));
+  mask *= mask * (3 - 2 * mask);
+  if (mask > 0) {
+    const ridge = 1 - Math.abs(valueNoise(x / 38 + 11, z / 38 - 7) * 2 - 1); // sharp crests
+    const peaks = valueNoise(x / 70 - 3, z / 70 + 5);
+    let m = (ridge * ridge * 22 + peaks * 14 + valueNoise(x / 12, z / 12) * 1.5) * mask;
+    for (const [fx, fz, r] of [[-130, -110, 34], [-160, -170, 16]]) {
+      const d = Math.hypot(x - fx, z - fz);
+      if (d < r * 1.8) m *= Math.max(0.1, Math.min(1, (d - r) / (r * 0.8)));
+    }
+    h += m;
+  }
   // rise into hills at the edges so the map feels enclosed
   const edge = Math.max(Math.abs(x), Math.abs(z));
   if (edge > MAP_HALF - 40) {

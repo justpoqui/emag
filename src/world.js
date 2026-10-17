@@ -6,12 +6,116 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Collision, terrainHeight, MAP_HALF } from './collision.js';
 import { makeRng } from './rng.js';
+import { GrassField, addWind } from './foliage.js';
 
 const TOWN = { x: -20, z: -10 };
 // the oil refinery in the south east, with a lift in the middle of it
 const REFINERY = { x: 165, z: 75 };
 // Crucible Works: the robots' factory, walled, south of the West Lift
 const FACTORY = { x: -150, z: 95 };
+
+// ---------- weathering ----------
+// Small deterministic noise for textures and shape jitter.
+function hash3(x, y, z) {
+  const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+function noise3(x, y, z) {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const iz = Math.floor(z);
+  const fx = x - ix;
+  const fy = y - iy;
+  const fz = z - iz;
+  const u = fx * fx * (3 - 2 * fx);
+  const v = fy * fy * (3 - 2 * fy);
+  const w = fz * fz * (3 - 2 * fz);
+  const l = (a, b, t) => a + (b - a) * t;
+  const c = (dx, dy, dz) => hash3(ix + dx, iy + dy, iz + dz);
+  return l(l(l(c(0, 0, 0), c(1, 0, 0), u), l(c(0, 1, 0), c(1, 1, 0), u), v), l(l(c(0, 0, 1), c(1, 0, 1), u), l(c(0, 1, 1), c(1, 1, 1), u), v), w);
+}
+// Push every vertex in or out by smooth noise of its position (shared corners
+// move together, so the shape stays closed). Gives rocks and foliage an organic shape.
+function displace(geo, amount, freq, seed = 0) {
+  const p = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const n = noise3(v.x * freq + seed, v.y * freq + seed * 1.7, v.z * freq - seed) - 0.5;
+    const len = v.length() || 1;
+    v.multiplyScalar(1 + (n * amount) / len);
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+function canvasTexture(size, paint, repeat = 1) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  paint(c.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  t.repeat.set(repeat, repeat);
+  return t;
+}
+// Weathering for walls, metal and paint: rain streaks running down, stains,
+// chipped patches and hairline cracks. Near-white, so it tints any colour.
+function weatherTexture() {
+  let seed = 3;
+  const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  return canvasTexture(256, (g, n) => {
+    g.fillStyle = '#f2eee7';
+    g.fillRect(0, 0, n, n);
+    for (let i = 0; i < 160; i++) {
+      g.fillStyle = r() < 0.6 ? `rgba(40,30,20,${0.02 + r() * 0.04})` : `rgba(255,255,255,${0.03 + r() * 0.05})`;
+      const x = r() * n;
+      const y = r() * n;
+      const rad = 3 + r() * 22;
+      g.beginPath();
+      g.ellipse(x, y, rad, rad * (0.5 + r() * 0.6), r() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    // rain streaks
+    for (let i = 0; i < 40; i++) {
+      const x = r() * n;
+      const y = r() * n;
+      const len = 30 + r() * 120;
+      const grad = g.createLinearGradient(0, y, 0, y + len);
+      grad.addColorStop(0, `rgba(50,38,28,${0.05 + r() * 0.09})`);
+      grad.addColorStop(1, 'rgba(50,38,28,0)');
+      g.fillStyle = grad;
+      g.fillRect(x, y, 1 + r() * 3, len);
+      if (y + len > n) g.fillRect(x, y - n, 1 + r() * 3, len); // wrap
+    }
+    // cracks
+    g.strokeStyle = 'rgba(30,24,18,0.3)';
+    for (let i = 0; i < 6; i++) {
+      g.lineWidth = 0.8 + r();
+      g.beginPath();
+      let x = r() * n;
+      let y = r() * n;
+      g.moveTo(x, y);
+      for (let k = 0; k < 6; k++) g.lineTo((x += (r() - 0.5) * 34), (y += (r() - 0.3) * 26));
+      g.stroke();
+    }
+  });
+}
+// Fine speckle for the ground (multiplied over the terrain's vertex colours).
+function groundTexture() {
+  let seed = 11;
+  const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  return canvasTexture(128, (g, n) => {
+    g.fillStyle = '#f0ece2';
+    g.fillRect(0, 0, n, n);
+    for (let i = 0; i < 900; i++) {
+      g.fillStyle = r() < 0.55 ? `rgba(60,48,30,${r() * 0.1})` : `rgba(255,250,230,${r() * 0.08})`;
+      const s = 1 + r() * 3;
+      g.fillRect(r() * n, r() * n, s, s);
+    }
+  }, 150);
+}
 
 function mat(color, opts = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: opts.roughness ?? 0.9, metalness: opts.metalness ?? 0.05, ...opts });
@@ -51,7 +155,7 @@ export function buildWorld(scene, opts = {}) {
     gasCan: mat(0xb8321f, { roughness: 0.5, metalness: 0.3 }),
     forge: new THREE.MeshStandardMaterial({ color: 0x401000, emissive: 0xff6a10, emissiveIntensity: 2.2 }),
     barrels: [mat(0x2a4a7a, { metalness: 0.4, roughness: 0.6 }), mat(0x7a2a22, { metalness: 0.4, roughness: 0.6 }), mat(0x202224, { metalness: 0.4, roughness: 0.6 }), mat(0xb89a30, { metalness: 0.4, roughness: 0.6 })],
-    rock: mat(0x7d756a, { flatShading: true }),
+    rock: mat(0xa49b8c, { flatShading: true }),
     trunk: mat(0x4a3a2a),
     leaves: [mat(0x5f7a35, { flatShading: true }), mat(0x6f8a3a, { flatShading: true }), mat(0x4e6b30, { flatShading: true })],
     ivy: mat(0x4f6e2c, { flatShading: true }),
@@ -60,10 +164,37 @@ export function buildWorld(scene, opts = {}) {
     liftGlow: new THREE.MeshStandardMaterial({ color: 0x40ffd0, emissive: 0x30ffc0, emissiveIntensity: 2 }),
     stripe: mat(0xe8b830),
     tarp: [mat(0xd2672f), mat(0x2f8f8a), mat(0xd8b54a)],
+    campTarp: [mat(0xd2672f, { side: THREE.DoubleSide }), mat(0x2f8f8a, { side: THREE.DoubleSide }), mat(0xd8b54a, { side: THREE.DoubleSide })],
+    burnt: mat(0x2c2824, { roughness: 1, metalness: 0.2 }),
+    headlight: mat(0xd8d4c4, { roughness: 0.3, metalness: 0.5 }),
+    taillight: mat(0x7a1a14, { roughness: 0.4 }),
   };
+  // weathered surfaces: everything built gets streaks, stains and cracks
+  const weather = weatherTexture();
+  for (const m of [M.burnt, M.trunk, M.rock, M.concrete, M.concreteDark, ...M.plaster, M.rust, M.metal, M.darkMetal, M.wood, M.asphalt, ...M.containerColors, ...M.carColors, M.tank, M.tankRust, M.pipe, M.hazard, M.corrugated, M.stripe, ...M.barrels, ...M.tarp, ...M.campTarp]) {
+    if (m) m.map = weather;
+  }
 
+  // Static geometry is merged per material. Every vertex also gets a grime
+  // shade: darker near the ground (dirt, damp, moss) with a little blotchiness,
+  // multiplied with any colour the geometry already has.
   function pushGeo(material, geo) {
     if (geo.index) geo = geo.toNonIndexed();
+    const p = geo.attributes.position;
+    const own = geo.attributes.color;
+    const col3 = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      const y = p.getY(i);
+      const z = p.getZ(i);
+      const h = y - terrainHeight(x, z);
+      const grime = Math.max(0, Math.min(1, 1 - h / 1.3)) * 0.34 + (noise3(x * 0.35, y * 0.35, z * 0.35) - 0.5) * 0.16;
+      const k = 1 - Math.max(-0.05, grime);
+      col3[i * 3] = k * (own ? own.getX(i) : 1);
+      col3[i * 3 + 1] = k * (own ? own.getY(i) : 1);
+      col3[i * 3 + 2] = k * (own ? own.getZ(i) : 1);
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col3, 3));
     let list = buckets.get(material);
     if (!list) {
       list = [];
@@ -73,15 +204,20 @@ export function buildWorld(scene, opts = {}) {
   }
 
   // A static box. rotY rotates the visual; collision uses the rotated AABB.
-  function box(material, cx, cy, cz, sx, sy, sz, { rotY = 0, collide = true, tag = 'concrete', rotX = 0, rotZ = 0 } = {}) {
+  // visible: false makes a collider only (for shapes drawn some other way)
+  function box(material, cx, cy, cz, sx, sy, sz, { rotY = 0, collide = true, tag = 'concrete', rotX = 0, rotZ = 0, visible = true } = {}) {
     const geo = unitBox.clone();
+    // texture every ~3 m of surface, whatever the box's size
+    const uv = geo.attributes.uv;
+    const dims = [[sz, sy], [sz, sy], [sx, sz], [sx, sz], [sx, sy], [sx, sy]];
+    for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) uv.setXY(f * 4 + k, (uv.getX(f * 4 + k) * dims[f][0]) / 4, (uv.getY(f * 4 + k) * dims[f][1]) / 4);
     const m = new THREE.Matrix4().compose(
       new THREE.Vector3(cx, cy, cz),
       new THREE.Quaternion().setFromEuler(new THREE.Euler(rotX, rotY, rotZ)),
       new THREE.Vector3(sx, sy, sz),
     );
     geo.applyMatrix4(m);
-    pushGeo(material, geo);
+    if (visible) pushGeo(material, geo);
     if (collide) {
       geo.computeBoundingBox();
       const bb = geo.boundingBox;
@@ -94,6 +230,69 @@ export function buildWorld(scene, opts = {}) {
       );
     }
     return geo;
+  }
+
+  // ---- rubble and junk (decay) ----
+  const rubbleShapes = [0, 1, 2, 3].map((v) => displace(new THREE.BoxGeometry(1, 1, 1, 2, 2, 2), 0.35, 2.5, 50 + v).toNonIndexed());
+  // A heap of broken concrete with junk through it. size ~ its radius (m).
+  function rubblePile(x, z, size, material = M.concreteDark, solid = false) {
+    const n = Math.round(4 + size * 5);
+    for (let k = 0; k < n; k++) {
+      const a = rng.range(0, Math.PI * 2);
+      const d = Math.sqrt(rng.next()) * size;
+      const px = x + Math.cos(a) * d;
+      const pz = z + Math.sin(a) * d;
+      const sc = rng.range(0.25, 0.75) * (1.2 - d / (size + 0.01) * 0.6);
+      const geo = rng.pick(rubbleShapes).clone();
+      geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(px, ground(px, pz) + sc * 0.3, pz), new THREE.Quaternion().setFromEuler(new THREE.Euler(rng.range(0, 3), rng.range(0, 3), rng.range(0, 3))), new THREE.Vector3(sc * rng.range(1, 1.8), sc, sc * rng.range(0.8, 1.4))));
+      pushGeo(rng.chance(0.3) ? M.concrete : material, geo);
+    }
+    for (let k = rng.int(1, 3); k > 0; k--) junk(x + rng.range(-size, size), z + rng.range(-size, size));
+    if (solid && size > 0.8) {
+      const g = ground(x, z);
+      col.addBox({ x: x - size * 0.6, y: g - 0.5, z: z - size * 0.6 }, { x: x + size * 0.6, y: g + 0.5, z: z + size * 0.6 }, 'concrete');
+    }
+  }
+  // One piece of junk lying about (no collision; it's small).
+  function junk(x, z) {
+    const g = ground(x, z);
+    const ry = rng.range(0, Math.PI * 2);
+    const at = (geo, material, y, rx = 0, rz = 0) => {
+      geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, g + y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(1, 1, 1)));
+      pushGeo(material, geo);
+    };
+    switch (rng.int(0, 9)) {
+      case 0: // planks
+        for (let k = 0; k < 3; k++) at(new THREE.BoxGeometry(0.22, 0.04, rng.range(1.2, 2.4)).translate(k * 0.25 - 0.25, k * 0.04, 0), M.wood, 0.03, 0, rng.range(-0.1, 0.1));
+        break;
+      case 1: // rebar sticking out at angles
+        for (let k = 0; k < 4; k++) at(new THREE.CylinderGeometry(0.015, 0.015, rng.range(0.8, 1.8), 4).translate(k * 0.12, 0.5, 0), M.rust, 0, rng.range(-0.6, 0.6), rng.range(-0.6, 0.6));
+        break;
+      case 2: // a length of pipe
+        at(new THREE.CylinderGeometry(0.12, 0.12, rng.range(1.5, 3), 10).rotateZ(Math.PI / 2), M.rust, 0.12);
+        break;
+      case 3: // a tyre
+        at(new THREE.TorusGeometry(0.32, 0.12, 8, 16).rotateX(Math.PI / 2), M.tire, 0.12, rng.range(-0.3, 0.3));
+        break;
+      case 4: // a rusty drum on its side
+        at(new THREE.CylinderGeometry(0.3, 0.3, 0.88, 14).rotateZ(Math.PI / 2), M.rust, 0.3);
+        break;
+      case 5: // cinder blocks
+        for (let k = 0; k < 3; k++) at(new THREE.BoxGeometry(0.4, 0.2, 0.2).translate(k * 0.42 - 0.4, 0.1, (k % 2) * 0.1), M.concrete, 0);
+        break;
+      case 6: // a bent corrugated sheet
+        at(new THREE.BoxGeometry(1.4, 0.03, 0.9), M.corrugated, 0.2, rng.range(-0.3, 0.3), 0.25);
+        break;
+      case 7: // an old television
+        at(new THREE.BoxGeometry(0.55, 0.42, 0.45), M.darkMetal, 0.21, 0, rng.range(-0.2, 0.2));
+        break;
+      case 8: // a broken chair
+        at(new THREE.BoxGeometry(0.45, 0.05, 0.45), M.wood, 0.3, 0, 0.4);
+        at(new THREE.BoxGeometry(0.45, 0.5, 0.05).translate(0, 0.25, -0.2), M.wood, 0.3, 0, 0.4);
+        break;
+      default: // a shopping cart on its side
+        at(new THREE.BoxGeometry(0.55, 0.45, 0.8), M.metal, 0.3, 0, 1.4);
+    }
   }
 
   function geoAt(material, geo, x, y, z, rotY = 0, scale = 1) {
@@ -124,6 +323,7 @@ export function buildWorld(scene, opts = {}) {
     const grass = new THREE.Color(0x6f7d3e);
     const dry = new THREE.Color(0xa59466);
     const dirt = new THREE.Color(0x7e6a4c);
+    const stone = new THREE.Color(0x8a8278);
     const road = new THREE.Color(0x4a4742);
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
@@ -133,6 +333,10 @@ export function buildWorld(scene, opts = {}) {
       const n = Math.sin(x * 0.07) * Math.cos(z * 0.05) * 0.5 + 0.5;
       c.copy(grass).lerp(dry, n * 0.8);
       if (h > 6) c.lerp(dirt, Math.min(1, (h - 6) / 10));
+      // bare rock on steep slopes and high ground (the north-west range)
+      const slope = Math.hypot(terrainHeight(x + 1, z) - terrainHeight(x - 1, z), terrainHeight(x, z + 1) - terrainHeight(x, z - 1)) / 2;
+      const bare = Math.max(Math.min(1, Math.max(0, slope - 0.45) * 1.6), Math.min(1, Math.max(0, (h - 16) / 14)));
+      if (bare > 0) c.lerp(stone, bare * 0.85);
       const roadX = Math.abs(z - TOWN.z) < 5 && Math.abs(x - TOWN.x) < 170;
       const roadZ = Math.abs(x - TOWN.x) < 5 && Math.abs(z - TOWN.z) < 170;
       if (roadX || roadZ) c.copy(road).lerp(dirt, hash2(x, z) * 0.25);
@@ -143,7 +347,7 @@ export function buildWorld(scene, opts = {}) {
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, map: groundTexture() }));
     mesh.receiveShadow = true;
     scene.add(mesh);
   }
@@ -188,9 +392,12 @@ export function buildWorld(scene, opts = {}) {
           const sz = side.ax === 'x' ? t : segLen;
           const roll = rng.next();
           if (roll < ruin + collapse) {
-            // broken stub
+            // broken stub, and what fell off it lying below
             const hh = rng.range(0.3, 1.4);
             box(paint, px, y0 + hh / 2, pz, sx, hh, sz);
+            const ox = side.ax === 'x' ? 0 : side.out * 1.2;
+            const oz = side.ax === 'x' ? side.out * 1.2 : 0;
+            if (f === 0 || rng.chance(0.5)) rubblePile(px + ox, pz + oz, rng.range(0.6, 1.3), paint);
             continue;
           }
           if (s === doorAt || s === door2) {
@@ -201,7 +408,16 @@ export function buildWorld(scene, opts = {}) {
             // window: sill + lintel
             box(paint, px, y0 + 0.5, pz, sx, 1.0, sz);
             box(paint, px, y0 + 2.4 + (fh - 2.4) / 2, pz, sx, fh - 2.4, sz);
-            if (rng.chance(0.3)) box(M.glass, px, y0 + 1.7, pz, sx * 0.9, 1.4, sz * 0.3, { collide: false });
+            const wr = rng.next();
+            if (wr < 0.15) box(M.glass, px, y0 + 1.7, pz, sx * 0.9, 1.4, sz * 0.3, { collide: false });
+            else if (wr < 0.4) {
+              // boarded up: planks nailed across the opening, outside
+              const ox = side.ax === 'x' ? 0 : side.out * (t / 2 + 0.03);
+              const oz = side.ax === 'x' ? side.out * (t / 2 + 0.03) : 0;
+              for (let k = 0; k < 3; k++) {
+                box(M.wood, px + ox, y0 + 1.25 + k * 0.45, pz + oz, side.ax === 'x' ? segLen * 0.95 : 0.04, 0.18, side.ax === 'x' ? 0.04 : segLen * 0.95, { collide: false, rotX: side.ax === 'z' ? rng.range(-0.15, 0.15) : 0, rotZ: side.ax === 'x' ? rng.range(-0.15, 0.15) : 0 });
+              }
+            }
           } else {
             box(paint, px, y0 + fh / 2, pz, sx, fh, sz);
           }
@@ -229,8 +445,20 @@ export function buildWorld(scene, opts = {}) {
     const roofY = top + floors * fh;
     if (rng.chance(0.6)) {
       box(M.concrete, cx + 1.3, roofY - 0.15, cz, w - 2.6, 0.3, d);
-      // parapet rubble on top
-      if (rng.chance(0.5)) box(M.concreteDark, cx + rng.range(-w / 3, w / 3), roofY + 0.4, cz + rng.range(-d / 3, d / 3), rng.range(1, 2.5), 0.8, rng.range(1, 2.5));
+      // what's left on the roof: an AC unit, a water tank, an antenna, rubble
+      if (rng.chance(0.5)) box(M.metal, cx + rng.range(-w / 4, w / 4), roofY + 0.45, cz + rng.range(-d / 4, d / 4), 1.2, 0.9, 0.9, { collide: false });
+      if (rng.chance(0.3)) {
+        const tx = cx + rng.range(-w / 4, w / 4);
+        const tz = cz + rng.range(-d / 4, d / 4);
+        const tank = new THREE.CylinderGeometry(0.7, 0.7, 1.4, 14);
+        tank.translate(tx, roofY + 0.9, tz);
+        pushGeo(M.rust, tank);
+      }
+      if (rng.chance(0.35)) box(M.darkMetal, cx + rng.range(-w / 3, w / 3), roofY + 1.5, cz + rng.range(-d / 3, d / 3), 0.06, 3, 0.06, { collide: false, rotZ: rng.range(-0.3, 0.3) });
+      if (rng.chance(0.5)) rubblePile(cx + rng.range(-w / 4, w / 4), cz + rng.range(-d / 4, d / 4), 0.6);
+    } else if (floors > 1) {
+      // the roof is gone: a slab hangs down into the top floor
+      box(M.concrete, cx + rng.range(-1, 1), roofY - 1.5, cz + rng.range(-1, 1), w * 0.45, 0.3, d * 0.5, { rotX: rng.range(0.35, 0.6), rotY: rng.range(0, 3), collide: false });
     }
     // ivy hanging off a wall
     if (rng.chance(0.55)) {
@@ -238,13 +466,13 @@ export function buildWorld(scene, opts = {}) {
       const ivyH = rng.range(2, floors * fh * 0.9);
       box(M.ivy, cx + rng.range(-w / 3, w / 3), top + ivyH / 2, cz + side * (d / 2 + 0.2), rng.range(1.5, 3.5), ivyH, 0.25, { collide: false });
     }
-    // rubble outside
-    for (let i = 0; i < 3; i++) {
+    // rubble and junk outside
+    for (let i = 0; i < 2; i++) {
       const rx = cx + rng.range(-w / 2 - 2, w / 2 + 2);
-      const rz = cz + (rng.chance(0.5) ? -1 : 1) * (d / 2 + rng.range(0.6, 2));
-      const s = rng.range(0.4, 1.0);
-      box(M.concreteDark, rx, ground(rx, rz) + s / 2, rz, s * 1.5, s, s, { rotY: rng.range(0, 3), collide: s > 0.7 });
+      const rz = cz + (rng.chance(0.5) ? -1 : 1) * (d / 2 + rng.range(1, 2.5));
+      rubblePile(rx, rz, rng.range(0.5, 1.4), M.concreteDark, true);
     }
+    for (let i = 0; i < 2; i++) junk(cx + rng.range(-w / 2 - 3, w / 2 + 3), cz + (rng.chance(0.5) ? -1 : 1) * (d / 2 + rng.range(1.5, 4)));
   }
 
   // Town blocks along the two roads
@@ -284,19 +512,80 @@ export function buildWorld(scene, opts = {}) {
   }
 
   // ---------- road props: cars, barriers, lamp posts ----------
+  // An abandoned car: a proper body profile (hood, cabin, trunk) extruded to
+  // width, glass, bumpers, wheels in their arches. Years out here show:
+  // smashed or missing glass, flat or missing tyres, rust, some burnt out.
   function car(x, z, rotY) {
     const g = ground(x, z);
-    const paint = rng.pick(M.carColors);
-    box(paint, x, g + 0.75, z, 1.9, 0.8, 4.2, { rotY, tag: 'metal' });
-    // cabin (offset along the car's length)
-    const off = -0.3;
-    box(paint, x + Math.sin(rotY) * off, g + 1.45, z + Math.cos(rotY) * off, 1.7, 0.6, 2.2, { rotY, tag: 'metal' });
-    box(M.glass, x + Math.sin(rotY) * off, g + 1.46, z + Math.cos(rotY) * off, 1.75, 0.45, 2.0, { rotY, collide: false });
-    for (const [wx, wz] of [[-0.9, 1.3], [0.9, 1.3], [-0.9, -1.3], [0.9, -1.3]]) {
-      const c = Math.cos(rotY);
-      const s = Math.sin(rotY);
-      box(M.darkMetal, x + wx * c + wz * s, g + 0.35, z - wx * s + wz * c, 0.3, 0.7, 0.7, { rotY, collide: false });
+    const burnt = rng.chance(0.18);
+    const paint = burnt ? M.burnt : rng.pick(M.carColors);
+    const flat = rng.chance(0.35) ? rng.pick([-1, 1]) : 0; // a side sitting on its rims
+    const tilt = flat * 0.06;
+    const place = (geo, material) => {
+      geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, g + (flat ? -0.08 : 0), z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, tilt, 'YXZ')), new THREE.Vector3(1, 1, 1)));
+      pushGeo(material, geo);
+    };
+    // side profile (z along the car, y up), extruded across its width
+    const W = 1.78;
+    const body = new THREE.Shape();
+    [[-2.2, 0.32], [-2.25, 0.72], [-1.85, 0.86], [-1.0, 0.9], [-0.6, 1.38], [0.55, 1.4], [1.05, 0.95], [2.05, 0.82], [2.2, 0.55], [2.1, 0.32]].forEach(([zz, yy], i) => (i ? body.lineTo(zz, yy) : body.moveTo(zz, yy)));
+    // wheel arches cut into the bottom edge
+    for (const wz of [1.35, -1.35]) {
+      body.lineTo(wz + 0.45, 0.32);
+      body.absarc(wz, 0.32, 0.45, 0, Math.PI, false);
     }
+    body.lineTo(-2.2, 0.32);
+    const bodyGeo = new THREE.ExtrudeGeometry(body, { depth: W, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.05, bevelSegments: 2, curveSegments: 8 });
+    bodyGeo.rotateY(-Math.PI / 2); // profile z -> world z, extrusion -> x
+    bodyGeo.translate(W / 2, 0, 0);
+    place(bodyGeo, paint);
+    // glass: the greenhouse, a little inset; broken cars show a dark hole instead
+    const glassShape = new THREE.Shape();
+    [[-0.92, 0.92], [-0.56, 1.33], [0.5, 1.35], [0.98, 0.96]].forEach(([zz, yy], i) => (i ? glassShape.lineTo(zz, yy) : glassShape.moveTo(zz, yy)));
+    const smashed = burnt || rng.chance(0.4);
+    const glassGeo = new THREE.ExtrudeGeometry(glassShape, { depth: W + 0.1, bevelEnabled: false });
+    glassGeo.rotateY(-Math.PI / 2);
+    glassGeo.translate((W + 0.1) / 2, 0.01, 0);
+    place(glassGeo, smashed ? M.darkMetal : M.glass);
+    // bumpers, lights, mirrors
+    for (const [zz, m] of [[2.27, M.darkMetal], [-2.3, M.darkMetal]]) {
+      const b = new THREE.BoxGeometry(W + 0.08, 0.18, 0.12);
+      b.translate(0, 0.42, zz);
+      place(b, m);
+    }
+    for (const sx of [-0.62, 0.62]) {
+      const hl = new THREE.BoxGeometry(0.32, 0.12, 0.05);
+      hl.translate(sx, 0.7, 2.2);
+      place(hl, smashed ? M.darkMetal : M.headlight);
+      const tl = new THREE.BoxGeometry(0.3, 0.12, 0.05);
+      tl.translate(sx, 0.72, -2.27);
+      place(tl, M.taillight);
+    }
+    // wheels: tyre and hub; one side may be flat, a wheel may be gone
+    for (const [wx, wz] of [[-0.86, 1.35], [0.86, 1.35], [-0.86, -1.35], [0.86, -1.35]]) {
+      if (burnt && rng.chance(0.5)) continue;
+      const isFlat = flat !== 0 && Math.sign(wx) === flat;
+      const tyre = new THREE.CylinderGeometry(0.36, 0.36, 0.24, 14);
+      tyre.rotateZ(Math.PI / 2);
+      if (isFlat) tyre.scale(1, 0.75, 1);
+      tyre.translate(wx, isFlat ? 0.27 : 0.36, wz);
+      place(tyre, burnt ? M.burnt : M.tire);
+      const hub = new THREE.CylinderGeometry(0.17, 0.17, 0.26, 10);
+      hub.rotateZ(Math.PI / 2);
+      hub.translate(wx * 1.01, isFlat ? 0.27 : 0.36, wz);
+      place(hub, M.rust);
+    }
+    // rust patches along the sills and wheel arches
+    if (!burnt && rng.chance(0.7)) {
+      for (let k = 0; k < rng.int(1, 3); k++) {
+        const rp = new THREE.BoxGeometry(W + 0.13, rng.range(0.12, 0.3), rng.range(0.4, 1.1));
+        rp.translate(0, rng.range(0.4, 0.7), rng.range(-1.8, 1.8));
+        place(rp, M.rust);
+      }
+    }
+    // collision: the body and the cabin
+    box(paint, x, g + 0.6, z, W, 0.6, 4.4, { rotY, collide: true, visible: false });
+    box(paint, x, g + 1.15, z, W - 0.2, 0.5, 1.6, { rotY, collide: true, visible: false });
     addContainer('car', x - Math.sin(rotY) * 2.4, g, z - Math.cos(rotY) * 2.4, rotY);
   }
   for (let i = 0; i < 26; i++) {
@@ -383,6 +672,22 @@ export function buildWorld(scene, opts = {}) {
     }
   });
 
+  // ---------- street signs: faded, rust-spotted, some bent or leaning ----------
+  {
+    const kinds = ['stop', 'speed', 'distance', 'warning', 'noentry', 'curve'];
+    for (let t = -160; t <= 160; t += 26) {
+      for (const [axis, side] of [['x', 1], ['z', -1]]) {
+        if (Math.abs(t) < 12 || rng.chance(0.35)) continue;
+        const x = axis === 'x' ? TOWN.x + t : TOWN.x + side * 6.6;
+        const z = axis === 'x' ? TOWN.z + side * 6.6 : TOWN.z + t;
+        if (Math.abs(x) > MAP_HALF - 25 || Math.abs(z) > MAP_HALF - 25) continue;
+        const facing = axis === 'x' ? (t < 0 ? Math.PI / 2 : -Math.PI / 2) : t < 0 ? 0 : Math.PI;
+        streetSign(scene, rng.pick(kinds), x, ground(x, z), z, facing, rng.next() < 0.3 ? rng.range(0.15, 0.45) : rng.range(-0.05, 0.05), rng);
+        box(M.darkMetal, x, ground(x, z) + 1, z, 0.08, 2, 0.08, { visible: false });
+      }
+    }
+  }
+
   // ---------- shipping-container yard (east) ----------
   const yard = { x: 110, z: -60 };
   for (let row = 0; row < 5; row++) {
@@ -414,19 +719,62 @@ export function buildWorld(scene, opts = {}) {
     box(M.rust, yard.x + 10, g + 17, yard.z + 14, 4, 2, 37, { tag: 'metal' });
   }
 
-  // ---------- gas station (south west) ----------
+  // ---------- gas station (west end of the main road) ----------
+  // Away from Crucible Works. A cracked, oil-stained forecourt under a sagging
+  // canopy with a panel missing, two pump islands, a tall price sign, the shop
+  // behind, and what people left: a car at the pumps, drums, tyres, rubble.
   {
-    const x = -120;
-    const z = 70;
+    const x = -150;
+    const z = 6;
     const g = ground(x, z);
     box(M.concreteDark, x, g + 0.1, z, 26, 0.3, 18);
-    for (const [px, pz] of [[-8, -5], [8, -5], [-8, 5], [8, 5]]) box(M.metal, x + px, g + 2.8, z + pz, 0.5, 5.4, 0.5, { tag: 'metal' });
-    box(M.tarp[0], x, g + 5.6, z, 20, 0.6, 13, { tag: 'metal' });
-    for (const px of [-4, 4]) {
-      box(M.metal, x + px, g + 1, z, 1, 2, 0.8, { tag: 'metal' });
-      box(M.stripe, x + px, g + 1.6, z + 0.41, 0.8, 0.3, 0.02, { collide: false });
+    for (let k = 0; k < 7; k++) {
+      // oil stains and patched cracks
+      const sx = x + rng.range(-10, 10);
+      const sz = z + rng.range(-7, 7);
+      const st = new THREE.CircleGeometry(rng.range(0.5, 1.6), 12);
+      st.rotateX(-Math.PI / 2);
+      st.scale(1, 1, rng.range(0.5, 1));
+      st.translate(sx, g + 0.26, sz);
+      pushGeo(M.burnt, st);
     }
-    building(x, z + 16, 12, 8, 1, { ruin: 0.1 });
+    // canopy on four columns; one corner has dropped
+    for (const [px, pz] of [[-8, -4.5], [8, -4.5], [-8, 4.5], [8, 4.5]]) box(M.metal, x + px, g + 2.8, z + pz, 0.45, 5.4, 0.45, { tag: 'metal' });
+    box(M.concrete, x - 4.5, g + 5.6, z, 11, 0.5, 12, { tag: 'metal' });
+    box(M.concrete, x + 4.2, g + 5.2, z, 9.4, 0.5, 12, { rotZ: -0.08, tag: 'metal' }); // sagging half
+    box(M.rust, x + 6.5, g + 4.8, z + 2.5, 3, 0.12, 3, { rotZ: 0.6, rotX: 0.3, collide: false }); // a fallen panel hanging
+    box(M.tarp[0], x - 4.5, g + 5.95, z + 6.05, 11, 0.7, 0.08, { collide: false });
+    box(M.tarp[0], x + 4.2, g + 5.55, z + 6.05, 9.4, 0.7, 0.08, { rotZ: -0.08, collide: false });
+    gasSign(scene, x - 4.5, g + 5.95, z + 6.12);
+    // pump islands
+    for (const px of [-4, 4]) {
+      box(M.concrete, x + px, g + 0.35, z, 1.6, 0.2, 6, { tag: 'concrete' });
+      for (const pz of [-1.6, 1.6]) {
+        box(M.metal, x + px, g + 1.2, z + pz, 0.9, 1.6, 0.6, { tag: 'metal' });
+        box(M.stripe, x + px, g + 1.75, z + pz, 0.92, 0.25, 0.62, { collide: false });
+        box(M.glass, x + px, g + 1.45, z + pz + 0.31, 0.5, 0.3, 0.02, { collide: false });
+        const hose = new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(new THREE.Vector3(x + px + 0.46, g + 1.6, z + pz), new THREE.Vector3(x + px + 0.9, g + 0.5, z + pz + 0.2), new THREE.Vector3(x + px + 0.5, g + 0.4, z + pz + 0.6)), 10, 0.025, 5);
+        pushGeo(M.tire, hose);
+      }
+    }
+    // tall price sign by the road, some digits gone
+    box(M.metal, x + 11, g + 4.5, z - 8, 0.35, 9, 0.35, { tag: 'metal' });
+    priceSign(scene, x + 11, g + 8.3, z - 8);
+    // underground tank vents
+    for (const px of [-11, -10.4]) box(M.darkMetal, x + px, g + 1.6, z + 7.6, 0.1, 3.2, 0.1, { collide: false });
+    // the shop behind, a car left at the pumps, junk
+    building(x, z + 16, 12, 8, 1, { ruin: 0.12 });
+    car(x - 4 + 2.2, z + 0.4, Math.PI / 2 + 0.15);
+    rubblePile(x + 10, z + 7, 1.3, M.concreteDark, true);
+    for (let k = 0; k < 4; k++) junk(x + rng.range(-12, 12), z + rng.range(-8, 8));
+    for (let k = 0; k < 4; k++) {
+      const bx2 = x - 11.5 + (k % 2) * 0.65;
+      const bz2 = z - 7.5 + Math.floor(k / 2) * 0.65;
+      const drum = new THREE.CylinderGeometry(0.3, 0.3, 0.88, 14);
+      drum.translate(bx2, g + 0.69, bz2);
+      pushGeo(rng.pick(M.barrels), drum);
+    }
+    col.addBox({ x: x - 11.85, y: g, z: z - 7.85 }, { x: x - 10.55, y: g + 1.1, z: z - 6.55 }, 'metal');
     addContainer(['medical', 'crate'], x + 3, g + 0.25, z - 2);
     addContainer(['crate', 'locker', 'weapon_case'], x - 6, g + 0.25, z + 3);
     enemySpawns.push({ type: 'skitter', x, z, radius: 18, count: 3 });
@@ -1022,6 +1370,7 @@ export function buildWorld(scene, opts = {}) {
     enemySpawns.push({ type: 'watcher', x: F.x, z: F.z, radius: 30 });
   }
 
+  const campSpots = [];
   // raider camps: a sloped tarp on four posts over a cache (always stocked),
   // with what's left of their gear round it, and sometimes a broken-down car
   for (let i = 0; i < 8; i++) {
@@ -1029,6 +1378,7 @@ export function buildWorld(scene, opts = {}) {
     const z = rng.range(-180, 180);
     if (Math.hypot(x - TOWN.x, z - TOWN.z) < 100 || Math.hypot(x - REFINERY.x, z - REFINERY.z) < 48 || Math.hypot(x - FACTORY.x, z - FACTORY.z) < 62) continue;
     const g = ground(x, z);
+    campSpots.push({ x, z });
     const ry = rng.range(0, Math.PI);
     const c = Math.cos(ry);
     const sn = Math.sin(ry);
@@ -1047,7 +1397,7 @@ export function buildWorld(scene, opts = {}) {
     tarpGeo.rotateX(Math.atan2(hBack - hFront, 4));
     tarpGeo.rotateY(ry);
     tarpGeo.translate(x, g + (hBack + hFront) / 2 + 0.03, z);
-    pushGeo(rng.pick(M.tarp), tarpGeo);
+    pushGeo(rng.pick(M.campTarp), tarpGeo);
     // the cache underneath
     const [cx, cz] = P(-0.6, -0.4);
     addContainer(['crate', 'locker', 'medical', 'weapon_case'], cx, 0, cz, ry, true);
@@ -1154,13 +1504,34 @@ export function buildWorld(scene, opts = {}) {
   }
 
   // ---------- rocks and trees ----------
-  const rockGeo = new THREE.DodecahedronGeometry(1, 0);
+  // Boulders: lumpy (noise-displaced), half-buried, moss on the upward faces,
+  // a scatter of pebbles round the big ones.
+  const rockShapes = [];
+  for (let v = 0; v < 6; v++) {
+    const geo = displace(new THREE.IcosahedronGeometry(1, 1), 0.55, 1.2, v * 3.1).toNonIndexed();
+    const n = geo.attributes.normal;
+    const p = geo.attributes.position;
+    const cols = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const tone = 0.82 + (noise3(p.getX(i) * 2, p.getY(i) * 2, p.getZ(i) * 2 + v) - 0.5) * 0.3;
+      const moss = Math.max(0, Math.min(1, (n.getY(i) - 0.55) * 3)) * (0.5 + noise3(p.getX(i) * 3, v, p.getZ(i) * 3) * 0.5);
+      cols[i * 3] = tone * (1 - moss * 0.45);
+      cols[i * 3 + 1] = tone * (1 - moss * 0.12);
+      cols[i * 3 + 2] = tone * (1 - moss * 0.6);
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    rockShapes.push(geo);
+  }
   // the collider matches the rock: about 0.8 of its size around, as tall as it shows
-  function rock(x, z, s) {
+  function rock(x, z, s, collide = true) {
     const g = ground(x, z);
-    geoAt(M.rock, rockGeo, x, g + s * 0.3, z, rng.range(0, 6), s);
+    const geo = rng.pick(rockShapes).clone();
+    const sy = s * rng.range(0.6, 0.85);
+    geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, g + sy * 0.35, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rng.range(-0.15, 0.15), rng.range(0, 6), rng.range(-0.15, 0.15))), new THREE.Vector3(s * rng.range(0.85, 1.2), sy, s * rng.range(0.85, 1.2))));
+    pushGeo(M.rock, geo);
+    if (!collide) return;
     const r = s * 0.8;
-    col.addBox({ x: x - r, y: g - 1, z: z - r }, { x: x + r, y: g + s * 1.05, z: z + r }, 'rock');
+    col.addBox({ x: x - r, y: g - 1, z: z - r }, { x: x + r, y: g + sy * 1.3, z: z + r }, 'rock');
   }
   const rockSpots = [];
   for (let i = 0, placed = 0; i < 900 && placed < 260; i++) {
@@ -1174,6 +1545,12 @@ export function buildWorld(scene, opts = {}) {
     rock(x, z, s);
     placed++;
     if (s > 1.6) rockSpots.push({ x, z, s });
+    // pebbles round it
+    for (let k = rng.int(2, 6); k > 0; k--) {
+      const a = rng.range(0, Math.PI * 2);
+      const d = s * rng.range(0.9, 1.6);
+      rock(x + Math.cos(a) * d, z + Math.sin(a) * d, rng.range(0.12, 0.3), false);
+    }
     // boulder fields: a few smaller rocks huddled around the big ones
     if (s > 2.2 && rng.chance(0.6)) {
       for (let k = rng.int(1, 3); k > 0; k--) {
@@ -1194,8 +1571,34 @@ export function buildWorld(scene, opts = {}) {
     if (clearAt(x, z, 0.6)) addContainer(['crate', 'crate', 'medical', 'locker', 'husk_pod'], x, 0, z, rng.pick([0, Math.PI / 2]));
   }
 
-  const coneGeo = new THREE.ConeGeometry(1, 1, 7);
-  const blobGeo = new THREE.IcosahedronGeometry(1, 0);
+  // Trees: conifers (tapered trunk, tiers of ragged foliage), broadleafs
+  // (leaning trunk, branches, a cluster of leafy crowns) and dead snags.
+  const leafShapes = [0, 1, 2, 3].map((v) => displace(new THREE.IcosahedronGeometry(1, 1), 0.45, 1.6, 10 + v * 2.3).toNonIndexed());
+  const tierShapes = [0, 1, 2].map((v) => displace(new THREE.ConeGeometry(1, 1, 9, 2), 0.18, 2.2, 30 + v).toNonIndexed());
+  // shade foliage: darker underneath and inside, lighter on top
+  const shadeFoliage = (geo, cy, r) => {
+    const p = geo.attributes.position;
+    const cols = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const k = 0.62 + 0.38 * Math.max(0, Math.min(1, (p.getY(i) - cy) / r * 0.5 + 0.5));
+      cols[i * 3] = cols[i * 3 + 1] = cols[i * 3 + 2] = k;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    return geo;
+  };
+  // a limb from (x,y,z), tilted out by `tilt` towards `yaw`
+  const limb = (material, x, y, z, len, r0, r1, tilt, yaw) => {
+    const geo = new THREE.CylinderGeometry(r1, r0, len, 6);
+    geo.translate(0, len / 2, 0);
+    geo.rotateZ(tilt);
+    geo.rotateY(yaw);
+    geo.translate(x, y, z);
+    pushGeo(material, geo);
+    // the far end, for hanging things off it
+    return new THREE.Vector3(x + Math.cos(yaw) * Math.sin(tilt) * -len, y + Math.cos(tilt) * len, z + Math.sin(yaw) * Math.sin(tilt) * len);
+  };
+  const deadWood = mat(0x7a7064);
+  deadWood.map = weather;
   for (let i = 0, placed = 0; i < 1400 && placed < 480; i++) {
     const x = rng.range(-MAP_HALF + 5, MAP_HALF - 5);
     const z = rng.range(-MAP_HALF + 5, MAP_HALF - 5);
@@ -1206,22 +1609,49 @@ export function buildWorld(scene, opts = {}) {
     placed++;
     const g = ground(x, z);
     const h = rng.range(5, 11);
-    box(M.trunk, x, g + h * 0.3, z, 0.5, h * 0.6, 0.5, { tag: 'wood', collide: false });
     col.addBox({ x: x - 0.35, y: g - 1, z: z - 0.35 }, { x: x + 0.35, y: g + h * 0.6, z: z + 0.35 }, 'wood');
     const leaves = rng.pick(M.leaves);
     // foliage that hangs below head height is solid too
     const canopy = (cx, cz, bottom, top, r) => {
       if (bottom - g < 2.3) col.addBox({ x: cx - r, y: bottom, z: cz - r }, { x: cx + r, y: top, z: cz + r }, 'wood');
     };
-    if (rng.chance(0.5)) {
-      const c = coneGeo.clone();
-      c.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, g + h * 0.65, z), new THREE.Quaternion(), new THREE.Vector3(h * 0.32, h * 0.8, h * 0.32)));
-      pushGeo(leaves, c);
-      canopy(x, z, g + h * 0.25, g + h * 0.55, h * 0.32 * 0.6);
+    const kind = rng.next();
+    const lean = rng.range(-0.08, 0.08);
+    const leanYaw = rng.range(0, Math.PI * 2);
+    if (kind < 0.45) {
+      // conifer
+      limb(M.trunk, x, g - 0.3, z, h * 0.95, 0.24, 0.05, lean, leanYaw);
+      const tiers = 4;
+      for (let t = 0; t < tiers; t++) {
+        const r = h * 0.3 * (1 - t * 0.2);
+        const th = h * (0.42 - t * 0.05);
+        const cy = g + h * 0.28 + t * h * 0.17;
+        const geo = rng.pick(tierShapes).clone();
+        geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x + Math.sin(lean) * cy * 0.1, cy + th / 2, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rng.range(0, 6), 0)), new THREE.Vector3(r, th, r)));
+        pushGeo(leaves, shadeFoliage(geo, cy + th / 2, th));
+      }
+      canopy(x, z, g + h * 0.28, g + h * 0.55, h * 0.3 * 0.6);
+    } else if (kind < 0.86) {
+      // broadleaf: trunk, a few branches, crowns at their ends
+      const top = limb(M.trunk, x, g - 0.3, z, h * 0.62, 0.26, 0.13, lean, leanYaw);
+      const crowns = [top];
+      for (let b = 0; b < rng.int(2, 4); b++) {
+        const yaw = rng.range(0, Math.PI * 2);
+        const by = g + h * rng.range(0.35, 0.55);
+        crowns.push(limb(M.trunk, x, by, z, h * rng.range(0.25, 0.38), 0.11, 0.04, rng.range(0.6, 1.0), yaw));
+      }
+      for (const c of crowns) {
+        const r = h * rng.range(0.16, 0.24);
+        const geo = rng.pick(leafShapes).clone();
+        geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(c.x, c.y + r * 0.3, c.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rng.range(0, 3), rng.range(0, 6), 0)), new THREE.Vector3(r * 1.15, r * 0.85, r * 1.15)));
+        pushGeo(leaves, shadeFoliage(geo, c.y + r * 0.3, r));
+      }
+      canopy(x, z, g + h * 0.5, g + h * 0.75, h * 0.18);
     } else {
-      geoAt(leaves, blobGeo, x, g + h * 0.7, z, rng.range(0, 6), h * 0.32);
-      geoAt(leaves, blobGeo, x + 0.8, g + h * 0.55, z + 0.5, rng.range(0, 6), h * 0.22);
-      canopy(x + 0.8, z + 0.5, g + h * 0.55 - h * 0.22 * 0.8, g + h * 0.55, h * 0.22 * 0.65);
+      // a dead snag: grey, bare, a few broken limbs (decay)
+      const th = h * rng.range(0.55, 0.85);
+      limb(deadWood, x, g - 0.3, z, th, 0.22, 0.06, lean * 2, leanYaw);
+      for (let b = 0; b < rng.int(2, 5); b++) limb(deadWood, x, g + th * rng.range(0.35, 0.85), z, h * rng.range(0.12, 0.3), 0.07, 0.02, rng.range(0.5, 1.2), rng.range(0, Math.PI * 2));
     }
   }
 
@@ -1230,9 +1660,9 @@ export function buildWorld(scene, opts = {}) {
   // through them. Three sizes: low scrub (hides you crouched), shrubs (hide you
   // standing) and thickets.
   const BUSH_SIZES = [
-    { r: 0.75, h: 0.55, count: 320 },
-    { r: 1.2, h: 0.95, count: 240 },
-    { r: 2.0, h: 1.45, count: 90 },
+    { r: 0.75, h: 0.55, count: 430 },
+    { r: 1.2, h: 0.95, count: 300 },
+    { r: 2.0, h: 1.45, count: 110 },
   ];
   const bushes = [];
   for (const size of BUSH_SIZES) {
@@ -1337,39 +1767,93 @@ export function buildWorld(scene, opts = {}) {
   col.addBox({ x: -W - 5, y: -50, z: -W }, { x: -W, y: 200, z: W }, 'wall');
   col.addBox({ x: W, y: -50, z: -W }, { x: W + 5, y: 200, z: W }, 'wall');
 
+  // ---------- dirt paths: worn trails between places, fading out at their ends ----------
+  const trailMask = [];
+  {
+    const roadNear = (x, z) => (Math.abs(z - TOWN.z) < Math.abs(x - TOWN.x) ? [Math.max(TOWN.x - 165, Math.min(TOWN.x + 165, x)), TOWN.z + Math.sign(z - TOWN.z) * 5.5] : [TOWN.x + Math.sign(x - TOWN.x) * 5.5, Math.max(TOWN.z - 165, Math.min(TOWN.z + 165, z))]);
+    const trails = [
+      [[-150, -3], [-152, 20], [-140, 40], [-122, 70], [-112, 95]], // gas station -> the factory's east gate
+      [[-150, 68], [-165, 40], [-180, 10], [-193, -12]], // factory north gate -> West Lift
+      [[148, -4], [156, 25], [160, 50], [164, 68]], // road -> the refinery
+      [[150, 116], [158, 100], [163, 86]], // radio tower -> refinery
+      [[-20, 158], [5, 178], [26, 190]], // road -> South Lift
+      [[-20, -172], [-30, -186], [-38, -192]], // road -> North Lift
+      [[-128, -104], [-124, -60], [-121, -16]], // farmhouse -> road
+      [[110, -52], [108, -30], [110, -15]], // container yard -> road
+      [[40, -138], [10, -125], [-14, -115]], // the crashed hull -> road
+    ];
+    for (const c of campSpots) {
+      const [rx, rz] = roadNear(c.x, c.z);
+      if (Math.hypot(rx - c.x, rz - c.z) < 120) trails.push([[c.x, c.z], [(c.x + rx) / 2 + rng.range(-12, 12), (c.z + rz) / 2 + rng.range(-12, 12)], [rx, rz]]);
+    }
+    // a few that go nowhere in particular
+    for (let i = 0; i < 6; i++) {
+      let x = rng.range(-180, 180);
+      let z = rng.range(-180, 180);
+      const pts = [[x, z]];
+      let a = rng.range(0, Math.PI * 2);
+      for (let k = 0; k < 4; k++) {
+        a += rng.range(-0.7, 0.7);
+        x += Math.cos(a) * rng.range(12, 22);
+        z += Math.sin(a) * rng.range(12, 22);
+        pts.push([x, z]);
+      }
+      trails.push(pts);
+    }
+    scene.add(buildTrails(trails, rng, trailMask));
+  }
+
   // ---------- merge static geometry ----------
   for (const [material, geos] of buckets) {
     const merged = mergeGeometries(geos, false);
-    const mesh = new THREE.Mesh(merged, material);
+    // a copy that reads the grime shading (the original stays usable for loose meshes)
+    const shaded = material.clone();
+    shaded.vertexColors = true;
+    if (M.leaves.includes(material)) addWind(shaded, 'canopy');
+    if (M.campTarp.includes(material)) addWind(shaded, 'cloth');
+    const mesh = new THREE.Mesh(merged, shaded);
     mesh.castShadow = material !== M.glass && material !== M.ivy;
     mesh.receiveShadow = true;
     scene.add(mesh);
     for (const g of geos) g.dispose();
   }
 
-  // ---------- grass tufts (instanced, no collision) ----------
+  // ---------- grass and ferns (instanced, follow the raider, sway in the wind) ----------
+  const foliage = [];
   {
-    const tuft = new THREE.ConeGeometry(0.07, 0.45, 3);
-    tuft.translate(0, 0.22, 0);
-    const count = opts.grass ?? 9000;
-    const grassMesh = new THREE.InstancedMesh(tuft, new THREE.MeshStandardMaterial({ color: 0x8a9147, roughness: 1 }), count);
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const color = new THREE.Color();
-    let n = 0;
-    for (let i = 0; i < count * 2 && n < count; i++) {
-      const x = rng.range(-MAP_HALF, MAP_HALF);
-      const z = rng.range(-MAP_HALF, MAP_HALF);
-      if (Math.abs(z - TOWN.z) < 5.5 || Math.abs(x - TOWN.x) < 5.5) continue;
-      const s = rng.range(0.5, 1.1);
-      q.setFromEuler(new THREE.Euler(rng.range(-0.3, 0.3), rng.range(0, 6), rng.range(-0.3, 0.3)));
-      m.compose(new THREE.Vector3(x, ground(x, z) - 0.05, z), q, new THREE.Vector3(s, s * rng.range(0.7, 1.4), s));
-      grassMesh.setMatrixAt(n, m);
-      grassMesh.setColorAt(n, color.setHSL(0.16 + rng.range(-0.04, 0.05), 0.38, rng.range(0.36, 0.5)));
-      n++;
+    const trailGrid = new Map();
+    for (const t of trailMask) {
+      const k = Math.floor(t[0] / 4) * 1000 + Math.floor(t[1] / 4);
+      if (!trailGrid.has(k)) trailGrid.set(k, []);
+      trailGrid.get(k).push(t);
     }
-    grassMesh.count = n;
-    scene.add(grassMesh);
+    const found = [];
+    const clear = (x, z) => {
+      if (onRoad(x, z, 0.5)) return true;
+      const h = terrainHeight(x, z);
+      // nothing grows on the bare rock of the high ground
+      if (h > 22) return true;
+      const slope = Math.hypot(terrainHeight(x + 1, z) - terrainHeight(x - 1, z), terrainHeight(x, z + 1) - terrainHeight(x, z - 1)) / 2;
+      if (slope > 0.6) return true;
+      // worn trails
+      const kx = Math.floor(x / 4);
+      const kz = Math.floor(z / 4);
+      for (let ix = kx - 1; ix <= kx + 1; ix++) {
+        for (let iz = kz - 1; iz <= kz + 1; iz++) {
+          for (const t of trailGrid.get(ix * 1000 + iz) ?? []) if ((t[0] - x) ** 2 + (t[1] - z) ** 2 < t[2] * t[2]) return true;
+        }
+      }
+      // floors, slabs, rocks: anything sitting on the ground here
+      for (const bx of col.query(x, z, x, z, found)) {
+        if (x > bx.min.x && x < bx.max.x && z > bx.min.z && z < bx.max.z && bx.min.y < h + 0.4 && bx.max.y > h - 0.3) return true;
+      }
+      return false;
+    };
+    // quality.grass sets the density: Low 2500, Medium 5000, High 9000
+    const density = (opts.grass ?? 9000) / 9000;
+    const radius = 5;
+    foliage.push(new GrassField(scene, { perCell: Math.round(60 + density * 240), radius, clear }));
+    foliage.push(new GrassField(scene, { perCell: Math.round(8 + density * 16), radius, clear, kind: 'fern' }));
   }
 
   // distant mountains for a horizon silhouette
@@ -1393,13 +1877,207 @@ export function buildWorld(scene, opts = {}) {
     if (!c.y) c.y = col.groundHeight(c.x, c.z, 100, 0.3, 0);
   }
 
-  return { collision: col, containers, enemySpawns, extractions, insertions, lights, infraSites, sightCover: new SightCover(bushes), town: TOWN };
+  return { collision: col, containers, enemySpawns, extractions, insertions, lights, infraSites, sightCover: new SightCover(bushes), town: TOWN, foliage };
+}
+
+// Dirt trails: soft-edged ribbons draped over the terrain, wandering a little,
+// patchy, and fading out over their first and last stretch.
+// trailMask (optional) collects [x, z, halfWidth] along each trail so grass keeps off it.
+function buildTrails(trails, rng, trailMask) {
+  const pos = [];
+  const colors = [];
+  const index = [];
+  for (const pts of trails) {
+    const curve = new THREE.CatmullRomCurve3(pts.map(([x, z]) => new THREE.Vector3(x, 0, z)));
+    const len = curve.getLength();
+    const n = Math.max(4, Math.round(len / 1.2));
+    const width = rng.range(0.9, 1.5);
+    const fade = Math.min(14, len * 0.3);
+    const base = pos.length / 3;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const p = curve.getPointAt(t);
+      const tan = curve.getTangentAt(t);
+      // wander side to side a little
+      const wob = (noise3(p.x * 0.08, 0, p.z * 0.08) - 0.5) * 1.6;
+      const nx = -tan.z;
+      const nz = tan.x;
+      const cx = p.x + nx * wob;
+      const cz = p.z + nz * wob;
+      const w = width * (0.75 + noise3(p.x * 0.3, 5, p.z * 0.3) * 0.5);
+      if (trailMask) trailMask.push([cx, cz, w * 0.7]);
+      const d = t * len;
+      const ends = Math.min(1, d / fade, (len - d) / fade);
+      const alpha = Math.max(0, ends) * (0.7 + noise3(p.x * 0.5, 9, p.z * 0.5) * 0.3);
+      for (const [o, a] of [[-1.35, 0], [-0.75, alpha * 0.7], [0.75, alpha * 0.7], [1.35, 0]]) {
+        const x = cx + nx * w * o;
+        const z = cz + nz * w * o;
+        pos.push(x, terrainHeight(x, z) + 0.1, z);
+        const tone = 0.9 + noise3(x * 0.9, 2, z * 0.9) * 0.2;
+        colors.push(tone, tone, tone, a);
+      }
+      if (i > 0) {
+        const r0 = base + (i - 1) * 4;
+        const r1 = base + i * 4;
+        for (let k = 0; k < 3; k++) index.push(r0 + k, r1 + k, r0 + k + 1, r0 + k + 1, r1 + k, r1 + k + 1);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
+  geo.setIndex(index);
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(pos.length).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x5e4a35, vertexColors: true, transparent: true, depthWrite: false, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  mesh.receiveShadow = true;
+  mesh.renderOrder = 1;
+  return mesh;
+}
+
+// The GAS lettering along the canopy edge, faded.
+function gasSign(scene, x, y, z) {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#c4672f';
+  g.fillRect(0, 0, 512, 64);
+  g.fillStyle = '#f4ead8';
+  g.font = '800 46px "Barlow Condensed", Arial, sans-serif';
+  g.textAlign = 'center';
+  g.fillText('DUSTLINE  FUEL  ·  GAS  ·  DIESEL', 256, 48);
+  g.fillStyle = 'rgba(60,40,20,0.35)';
+  for (let i = 0; i < 30; i++) g.fillRect(Math.random() * 512, 0, 2 + Math.random() * 10, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(10.6, 0.66), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 }));
+  m.position.set(x, y, z);
+  scene.add(m);
+}
+
+// A tall roadside price board with a few numbers fallen off.
+function priceSign(scene, x, y, z) {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 320;
+  const g = c.getContext('2d');
+  g.fillStyle = '#1d1c1a';
+  g.fillRect(0, 0, 256, 320);
+  g.fillStyle = '#c4672f';
+  g.fillRect(0, 0, 256, 70);
+  g.fillStyle = '#f4ead8';
+  g.textAlign = 'center';
+  g.font = '800 54px "Barlow Condensed", Arial, sans-serif';
+  g.fillText('FUEL', 128, 54);
+  g.font = '700 40px "Barlow Condensed", Arial, sans-serif';
+  [['REG', '9.  9'], ['DSL', '  .49'], ['RATION', '— —']].forEach(([a, b], i) => {
+    g.textAlign = 'left';
+    g.fillText(a, 18, 130 + i * 70);
+    g.textAlign = 'right';
+    g.fillStyle = '#f2c14e';
+    g.fillText(b, 238, 130 + i * 70);
+    g.fillStyle = '#f4ead8';
+  });
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(2.4, 3, 0.25), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }));
+  m.position.set(x, y, z);
+  m.rotation.y = Math.PI / 2;
+  scene.add(m);
+}
+
+// A street sign on a pole, faded and rust-spotted. lean: how far it's bent over.
+function streetSign(scene, kind, x, y, z, facing, lean, rng) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const paint = (fill, stroke) => {
+    g.fillStyle = fill;
+    g.fill();
+    g.lineWidth = 6;
+    g.strokeStyle = stroke;
+    g.stroke();
+  };
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.font = '800 30px "Barlow Condensed", Arial, sans-serif';
+  if (kind === 'stop' || kind === 'noentry') {
+    g.beginPath();
+    for (let i = 0; i < 8; i++) g.lineTo(64 + Math.cos((i / 8) * Math.PI * 2 + Math.PI / 8) * 58, 64 + Math.sin((i / 8) * Math.PI * 2 + Math.PI / 8) * 58);
+    g.closePath();
+    paint('#a8281e', '#e8e0d0');
+    if (kind === 'noentry') {
+      g.fillStyle = '#e8e0d0';
+      g.fillRect(28, 56, 72, 16);
+    } else {
+      g.fillStyle = '#e8e0d0';
+      g.fillText('STOP', 64, 66);
+    }
+  } else if (kind === 'warning' || kind === 'curve') {
+    g.beginPath();
+    g.moveTo(64, 6);
+    g.lineTo(122, 64);
+    g.lineTo(64, 122);
+    g.lineTo(6, 64);
+    g.closePath();
+    paint('#d8a830', '#1d1c1a');
+    g.fillStyle = '#1d1c1a';
+    g.font = '800 54px "Barlow Condensed", Arial, sans-serif';
+    g.fillText(kind === 'curve' ? '↱' : '!', 64, 68);
+  } else {
+    g.beginPath();
+    g.rect(10, 6, 108, 116);
+    paint(kind === 'distance' ? '#2f6a4a' : '#e8e0d0', '#1d1c1a');
+    g.fillStyle = kind === 'distance' ? '#e8e0d0' : '#1d1c1a';
+    if (kind === 'speed') {
+      g.font = '700 20px "Barlow Condensed", Arial, sans-serif';
+      g.fillText('SPEED LIMIT', 64, 28);
+      g.font = '800 54px "Barlow Condensed", Arial, sans-serif';
+      g.fillText(rng.pick(['30', '45', '55']), 64, 78);
+    } else {
+      g.font = '700 22px "Barlow Condensed", Arial, sans-serif';
+      g.fillText('DUSTLINE', 64, 38);
+      g.fillText(`${rng.int(2, 40)} km`, 64, 66);
+      g.fillText('LIFT ▸', 64, 94);
+    }
+  }
+  // fade, rust spots and grime
+  g.globalCompositeOperation = 'source-atop';
+  g.fillStyle = 'rgba(200,190,170,0.25)';
+  g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 40; i++) {
+    g.fillStyle = `rgba(${110 + Math.random() * 40},60,30,${0.2 + Math.random() * 0.5})`;
+    g.beginPath();
+    g.arc(Math.random() * 128, Math.random() * 128, 1 + Math.random() * 6, 0, Math.PI * 2);
+    g.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const group = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.4, 6), new THREE.MeshStandardMaterial({ color: 0x6b6f72, metalness: 0.6, roughness: 0.6 }));
+  pole.position.y = 1.2;
+  group.add(pole);
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), new THREE.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, metalness: 0.2 }));
+  plate.position.set(0, 2.2, 0.05);
+  group.add(plate);
+  group.position.set(x, y, z);
+  group.rotation.set(0, facing, 0);
+  group.rotateZ(lean); // bent over by a car, or by years of wind
+  scene.add(group);
 }
 
 // Bushes are drawn as clumps of a few leafy blobs, all in one instanced mesh.
 function buildBushes(scene, bushes, rng) {
-  const geo = new THREE.IcosahedronGeometry(1, 1);
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true });
+  // a ragged leafy blob, darker underneath (vertex colours x each instance's colour)
+  const geo = displace(new THREE.IcosahedronGeometry(1, 2), 0.38, 2.4, 7.7);
+  const p = geo.attributes.position;
+  const shade = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const k = 0.55 + 0.45 * Math.max(0, Math.min(1, p.getY(i) * 0.6 + 0.5)) - noise3(p.getX(i) * 4, p.getY(i) * 4, p.getZ(i) * 4) * 0.15;
+    shade[i * 3] = shade[i * 3 + 1] = shade[i * 3 + 2] = k;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(shade, 3));
+  const mat = addWind(new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true, vertexColors: true }), 'bush');
   const mesh = new THREE.InstancedMesh(geo, mat, bushes.length * 3);
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
@@ -1513,13 +2191,33 @@ function networkBoard(scene, [line1, line2], x, y, z, facing) {
   g.fillStyle = '#5a554c';
   g.font = '600 38px "Barlow Condensed", "Arial Narrow", sans-serif';
   g.fillText(line2, 228, 172, 770);
+  // years of weather: water stains running down, and paper torn away in patches
+  for (let i = 0; i < 26; i++) {
+    const sx = Math.random() * 1024;
+    const grad = g.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, 'rgba(70,52,30,0)');
+    grad.addColorStop(1, `rgba(70,52,30,${0.12 + Math.random() * 0.2})`);
+    g.fillStyle = grad;
+    g.fillRect(sx, Math.random() * 120, 6 + Math.random() * 30, 256);
+  }
+  for (let i = 0; i < 5; i++) {
+    g.beginPath();
+    const tx = Math.random() * 1024;
+    const ty = Math.random() < 0.5 ? 0 : 256;
+    g.moveTo(tx, ty);
+    for (let k = 0; k < 7; k++) g.lineTo(tx + (Math.random() - 0.3) * 140, ty + (ty ? -1 : 1) * Math.random() * 110);
+    g.closePath();
+    g.globalCompositeOperation = 'destination-out';
+    g.fill();
+    g.globalCompositeOperation = 'source-over';
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   const R = 9;
   const arc = 5.6 / R;
   const geo = new THREE.CylinderGeometry(R, R, 1.6, 18, 1, true, -arc / 2, arc);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.12 }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.12, alphaTest: 0.5, side: THREE.DoubleSide }));
   // the cylinder's axis sits behind the board so its outside faces the road
   mesh.position.set(x - Math.sin(facing) * R, y + 3.1, z - Math.cos(facing) * R);
   mesh.rotation.y = facing;
