@@ -145,11 +145,12 @@ Players sign in with a username and password. On the Claude page:
   page's owner, can read or change it.
 - `registry/<Claude id>` lists the usernames each person has claimed, so names
   stay unique. Everyone can read it; each person can only write their own.
-- `admin/*` (Field Bulletin posts, suspended usernames) can only be written by
-  the page's owner.
-- **Poqui** is the only admin account: the name is reserved for the page's
-  owner, and the Admin tab only appears when Poqui is signed in on the owner's
-  Claude login.
+- `admin/*` (who the admin is, Field Bulletin posts, suspended usernames) can
+  only be written by the page's owner.
+- **The first account created on the page is the admin.** `admin/meta` records
+  it, and since only the page's owner can write that record, the first
+  account the owner creates becomes the one admin. The Admin tab only appears
+  for that account on that Claude login.
 - Five wrong passwords lock sign-in for a minute (doubling each time), wrong
   usernames and wrong passwords give the same message, saves are clamped to
   values the game can produce when loaded, and release builds don't expose the

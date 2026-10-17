@@ -11,7 +11,7 @@ export const VERSION = '0.6';
 
 // Newest first. Shown in the Field Bulletin.
 const BULLETIN = [
-  { tag: 'New', title: 'Account security', body: 'Your account and save are private to your Claude login. Change your password in Settings.' },
+  { tag: 'New', title: 'Account security', body: 'Your account and save are private to your Claude login. Change your password in Settings. The first account made here is the admin.' },
   { tag: 'New', title: 'Raider accounts', body: 'Sign in with a username and password. On the Claude page your progress follows you between PC and phone.' },
   { tag: 'New', title: 'Item menus', body: 'Right-click (or hold on a phone) any item to sell, move or repair it.' },
   { tag: 'New', title: 'Title screen', body: 'The game now opens here instead of dropping you straight into your loadout.' },
@@ -187,7 +187,7 @@ export function renderLogin(ui) {
       return;
     }
     Audio.playChime();
-    ui.signedIn(res.profile, res.imported);
+    ui.signedIn(res.profile);
   });
 
   // connect to storage, then try the remembered session
@@ -197,7 +197,7 @@ export function renderLogin(ui) {
       : 'Accounts are saved in this browser only.';
     const resumed = await resumeSession();
     if (resumed) {
-      ui.signedIn(resumed.profile, false);
+      ui.signedIn(resumed.profile);
       return;
     }
     ready = true;

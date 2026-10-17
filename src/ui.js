@@ -12,7 +12,7 @@ import { MAP_HALF } from './collision.js';
 import * as Audio from './audio.js';
 import { QUALITY, getQualityName, setQualityName } from './settings.js';
 import { renderHome, renderLogin } from './home.js';
-import { signOut, currentUser, isAdmin, storageKind, changePassword, passwordProblem, adminData, adminSetBans, adminSetBulletin, ADMIN_NAME } from './accounts.js';
+import { signOut, currentUser, isAdmin, storageKind, changePassword, passwordProblem, adminData, adminSetBans, adminSetBulletin, adminName } from './accounts.js';
 
 // Fullscreen + landscape on phones (Android honours the orientation lock; on
 // iPhone, add the game to the home screen for fullscreen).
@@ -1548,9 +1548,8 @@ export class UI {
     this.menus.appendChild(renderLogin(this));
   }
 
-  signedIn(profile, imported) {
+  signedIn(profile) {
     this.game.useProfile(profile);
-    if (imported) setTimeout(() => this.notifyHub('Your progress from this browser was moved into your new account.'), 400);
   }
 
   async signOut() {
@@ -1614,7 +1613,7 @@ export class UI {
       return item;
     };
     const players = col.querySelector('.players');
-    for (const n of data.players) players.appendChild(li(n + (n === ADMIN_NAME.toLowerCase() ? ' (admin)' : ''), null));
+    for (const n of data.players) players.appendChild(li(n + (n === adminName() ? ' (admin)' : ''), null));
     if (!data.players.length) players.appendChild(li('No players yet.'));
     const renderBans = () => {
       const ul = col.querySelector('.bans');
@@ -1633,7 +1632,7 @@ export class UI {
       e.preventDefault();
       const input = col.querySelector('#ban-name');
       const n = input.value.trim().toLowerCase();
-      if (!n || n === ADMIN_NAME.toLowerCase() || data.bans.includes(n)) return;
+      if (!n || n === adminName() || data.bans.includes(n)) return;
       data.bans.push(n);
       await adminSetBans(data.bans);
       input.value = '';

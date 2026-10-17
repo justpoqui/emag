@@ -8,24 +8,27 @@
 //  - registry/<Claude id> lists the usernames that person has claimed, so
 //    names stay unique. Everyone can read it; each person can only write
 //    their own entry.
-//  - admin/* (bulletin, bans) can only be written by the page's owner.
-//  - The admin account is "Poqui", and it is only admin when the viewer is
-//    the page's owner, which the platform verifies.
+//  - admin/* (who the admin is, bulletin, bans) can only be written by the
+//    page's owner.
+//  - The admin is the first account created on the page. admin/meta records
+//    it, and only the page's owner can write that record, so the first
+//    account the owner creates becomes the one and only admin.
 //
 // Off the Claude page (GitHub Pages, local dev) there is no server, so
 // accounts live in this browser's storage and there is no admin.
 //
 // Passwords are never stored: only a salted PBKDF2-SHA256 hash.
 
-import { normalizeProfile, blankProfile, takeLegacySave, setSaver } from './inventory.js';
+import { normalizeProfile, blankProfile, setSaver } from './inventory.js';
 
-export const ADMIN_NAME = 'Poqui';
-const ADMIN_KEY = ADMIN_NAME.toLowerCase();
 
 const LOCAL_ACCOUNTS = 'scrapfall_accounts_v1';
 const LOCAL_SAVE = 'scrapfall_acct_';
-const SESSION = 'scrapfall_session_v2';
-const THROTTLE = 'scrapfall_login_throttle';
+const SESSION = 'scrapfall_session_v3';
+// Storage from earlier versions, cleared on start (old accounts, sessions,
+// pre-account saves).
+const OLD_KEYS = ['scrapfall_accounts_v1', 'scrapfall_session_v1', 'scrapfall_session_v2', 'scrapfall_save_v1', 'scrapfall_login_throttle'];
+const THROTTLE = 'scrapfall_login_throttle_v2';
 const ITERATIONS = 150000;
 // Older records didn't store their iteration count; these are the counts
 // earlier versions used.
@@ -139,9 +142,6 @@ function clearFailures() {
 function localBackend() {
   return {
     kind: 'local',
-    async ownerCheck() {
-      return false;
-    },
     async getAccount(key) {
       return readLocal(LOCAL_ACCOUNTS, {})[key] || null;
     },
@@ -176,15 +176,12 @@ function localBackend() {
   };
 }
 
-function cloudBackend(db, user, uid) {
+function cloudBackend(db, uid) {
   const mine = (doc) => db.doc(`data/users/${uid}/${doc}`);
   const registry = db.collection('registry');
   return {
     kind: 'cloud',
     uid,
-    async ownerCheck() {
-      return user ? user.isOwner() : false;
-    },
     async getAccount(key) {
       const snap = await mine(`acct-${key}`).get();
       return snap.exists ? { ...snap.data() } : null;
@@ -236,6 +233,16 @@ function cloudBackend(db, user, uid) {
   };
 }
 
+// Old browser-stored accounts and saves from earlier versions are removed.
+function clearOldStorage() {
+  try {
+    for (const k of OLD_KEYS) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage)) if (k.startsWith(LOCAL_SAVE)) localStorage.removeItem(k);
+  } catch (err) {
+    // storage blocked: nothing to clear
+  }
+}
+
 // Pick the backend: the page's database inside the Claude viewer, else this browser.
 export async function connect() {
   if (backend) return backend.kind;
@@ -249,7 +256,8 @@ export async function connect() {
     db = null;
   }
   const uid = user ? await user.id() : null;
-  backend = db && uid ? cloudBackend(db, user, uid) : localBackend();
+  backend = db && uid ? cloudBackend(db, uid) : localBackend();
+  if (backend.kind === 'cloud') clearOldStorage();
   return backend.kind;
 }
 
@@ -324,7 +332,9 @@ function remember(on) {
 
 async function finishSignIn(account, keep) {
   const key = keyFor(account.username);
-  const admin = key === ADMIN_KEY && (await backend.ownerCheck());
+  const meta = backend.kind === 'cloud' ? await backend.readAdmin('meta').catch(() => null) : null;
+  if (meta && meta.adminKey) adminKeyCache = meta.adminKey;
+  const admin = !!(meta && meta.adminKey === key && meta.adminUid === backend.uid);
   current = { key, username: account.username, hash: account.hash, salt: account.salt, iter: account.iter, created: account.created, admin };
   remember(keep);
   const saved = await backend.loadSave(key);
@@ -332,13 +342,37 @@ async function finishSignIn(account, keep) {
 }
 
 async function bannedName(key) {
-  if (key === ADMIN_KEY) return false;
+  if (key === adminKeyCache) return false;
   try {
     const bans = await backend.readAdmin('bans');
     return !!(bans && Array.isArray(bans.names) && bans.names.includes(key));
   } catch (err) {
     return false;
   }
+}
+
+// The first account created on the page becomes the admin. Only the page's
+// owner can write admin/meta, so an account someone else creates first is
+// simply not recorded and the owner's first account takes the role.
+let adminKeyCache = null;
+
+async function claimAdminIfFirst(key) {
+  if (backend.kind !== 'cloud') return;
+  try {
+    const meta = await backend.readAdmin('meta');
+    if (meta && meta.adminKey) {
+      adminKeyCache = meta.adminKey;
+      return;
+    }
+    await backend.writeAdmin('meta', { adminKey: key, adminUid: backend.uid, since: Date.now() });
+    adminKeyCache = key;
+  } catch (err) {
+    // not the page owner: no admin record for this account
+  }
+}
+
+export function adminName() {
+  return adminKeyCache;
 }
 
 function lockMessage() {
@@ -352,7 +386,6 @@ export async function createAccount(username, password, keep) {
   if (!USERNAME_RULE.test(username)) return { error: 'Usernames are 3–16 letters, numbers or underscores.' };
   const problem = passwordProblem(password);
   if (problem) return { error: problem };
-  if (key === ADMIN_KEY && !(await backend.ownerCheck())) return { error: 'That username is reserved.' };
   if (await bannedName(key)) return { error: 'That username is not available.' };
   const record = await newRecord(username, password);
   let ok;
@@ -363,35 +396,11 @@ export async function createAccount(username, password, keep) {
     return { error: 'Could not create the account. Check your connection and try again.' };
   }
   if (!ok) return { error: 'That username is taken.' };
-  const legacy = takeLegacySave();
+  await claimAdminIfFirst(key);
   const profile = await finishSignIn(record, keep);
-  const start = legacy || profile;
-  queueSave(start);
+  queueSave(profile);
   await flushNow();
-  return { profile: start, imported: !!legacy };
-}
-
-async function migrateLocalAccount(key, username, password) {
-  const all = readLocal(LOCAL_ACCOUNTS, {});
-  const old = all[key];
-  if (!old || !(await verify(password, old))) return null;
-  if (key === ADMIN_KEY && !(await backend.ownerCheck())) return null;
-  const record = await newRecord(old.username || username, password, old.created);
-  try {
-    if (!(await backend.createAccount(key, record))) return null;
-  } catch (err) {
-    return null;
-  }
-  const save = readLocal(LOCAL_SAVE + key, null);
-  if (save) await backend.writeSave(key, JSON.stringify(save));
-  delete all[key];
-  writeLocal(LOCAL_ACCOUNTS, all);
-  try {
-    localStorage.removeItem(LOCAL_SAVE + key);
-  } catch (err) {
-    // ignore
-  }
-  return record;
+  return { profile };
 }
 
 export async function signIn(username, password, keep) {
@@ -402,12 +411,6 @@ export async function signIn(username, password, keep) {
     account = await backend.getAccount(key);
   } catch (err) {
     return { error: 'Could not reach the save server. Check your connection and try again.' };
-  }
-  // An account made before the move to private cloud storage is still in
-  // this browser: move it (and its save) over when its password checks out.
-  if (!account && backend.kind === 'cloud') {
-    const moved = await migrateLocalAccount(key, username.trim(), password);
-    if (moved) account = moved;
   }
   // Same message and same work for a missing account as for a wrong
   // password, so the login form can't be used to find out which names exist.
@@ -503,7 +506,7 @@ export async function adminData() {
 
 export async function adminSetBans(names) {
   if (!isAdmin()) return false;
-  await backend.writeAdmin('bans', { names: names.filter((n) => n !== ADMIN_KEY) });
+  await backend.writeAdmin('bans', { names: names.filter((n) => n !== adminKeyCache) });
   return true;
 }
 

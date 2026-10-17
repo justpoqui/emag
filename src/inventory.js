@@ -2,7 +2,6 @@
 
 import { ITEMS, BAG_SLOTS, SAFE_SLOTS, STASH_SLOTS, START_CREDITS, stackSize, FREE_KIT, MAX_DURABILITY, isDurable } from './config.js';
 
-const SAVE_KEY = 'scrapfall_save_v1';
 
 export function makeStack(id, n = 1) {
   const item = ITEMS[id];
@@ -131,18 +130,6 @@ function sanitize(p) {
   // drop any keys the game doesn't use
   for (const k of Object.keys(p)) if (!['credits', 'stash', 'loadout', 'stats', 'level', 'xp', 'inRaid'].includes(k)) delete p[k];
   for (const k of Object.keys(lo)) if (!['weapons', 'shield', 'bag', 'safe'].includes(k)) delete lo[k];
-}
-
-// The progress this browser kept before accounts existed, if any.
-export function takeLegacySave() {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    localStorage.removeItem(SAVE_KEY);
-    return normalizeProfile(JSON.parse(raw));
-  } catch (err) {
-    return null;
-  }
 }
 
 function fitArray(arr, size) {
