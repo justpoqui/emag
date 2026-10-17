@@ -1,5 +1,5 @@
 // Builds the topside map: terrain, ruined town, container yard, pylons, the
-// crashed ARC hull, extraction lifts, loot containers and ARC spawn points.
+// crashed Husk hull, extraction lifts, loot containers and Husk spawn points.
 // Static geometry is merged per material to keep draw calls low.
 
 import * as THREE from 'three';
@@ -40,8 +40,8 @@ export function buildWorld(scene, opts = {}) {
     trunk: mat(0x4a3a2a),
     leaves: [mat(0x5f7a35, { flatShading: true }), mat(0x6f8a3a, { flatShading: true }), mat(0x4e6b30, { flatShading: true })],
     ivy: mat(0x4f6e2c, { flatShading: true }),
-    arcHull: mat(0x6a7178, { roughness: 0.5, metalness: 0.55 }),
-    arcGlow: new THREE.MeshStandardMaterial({ color: 0xff6a20, emissive: 0xff5a10, emissiveIntensity: 2.5 }),
+    huskHull: mat(0x6a7178, { roughness: 0.5, metalness: 0.55 }),
+    huskGlow: new THREE.MeshStandardMaterial({ color: 0xff6a20, emissive: 0xff5a10, emissiveIntensity: 2.5 }),
     liftGlow: new THREE.MeshStandardMaterial({ color: 0x40ffd0, emissive: 0x30ffc0, emissiveIntensity: 2 }),
     stripe: mat(0xe8b830),
     tarp: [mat(0xd2672f), mat(0x2f8f8a), mat(0xd8b54a)],
@@ -245,14 +245,14 @@ export function buildWorld(scene, opts = {}) {
   }
   const plaza = { x: TOWN.x + 32, z: TOWN.z + 32 };
   for (const lot of lots) {
-    if (Math.hypot(lot.x - plaza.x, lot.z - plaza.z) < 20) continue; // keep the Bastion plaza open
+    if (Math.hypot(lot.x - plaza.x, lot.z - plaza.z) < 20) continue; // keep the Warden plaza open
     const w = rng.int(8, 12);
     const d = rng.int(8, 12);
     const floors = Math.max(1, Math.round(rng.range(1, 4.2) - lot.dist * 0.35));
     building(lot.x + rng.range(-1, 1), lot.z + rng.range(-1, 1), w, d, floors);
   }
 
-  // Bastion plaza: a fountain ring and broken statues
+  // Warden plaza: a fountain ring and broken statues
   {
     const g = ground(plaza.x, plaza.z);
     for (let i = 0; i < 12; i++) {
@@ -261,9 +261,9 @@ export function buildWorld(scene, opts = {}) {
     }
     box(M.concrete, plaza.x, g + 1.4, plaza.z, 1.2, 2.8, 1.2);
     box(M.metal, plaza.x, g + 3.2, plaza.z, 0.6, 1.2, 0.6, { collide: false });
-    enemySpawns.push({ type: 'bastion', x: plaza.x, z: plaza.z + 10, radius: 20 });
+    enemySpawns.push({ type: 'warden', x: plaza.x, z: plaza.z + 10, radius: 20 });
     addContainer('weapon_case', plaza.x + 2, g, plaza.z - 2);
-    addContainer('arc_probe', plaza.x - 3, g, plaza.z + 3);
+    addContainer('husk_pod', plaza.x - 3, g, plaza.z + 3);
   }
 
   // ---------- road props: cars, barriers, lamp posts ----------
@@ -335,11 +335,11 @@ export function buildWorld(scene, opts = {}) {
         const rot = rng.range(-0.06, 0.06);
         box(m, x + rng.range(-0.3, 0.3), g + 1.3 + s * 2.6, z, 6, 2.6, 2.5, { rotY: rot, tag: 'metal' });
       }
-      if (rng.chance(0.35)) addContainer(rng.pick(['crate', 'weapon_case', 'arc_probe']), x, g, z + 2.2);
+      if (rng.chance(0.35)) addContainer(rng.pick(['crate', 'weapon_case', 'husk_pod']), x, g, z + 2.2);
     }
   }
-  enemySpawns.push({ type: 'leaper', x: yard.x + 14, z: yard.z + 15, radius: 22 });
-  enemySpawns.push({ type: 'tick', x: yard.x + 10, z: yard.z - 8, radius: 14, count: 4 });
+  enemySpawns.push({ type: 'pouncer', x: yard.x + 14, z: yard.z + 15, radius: 22 });
+  enemySpawns.push({ type: 'skitter', x: yard.x + 10, z: yard.z - 8, radius: 14, count: 4 });
   // gantry crane
   {
     const g = ground(yard.x + 14, yard.z + 14);
@@ -367,7 +367,7 @@ export function buildWorld(scene, opts = {}) {
     building(x, z + 16, 12, 8, 1, { ruin: 0.1 });
     addContainer('medical', x + 3, g + 0.25, z - 2);
     addContainer('crate', x - 6, g + 0.25, z + 3);
-    enemySpawns.push({ type: 'pop', x, z, radius: 18, count: 3 });
+    enemySpawns.push({ type: 'skitter', x, z, radius: 18, count: 3 });
   }
 
   // ---------- farmhouse + fields (north west) ----------
@@ -388,11 +388,11 @@ export function buildWorld(scene, opts = {}) {
       const hz = z + rng.range(26, 40);
       box(M.tarp[2], hx, ground(hx, hz) + 0.6, hz, 1.6, 1.2, 1.2, { rotY: rng.range(0, 3) });
     }
-    enemySpawns.push({ type: 'snitch', x: x + 10, z: z + 30, radius: 30 });
-    enemySpawns.push({ type: 'tick', x: x + 5, z: z + 5, radius: 15, count: 3 });
+    enemySpawns.push({ type: 'watcher', x: x + 10, z: z + 30, radius: 30 });
+    enemySpawns.push({ type: 'skitter', x: x + 5, z: z + 5, radius: 15, count: 3 });
   }
 
-  // ---------- crashed ARC hull (north) ----------
+  // ---------- crashed Husk hull (north) ----------
   {
     const hx = 40;
     const hz = -150;
@@ -401,7 +401,7 @@ export function buildWorld(scene, opts = {}) {
     const ringG = ring.clone();
     ringG.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0.4, 0.6, 0.15)));
     ringG.translate(hx, g + 8, hz);
-    pushGeo(M.arcHull, ringG);
+    pushGeo(M.huskHull, ringG);
     // approximate collision with boxes around the ring's lower half
     for (let i = 0; i < 20; i++) {
       const a = (i / 20) * Math.PI * 2;
@@ -411,20 +411,20 @@ export function buildWorld(scene, opts = {}) {
       col.addBox({ x: hx + p.x - 2.6, y: Math.max(g - 2, y - 2.6), z: hz + p.z - 2.6 }, { x: hx + p.x + 2.6, y: y + 2.6, z: hz + p.z + 2.6 }, 'metal');
     }
     // hull spine
-    box(M.arcHull, hx - 20, g + 2, hz + 12, 6, 5, 26, { rotY: 0.6, rotZ: 0.2, tag: 'metal' });
-    box(M.arcHull, hx + 18, g + 1.5, hz - 14, 5, 4, 18, { rotY: -0.4, tag: 'metal' });
+    box(M.huskHull, hx - 20, g + 2, hz + 12, 6, 5, 26, { rotY: 0.6, rotZ: 0.2, tag: 'metal' });
+    box(M.huskHull, hx + 18, g + 1.5, hz - 14, 5, 4, 18, { rotY: -0.4, tag: 'metal' });
     for (let i = 0; i < 6; i++) {
       const vx = hx + rng.range(-22, 22);
       const vz = hz + rng.range(-16, 16);
-      box(M.arcGlow, vx, ground(vx, vz) + 0.5, vz, 0.6, 1, 0.6, { collide: false });
+      box(M.huskGlow, vx, ground(vx, vz) + 0.5, vz, 0.6, 1, 0.6, { collide: false });
     }
     const glow = new THREE.PointLight(0xff6a20, 40, 40, 2);
     glow.position.set(hx, g + 4, hz);
     scene.add(glow);
     lights.push(glow);
-    for (let i = 0; i < 4; i++) addContainer('arc_probe', hx + rng.range(-14, 14), 0, hz + rng.range(-10, 10));
-    enemySpawns.push({ type: 'wasp', x: hx, z: hz + 20, radius: 25, count: 2 });
-    enemySpawns.push({ type: 'tick', x: hx - 10, z: hz + 8, radius: 15, count: 3 });
+    for (let i = 0; i < 4; i++) addContainer('husk_pod', hx + rng.range(-14, 14), 0, hz + rng.range(-10, 10));
+    enemySpawns.push({ type: 'buzzer', x: hx, z: hz + 20, radius: 25, count: 2 });
+    enemySpawns.push({ type: 'skitter', x: hx - 10, z: hz + 8, radius: 15, count: 3 });
   }
 
   // ---------- power pylons with cables ----------
@@ -471,21 +471,21 @@ export function buildWorld(scene, opts = {}) {
     scene.add(beacon);
     building(x + 10, z - 6, 8, 8, 1, { ruin: 0.05 });
     addContainer('weapon_case', x + 10, g, z - 6);
-    enemySpawns.push({ type: 'wasp', x, z, radius: 30, count: 2 });
-    enemySpawns.push({ type: 'snitch', x: x - 30, z: z - 20, radius: 30 });
+    enemySpawns.push({ type: 'buzzer', x, z, radius: 30, count: 2 });
+    enemySpawns.push({ type: 'watcher', x: x - 30, z: z - 20, radius: 30 });
   }
 
-  // ---------- scattered ARC probes and camps ----------
+  // ---------- scattered Husk probes and camps ----------
   for (let i = 0; i < 10; i++) {
     const x = rng.range(-190, 190);
     const z = rng.range(-190, 190);
     if (Math.hypot(x - TOWN.x, z - TOWN.z) < 90) continue;
     const g = ground(x, z);
     // probe pod half-buried
-    box(M.arcHull, x, g + 0.5, z, 1.4, 1.4, 2.2, { rotY: rng.range(0, 3), rotX: 0.3, tag: 'metal' });
-    box(M.arcGlow, x, g + 1.3, z, 0.25, 0.25, 0.25, { collide: false });
-    addContainer('arc_probe', x + 1.6, g, z);
-    if (rng.chance(0.6)) enemySpawns.push({ type: rng.pick(['tick', 'pop', 'wasp']), x, z, radius: 16, count: rng.int(1, 3) });
+    box(M.huskHull, x, g + 0.5, z, 1.4, 1.4, 2.2, { rotY: rng.range(0, 3), rotX: 0.3, tag: 'metal' });
+    box(M.huskGlow, x, g + 1.3, z, 0.25, 0.25, 0.25, { collide: false });
+    addContainer('husk_pod', x + 1.6, g, z);
+    if (rng.chance(0.6)) enemySpawns.push({ type: rng.pick(['skitter', 'skitter', 'buzzer']), x, z, radius: 16, count: rng.int(1, 3) });
   }
   // raider camps with tarps
   for (let i = 0; i < 6; i++) {
@@ -602,13 +602,13 @@ export function buildWorld(scene, opts = {}) {
     insertions.push({ x, z });
   }
 
-  // ---------- town ARC presence ----------
-  enemySpawns.push({ type: 'tick', x: TOWN.x - 30, z: TOWN.z + 30, radius: 20, count: 3 });
-  enemySpawns.push({ type: 'pop', x: TOWN.x + 40, z: TOWN.z - 30, radius: 20, count: 2 });
-  enemySpawns.push({ type: 'wasp', x: TOWN.x - 40, z: TOWN.z - 40, radius: 25, count: 2 });
-  enemySpawns.push({ type: 'snitch', x: TOWN.x, z: TOWN.z, radius: 50 });
-  enemySpawns.push({ type: 'wasp', x: TOWN.x + 60, z: TOWN.z + 60, radius: 25, count: 1 });
-  enemySpawns.push({ type: 'tick', x: TOWN.x + 50, z: TOWN.z - 70, radius: 20, count: 3 });
+  // ---------- town Husk presence ----------
+  enemySpawns.push({ type: 'skitter', x: TOWN.x - 30, z: TOWN.z + 30, radius: 20, count: 3 });
+  enemySpawns.push({ type: 'skitter', x: TOWN.x + 40, z: TOWN.z - 30, radius: 20, count: 2 });
+  enemySpawns.push({ type: 'buzzer', x: TOWN.x - 40, z: TOWN.z - 40, radius: 25, count: 2 });
+  enemySpawns.push({ type: 'watcher', x: TOWN.x, z: TOWN.z, radius: 50 });
+  enemySpawns.push({ type: 'buzzer', x: TOWN.x + 60, z: TOWN.z + 60, radius: 25, count: 1 });
+  enemySpawns.push({ type: 'skitter', x: TOWN.x + 50, z: TOWN.z - 70, radius: 20, count: 3 });
 
   // invisible walls at the map border
   const W = MAP_HALF;

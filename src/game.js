@@ -1,5 +1,5 @@
-// The game: renderer, the topside raid loop, ARC spawning, looting,
-// extraction, and the hand-off between the hub (Speranza-style menus) and raids.
+// The game: renderer, the topside raid loop, Husk spawning, looting,
+// extraction, and the hand-off between the hub (menus) and raids.
 
 import * as THREE from 'three';
 import {
@@ -7,7 +7,7 @@ import {
 } from './config.js';
 import { buildWorld } from './world.js';
 import { Player } from './player.js';
-import { Arc } from './enemies.js';
+import { Husk } from './enemies.js';
 import { Weapons } from './weapons.js';
 import { Effects } from './effects.js';
 import { Input } from './input.js';
@@ -20,8 +20,8 @@ import * as Audio from './audio.js';
 import { getQuality, IS_TOUCH } from './settings.js';
 import { TouchControls } from './touch.js';
 
-const SEARCH_TIME = { crate: 1.2, locker: 1.0, medical: 1.0, weapon_case: 1.8, arc_probe: 2.0, car: 1.4, wreck: 0.9 };
-const MAX_ARC = 40;
+const SEARCH_TIME = { crate: 1.2, locker: 1.0, medical: 1.0, weapon_case: 1.8, husk_pod: 2.0, car: 1.4, wreck: 0.9 };
+const MAX_HUSKS = 40;
 
 export class Game {
   constructor(container) {
@@ -67,7 +67,7 @@ export class Game {
     this.baseFov = 72;
 
     this.buildSky();
-    // image-based lighting from the sky so metal (ARC plating, containers) isn't pitch black
+    // image-based lighting from the sky so metal (Husk plating, containers) isn't pitch black
     {
       const pmrem = new THREE.PMREMGenerator(renderer);
       const envScene = new THREE.Scene();
@@ -190,7 +190,7 @@ export class Game {
       white: new THREE.MeshStandardMaterial({ color: 0xe6e2d6, roughness: 0.6 }),
       red: new THREE.MeshStandardMaterial({ color: 0xc23a2a, roughness: 0.6 }),
       case: new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.5, metalness: 0.6 }),
-      arc: new THREE.MeshStandardMaterial({ color: 0x9aa2a8, roughness: 0.4, metalness: 0.8 }),
+      husk: new THREE.MeshStandardMaterial({ color: 0x9aa2a8, roughness: 0.4, metalness: 0.8 }),
       trunk: new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.7 }),
     };
     this.containerMats = mats;
@@ -230,8 +230,8 @@ export class Game {
           lid = add(1.52, 0.1, 0.57, mats.olive, 0, 0.4, 0);
           size = [1.5, 0.45, 0.55];
           break;
-        case 'arc_probe':
-          add(0.9, 0.9, 0.9, mats.arc, 0, 0.45, 0).rotation.set(0.3, 0.6, 0.2);
+        case 'husk_pod':
+          add(0.9, 0.9, 0.9, mats.husk, 0, 0.45, 0).rotation.set(0.3, 0.6, 0.2);
           lid = add(0.3, 0.3, 0.3, new THREE.MeshStandardMaterial({ color: 0x40ffd0, emissive: 0x30ffc0, emissiveIntensity: 1.5 }), 0, 1.0, 0);
           size = [1, 1, 1];
           break;
@@ -283,7 +283,7 @@ export class Game {
       c.lid.position.x += 0.3;
       c.lid.position.z += 0.3;
       c.lid.rotation.y = -1.3;
-    } else if (c.type === 'arc_probe') {
+    } else if (c.type === 'husk_pod') {
       c.lid.visible = false;
     } else {
       c.lid.position.y += 0.2;
@@ -416,11 +416,11 @@ export class Game {
     if (!on) this.input.lock();
   }
 
-  // ---------- ARC ----------
+  // ---------- Husk ----------
   spawnEnemyAt(type, x, z, alertAt, home) {
-    if (this.enemies.filter((e) => !e.dead).length >= MAX_ARC && !alertAt) return null;
+    if (this.enemies.filter((e) => !e.dead).length >= MAX_HUSKS && !alertAt) return null;
     const y = this.col.groundHeight(x, z, 300, ENEMIES[type].radius, 400);
-    const e = new Arc(type, x, y, z, home || { x, z, radius: 20 }, this.scene);
+    const e = new Husk(type, x, y, z, home || { x, z, radius: 20 }, this.scene);
     if (alertAt) e.alert(alertAt, true);
     this.enemies.push(e);
     return e;
@@ -449,10 +449,6 @@ export class Game {
     Audio.playKill();
     this.ui.notify(`${enemy.def.name} destroyed  +${enemy.def.xp} XP`);
     this.spawnWreck(enemy);
-    if (enemy.type === 'pop') {
-      // popping a Pop still sets it off, but weaker
-      this.explode(enemy.center.clone(), enemy.def.attack.radius * 0.7, enemy.def.attack.damage * 0.5, enemy);
-    }
   }
 
   explode(pos, radius, damage, source) {
@@ -527,7 +523,7 @@ export class Game {
   // ---------- items ----------
   useQuick(type) {
     const bag = this.profile.loadout.bag;
-    const order = type === 'heal' ? ['med_kit', 'bandage'] : ['recharger'];
+    const order = type === 'heal' ? ['med_kit', 'bandage'] : ['shield_cell'];
     const p = this.player;
     if (type === 'heal' && p.health >= PLAYER.health) return this.ui.notify('Already at full health.');
     if (type === 'recharge') {
@@ -543,7 +539,7 @@ export class Game {
         break;
       }
     }
-    if (!pick) return this.ui.notify(type === 'heal' ? 'No healing items in your bag.' : 'No shield rechargers in your bag.');
+    if (!pick) return this.ui.notify(type === 'heal' ? 'No healing items in your bag.' : 'No shield cells in your bag.');
     this.startUse(pick);
   }
 
@@ -723,12 +719,12 @@ export class Game {
       this.setLift(target.obj, 'calling');
       this.ui.notify(`${target.obj.name} called. Hold out for ${EXTRACT_CALL_SECONDS}s!`);
       Audio.playAlarm(0);
-      // the lift's noise draws ARC in
+      // the lift's noise draws Husks in
       this.noise(target.obj, 90);
       const ex = target.obj;
       for (let i = 0; i < 3; i++) {
         const a = Math.random() * Math.PI * 2;
-        const type = i === 0 ? 'wasp' : Math.random() < 0.5 ? 'tick' : 'pop';
+        const type = i === 0 ? 'buzzer' : 'skitter';
         setTimeout(() => {
           if (this.mode === 'raid') this.spawnEnemyAt(type, ex.x + Math.cos(a) * 45, ex.z + Math.sin(a) * 45, new THREE.Vector3(ex.x, ex.y + 1, ex.z));
         }, 2000 + i * 4000);
@@ -881,7 +877,7 @@ export class Game {
     }
 
     // ---- world ----
-    const ctx = this.arcCtx || (this.arcCtx = {
+    const ctx = this.huskCtx || (this.huskCtx = {
       player: p, col: this.col, effects: this.effects,
       damagePlayer: (a, from, src) => this.damagePlayer(a, from, src),
       spawnEnemy: (type, x, z, alertAt) => this.spawnEnemyAt(type, x, z, alertAt),
@@ -890,7 +886,7 @@ export class Game {
       shake: (a) => this.shake(a),
     });
     for (const e of this.enemies) {
-      // far-away ARC think less often
+      // far-away Husks think less often
       const far = e.pos.distanceTo(p.pos) > 120;
       if (far) {
         e._skip = (e._skip || 0) + dt;
@@ -922,11 +918,11 @@ export class Game {
       w.marker.rotation.y += dt * 2;
     }
 
-    // trickle in more ARC over time
+    // trickle in more Husks over time
     this.respawnTimer -= dt;
     if (this.respawnTimer <= 0) {
       this.respawnTimer = 50;
-      const spots = this.world.enemySpawns.filter((s) => Math.hypot(s.x - p.pos.x, s.z - p.pos.z) > 70 && s.type !== 'bastion' && s.type !== 'leaper');
+      const spots = this.world.enemySpawns.filter((s) => Math.hypot(s.x - p.pos.x, s.z - p.pos.z) > 70 && s.type !== 'warden' && s.type !== 'pouncer');
       if (spots.length) {
         const s = spots[Math.floor(Math.random() * spots.length)];
         for (let i = 0; i < (s.count || 1); i++) this.spawnEnemyAt(s.type, s.x + (Math.random() - 0.5) * 10, s.z + (Math.random() - 0.5) * 10, null, s);

@@ -172,7 +172,7 @@ export class Weapons {
     game.ui.refreshAmmo();
   }
 
-  // Closest hit along a ray: world geometry or an ARC hitbox.
+  // Closest hit along a ray: world geometry or a Husk hitbox.
   trace(origin, dir, range, forAim) {
     const game = this.game;
     const world = game.col.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, range);

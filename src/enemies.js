@@ -1,4 +1,4 @@
-// ARC machines: models and AI.
+// Husks: models and AI.
 
 import * as THREE from 'three';
 import { ENEMIES } from './config.js';
@@ -26,7 +26,7 @@ function add(parent, geo, material, x, y, z) {
 
 // Each builder returns { root, eye, parts, hitboxes:[{node, r, mult}] }
 const BUILDERS = {
-  tick() {
+  skitter() {
     const root = new THREE.Group();
     const body = add(root, new THREE.SphereGeometry(0.42, 10, 6), shell, 0, 0.45, 0);
     body.scale.set(1, 0.55, 1.2);
@@ -49,18 +49,7 @@ const BUILDERS = {
     }
     return { root, eye, legs, hitboxes: [{ node: body, r: 0.55, mult: 1 }] };
   },
-  pop() {
-    const root = new THREE.Group();
-    const ball = new THREE.Group();
-    ball.position.y = 0.55;
-    root.add(ball);
-    add(ball, new THREE.SphereGeometry(0.55, 14, 10), shell, 0, 0, 0);
-    const band = add(ball, new THREE.TorusGeometry(0.56, 0.06, 6, 20), hazard, 0, 0, 0);
-    band.rotation.y = Math.PI / 2;
-    const eye = add(ball, new THREE.SphereGeometry(0.16, 8, 6), eyeMaterial(), 0, 0.1, 0.48);
-    return { root, eye, ball, hitboxes: [{ node: ball, r: 0.6, mult: 1 }] };
-  },
-  wasp() {
+  buzzer() {
     const root = new THREE.Group();
     const body = add(root, new THREE.BoxGeometry(0.6, 0.35, 0.9), shell, 0, 0, 0);
     add(root, new THREE.BoxGeometry(0.4, 0.15, 0.5), plate, 0, 0.24, -0.05);
@@ -75,7 +64,7 @@ const BUILDERS = {
     }
     return { root, eye, rotors, hitboxes: [{ node: body, r: 0.6, mult: 1 }, { node: eye, r: 0.2, mult: 2 }] };
   },
-  snitch() {
+  watcher() {
     const root = new THREE.Group();
     const body = add(root, new THREE.CylinderGeometry(0.25, 0.4, 0.7, 8), shell, 0, 0, 0);
     const ring = add(root, new THREE.TorusGeometry(0.8, 0.05, 6, 24), hazard, 0, 0.15, 0);
@@ -86,7 +75,7 @@ const BUILDERS = {
     add(root, new THREE.CylinderGeometry(0.02, 0.02, 0.9, 4), dark, 0, 0.75, 0);
     return { root, eye, ring, hitboxes: [{ node: body, r: 0.55, mult: 1 }, { node: eye, r: 0.22, mult: 2 }] };
   },
-  leaper() {
+  pouncer() {
     const root = new THREE.Group();
     const body = new THREE.Group();
     body.position.y = 2.4;
@@ -111,7 +100,7 @@ const BUILDERS = {
     }
     return { root, eye, core, body, legs, hitboxes: [{ node: body, r: 1.7, mult: 1 }, { node: core, r: 0.45, mult: 2.5, weak: true }] };
   },
-  bastion() {
+  warden() {
     const root = new THREE.Group();
     const body = new THREE.Group();
     body.position.y = 4.2;
@@ -143,7 +132,7 @@ const BUILDERS = {
 
 let nextId = 1;
 
-export class Arc {
+export class Husk {
   constructor(type, x, y, z, home, scene) {
     this.id = nextId++;
     this.type = type;
@@ -186,7 +175,7 @@ export class Arc {
 
   get center() {
     if (this.def.flying) return this.pos;
-    const h = { tick: 0.45, pop: 0.55, leaper: 2.4, bastion: 4.2 }[this.type] || 1;
+    const h = { skitter: 0.45, pouncer: 2.4, warden: 4.2 }[this.type] || 1;
     return _w.set(this.pos.x, this.pos.y + h, this.pos.z);
   }
 
@@ -197,7 +186,7 @@ export class Arc {
 
   alert(pos, strong = true) {
     if (this.dead) return;
-    if (this.state === 'idle' && strong) Audio.playArcChirp(this.distTo);
+    if (this.state === 'idle' && strong) Audio.playHuskChirp(this.distTo);
     this.state = 'alert';
     this.alertTimer = strong ? 12 : 6;
     this.lastSeen.copy(pos);
@@ -236,7 +225,7 @@ export class Arc {
         const eye = this.center.clone();
         if (ctx.col.lineOfSight(eye, playerPos)) {
           this.canSee = true;
-          if (this.state === 'idle') Audio.playArcChirp(dist);
+          if (this.state === 'idle') Audio.playHuskChirp(dist);
           this.state = 'alert';
           this.alertTimer = 10;
           this.lastSeen.copy(playerPos);
@@ -253,7 +242,7 @@ export class Arc {
     this.chirpTimer -= dt;
     if (this.chirpTimer <= 0) {
       this.chirpTimer = 4 + Math.random() * 6;
-      if (dist < 40) Audio.playArcChirp(dist);
+      if (dist < 40) Audio.playHuskChirp(dist);
     }
 
     const handler = this[`think_${this.def.attack.kind}`];
@@ -306,8 +295,8 @@ export class Arc {
     const before = { x: this.pos.x, z: this.pos.z };
     this.pos.x += mx * speed * dt;
     this.pos.z += mz * speed * dt;
-    ctx.col.resolveCylinder(this.pos, this.def.radius, this.type === 'bastion' ? 6 : 1.5, this.type === 'bastion' || this.type === 'leaper' ? 1.2 : 0.55);
-    const ground = ctx.col.groundHeight(this.pos.x, this.pos.z, this.pos.y, this.def.radius, this.type === 'bastion' || this.type === 'leaper' ? 1.2 : 0.6);
+    ctx.col.resolveCylinder(this.pos, this.def.radius, this.type === 'warden' ? 6 : 1.5, this.type === 'warden' || this.type === 'pouncer' ? 1.2 : 0.55);
+    const ground = ctx.col.groundHeight(this.pos.x, this.pos.z, this.pos.y, this.def.radius, this.type === 'warden' || this.type === 'pouncer' ? 1.2 : 0.6);
     this.pos.y += (ground - this.pos.y) * Math.min(1, dt * 12);
     const moved = Math.hypot(this.pos.x - before.x, this.pos.z - before.z);
     if (moved < speed * dt * 0.3) {
@@ -381,7 +370,7 @@ export class Arc {
         if (away.lengthSq() > 0.01) to.addScaledVector(away.normalize(), 0.9);
         to.y = ctx.col.groundHeight(to.x, to.z, to.y + 0.5, 0.3);
         this.leap = { from: this.pos.clone(), to, t: 0, dur: 0.45, hit: false };
-        Audio.playArcChirp(dist);
+        Audio.playHuskChirp(dist);
         return;
       }
       this.groundMove(dt, ctx, target.x, target.z, this.def.speed);
@@ -389,36 +378,6 @@ export class Arc {
       const pt = this.patrolTarget();
       if (this.groundMove(dt, ctx, pt.x, pt.z, this.def.speed * 0.25) < 1) this.patrol = null;
     }
-  }
-
-  think_explode(dt, ctx, dist) {
-    const a = this.def.attack;
-    if (this.fuse >= 0) {
-      this.fuse -= dt;
-      const beepRate = 0.12;
-      this._beep = (this._beep || 0) - dt;
-      if (this._beep <= 0) {
-        this._beep = beepRate;
-        Audio.playBeep(dist, 1.3);
-      }
-      this.parts.eye.material.emissiveIntensity = Math.sin(this.anim * 40) > 0 ? 8 : 1;
-      if (this.fuse <= 0) {
-        this.dead = true;
-        ctx.explode(this.center.clone(), a.radius, a.damage, this);
-      }
-      return;
-    }
-    if (this.state === 'alert') {
-      this.groundMove(dt, ctx, this.lastSeen.x, this.lastSeen.z, this.def.speed);
-      if (dist < a.range) {
-        this.fuse = a.fuse;
-      }
-    } else {
-      const pt = this.patrolTarget();
-      if (this.groundMove(dt, ctx, pt.x, pt.z, this.def.speed * 0.3) < 1) this.patrol = null;
-    }
-    // roll the ball
-    this.parts.ball.rotation.x += dt * this.def.speed * (this.state === 'alert' ? 1.8 : 0.5);
   }
 
   think_gun(dt, ctx, dist) {
@@ -450,7 +409,7 @@ export class Arc {
       else this.faceTowards(tx, tz, dt, 2);
       this.model.rotation.z = -this.vel.x * 0.03;
     } else {
-      // Bastion: stomp towards the player, stop at range
+      // Warden: stomp towards the player, stop at range
       const moving = this.state === 'alert' && dist > 25;
       if (this.state === 'alert') {
         if (moving) this.groundMove(dt, ctx, this.lastSeen.x, this.lastSeen.z, this.def.speed);
@@ -507,7 +466,7 @@ export class Arc {
     const playerHit = rayHitsPlayer(from, dir, p, maxD);
     const end = from.clone().addScaledVector(dir, playerHit !== null ? playerHit : maxD);
     ctx.effects.tracer(from, end, true);
-    Audio.playGun('arc', this.distTo);
+    Audio.playGun('husk', this.distTo);
     if (playerHit !== null) ctx.damagePlayer(a.damage, from, this);
     else if (hit) ctx.effects.impact(end, hit.normal, hit.tag === 'metal' ? 'metal' : 'dust');
   }
@@ -529,10 +488,10 @@ export class Arc {
           this.called = true;
           this.recall = 40;
           Audio.playAlarm(dist);
-          ctx.notify('A Snitch called in reinforcements!');
+          ctx.notify('A Watcher called in reinforcements!');
           for (let i = 0; i < a.calls; i++) {
             const ang = Math.random() * Math.PI * 2;
-            ctx.spawnEnemy('wasp', this.pos.x + Math.cos(ang) * 25, this.pos.z + Math.sin(ang) * 25, this.lastSeen);
+            ctx.spawnEnemy('buzzer', this.pos.x + Math.cos(ang) * 25, this.pos.z + Math.sin(ang) * 25, this.lastSeen);
           }
         }
       }
@@ -586,7 +545,7 @@ export class Arc {
         to.y = ctx.col.groundHeight(to.x, to.z, to.y + 1, 0.5);
         this.leap = { from: this.pos.clone(), to, t: 0, dur: 1.1 };
         this.faceTowards(to.x, to.z, 1, 100);
-        Audio.playArcChirp(dist);
+        Audio.playHuskChirp(dist);
         return;
       }
       this.groundMove(dt, ctx, this.lastSeen.x, this.lastSeen.z, this.def.speed);
@@ -606,7 +565,7 @@ export class Arc {
     const speed = this.state === 'alert' ? 14 : 5;
     this.parts.legs.forEach((leg, i) => {
       const phase = this.anim * speed + i * Math.PI * 0.5;
-      if (this.type === 'tick') leg.rotation.y = Math.sin(phase) * 0.4;
+      if (this.type === 'skitter') leg.rotation.y = Math.sin(phase) * 0.4;
       else leg.position.y = -1.1 + Math.max(0, Math.sin(phase)) * 0.3;
     });
   }

@@ -11,7 +11,7 @@ export class Effects {
     this.items = [];
     this.numbers = [];
     this.tracerMat = new THREE.LineBasicMaterial({ color: 0xffe2a0, transparent: true, opacity: 0.9 });
-    this.arcTracerMat = new THREE.LineBasicMaterial({ color: 0xff5530, transparent: true, opacity: 0.9 });
+    this.huskTracerMat = new THREE.LineBasicMaterial({ color: 0xff5530, transparent: true, opacity: 0.9 });
     this.sparkGeo = new THREE.BoxGeometry(0.05, 0.05, 0.05);
     this.sparkMat = new THREE.MeshBasicMaterial({ color: 0xffc070 });
     this.dustMat = new THREE.MeshBasicMaterial({ color: 0x9a8a6a, transparent: true, opacity: 0.7 });
@@ -20,9 +20,9 @@ export class Effects {
     this.flashTime = 0;
   }
 
-  tracer(from, to, arc = false) {
+  tracer(from, to, husk = false) {
     const geo = new THREE.BufferGeometry().setFromPoints([from.clone(), to.clone()]);
-    const line = new THREE.Line(geo, (arc ? this.arcTracerMat : this.tracerMat).clone());
+    const line = new THREE.Line(geo, (husk ? this.huskTracerMat : this.tracerMat).clone());
     this.scene.add(line);
     this.items.push({ obj: line, life: 0.06, max: 0.06, fade: true });
   }
@@ -72,7 +72,7 @@ export class Effects {
     }
   }
 
-  // A brief glowing ring, e.g. a Leaper slam.
+  // A brief glowing ring, e.g. a Pouncer slam.
   shockwave(pos, radius, color = 0xff6a20) {
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.8, 1, 32),

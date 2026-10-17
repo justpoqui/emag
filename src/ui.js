@@ -208,7 +208,7 @@ export class UI {
     const bag = this.game.profile.loadout.bag;
     const counts = {
       heal: countIn(bag, 'bandage') + countIn(bag, 'med_kit'),
-      recharge: countIn(bag, 'recharger'),
+      recharge: countIn(bag, 'shield_cell'),
       frag: countIn(bag, 'frag'),
     };
     this.h.quick.forEach((q) => {
@@ -664,12 +664,12 @@ export class UI {
   renderMap() {
     this.menus.innerHTML = '';
     const panel = el('div', 'panel map-panel');
-    panel.appendChild(this.titleBar('TOPSIDE · RUST BELT', 'M to close'));
+    panel.appendChild(this.titleBar('TOPSIDE · DUSTLINE', 'M to close'));
     const canvas = el('canvas', 'map');
     canvas.width = 640;
     canvas.height = 640;
     panel.appendChild(canvas);
-    panel.appendChild(el('div', 'legend', '<span class="lg you">▲ You</span><span class="lg lift">■ Lift</span><span class="lg arc">● ARC (spotted)</span>'));
+    panel.appendChild(el('div', 'legend', '<span class="lg you">▲ You</span><span class="lg lift">■ Lift</span><span class="lg husk">● Husks (spotted)</span>'));
     this.menus.appendChild(panel);
     this.mapCanvas = canvas;
     if (!this.mapBase) this.mapBase = this.buildMapBase();
@@ -827,7 +827,7 @@ export class UI {
       <div class="result-head">${sum.extracted ? 'EXTRACTED' : 'MISSING IN ACTION'}</div>
       <div class="result-sub">${sum.extracted ? 'You made it back to the Burrow.' : `${sum.reason}. Everything you carried is gone, except your safe pocket.`}</div>
       <div class="result-grid">
-        <div><b>${sum.kills}</b><span>ARC destroyed</span></div>
+        <div><b>${sum.kills}</b><span>Husks destroyed</span></div>
         <div><b>+${sum.xp}</b><span>XP</span></div>
         <div><b>⌬ ${sum.value}</b><span>${sum.extracted ? 'Carried home' : 'Lost'}</span></div>
       </div>
@@ -978,7 +978,7 @@ export class UI {
     left.appendChild(bag);
     const kitRow = el('div', 'row');
     const kit = el('button', 'btn', 'Take free kit');
-    kit.title = 'A Kettle, light ammo, bandages and a light shield. Free, any time your loadout is empty.';
+    kit.title = 'A Mule, light ammo, bandages and a light shield. Free, any time your loadout is empty.';
     kit.disabled = !loadoutIsEmpty(lo);
     kit.onclick = () => {
       applyFreeKit(lo);
@@ -1196,14 +1196,14 @@ export class UI {
         <div><b>${s.extracts}</b><span>Extractions</span></div>
         <div><b>${rate}%</b><span>Survival rate</span></div>
         <div><b>${s.deaths}</b><span>Deaths</span></div>
-        <div><b>${s.kills}</b><span>ARC destroyed</span></div>
+        <div><b>${s.kills}</b><span>Husks destroyed</span></div>
       </div>
       <div class="guide">
         <h3>How a raid works</h3>
-        <p>Everything in your loadout comes topside with you. Search crates, lockers, cars and ARC probes for materials and valuables, destroy ARC machines and loot their wrecks, then <b>call a lift</b> at one of the four extraction points. Hold out while it arrives (the noise draws ARC in), step inside and hold <b>E</b>.</p>
+        <p>Everything in your loadout comes topside with you. Search crates, lockers, cars and Husk pods for materials and valuables, destroy Husks and loot their wrecks, then <b>call a lift</b> at one of the four extraction points. Hold out while it arrives (the noise draws Husks in), step inside and hold <b>E</b>.</p>
         <p>Die, or still be topside when the ${Math.round(RAID_SECONDS / 60)}-minute raid clock runs out, and you lose everything you carried except your <b>safe pocket</b>.</p>
-        <h3>ARC field notes</h3>
-        <p><b>Tick</b>: small crawler that leaps at you. <b>Pop</b>: rolling bomb. Shoot it before it gets close. <b>Wasp</b>: armed drone that strafes; its eye is a weak spot. <b>Snitch</b>: scout drone; if it sees you for a few seconds it calls Wasps. <b>Leaper</b>: armored jumper; aim for the glowing core on top. <b>Bastion</b>: walking fortress in the plaza; its core is on its back.</p>
+        <h3>Husk field notes</h3>
+        <p><b>Skitter</b>: small crawler that leaps at you. <b>Buzzer</b>: armed drone that strafes; its eye is a weak spot. <b>Watcher</b>: scout drone; if it sees you for a few seconds it calls Buzzers. <b>Pouncer</b>: armored jumper; aim for the glowing core on top. <b>Warden</b>: walking fortress in the plaza; its core is on its back.</p>
         <h3>Controls</h3>
         <p>WASD move · Shift sprint · Space jump · C crouch · V dodge roll · Mouse aim/fire · RMB aim down sights · R reload · 1/2 or wheel swap weapon · 3 heal · 4 recharge shield · G grenade · E interact (hold) · Tab backpack · M map · Esc pause</p>
       </div>

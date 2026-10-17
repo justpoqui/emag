@@ -79,7 +79,7 @@ const GUN_VOICES = {
   pistol: { freq: 1500, thump: 70, gain: 1.0, decay: 0.3 },
   shotgun: { freq: 1100, thump: 55, gain: 1.0, decay: 0.4 },
   long: { freq: 1800, thump: 50, gain: 1.0, decay: 0.55 },
-  arc: { freq: 3800, thump: 300, gain: 0.45, decay: 0.08 },
+  husk: { freq: 3800, thump: 300, gain: 0.45, decay: 0.08 },
 };
 
 export function playGun(shape, dist) {
@@ -150,7 +150,7 @@ export function playAlarm(dist) {
   }
 }
 
-export function playArcChirp(dist) {
+export function playHuskChirp(dist) {
   const g = distGain(dist);
   if (g < 0.05) return;
   tone(500 + Math.random() * 400, 0.2, { type: 'square', gain: 0.06 * g, slideTo: 1200 + Math.random() * 800 });

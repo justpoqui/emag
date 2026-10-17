@@ -36,11 +36,32 @@ function template() {
   return { credits: START_CREDITS, stash, loadout, stats: { raids: 0, extracts: 0, deaths: 0, kills: 0 }, level: 1, xp: 0 };
 }
 
+// Item ids from older saves, renamed since.
+const RENAMED = {
+  kettle: 'mule', stitcher: 'sparrow', rattler: 'badger', anvil: 'hammerhead', toro: 'boar', ferro: 'heron',
+  arc_alloy: 'husk_plating', arc_circuit: 'husk_circuit', arc_core: 'husk_heart', recharger: 'shield_cell',
+};
+
+function migrateIds(data) {
+  const fix = (s) => {
+    if (!s) return s;
+    if (RENAMED[s.id]) s.id = RENAMED[s.id];
+    return ITEMS[s.id] ? s : null; // drop anything the game no longer has
+  };
+  data.stash = data.stash.map(fix);
+  const lo = data.loadout;
+  lo.weapons = lo.weapons.map(fix);
+  lo.shield = fix(lo.shield);
+  lo.bag = lo.bag.map(fix);
+  lo.safe = lo.safe.map(fix);
+}
+
 export function loadProfile() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) {
       const data = JSON.parse(raw);
+      migrateIds(data);
       const base = template();
       for (const key of Object.keys(base)) if (data[key] === undefined) data[key] = base[key];
       fitArray(data.stash, STASH_SLOTS);

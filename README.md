@@ -1,7 +1,7 @@
 # Scrapfall
 
 A standalone third-person **extraction shooter** in the spirit of *Arc Raiders*.
-Drop topside into the ruined Rust Belt, scavenge, fight ARC machines and get
+Drop topside into the ruined Dustline, scavenge, fight Husks and get
 to a lift before the raid clock runs out. Die and you lose everything you
 carried except your safe pocket.
 
@@ -48,24 +48,23 @@ level) is saved in the browser's localStorage.
    and craft at the **Workbench**. If you're broke, take the free kit.
 2. **Deploy topside**: everything in your loadout comes with you.
 3. **Loot**: hold **E** to search supply crates, lockers, med cabinets, weapon
-   cases, car trunks and ARC probes. Items are revealed one at a time. Destroyed
-   ARC leave wrecks you can loot too.
+   cases, car trunks and Husk pods. Items are revealed one at a time. Destroyed
+   Husks leave wrecks you can loot too.
 4. **Extract**: find one of the four lifts (cyan ▲ on the compass, **M** for
    the map). Hold **E** at the call panel. The lift takes 20 seconds to arrive
-   and the noise draws ARC in. Once the doors open, step inside and hold **E**.
+   and the noise draws Husks in. Once the doors open, step inside and hold **E**.
 5. **Die, or still be topside when the 20-minute clock ends**, and your
    loadout is gone. Closing the game mid-raid counts as dying.
 
-## ARC machines
+## Husks
 
-| ARC | Behaviour | Tip |
+| Husk | Behaviour | Tip |
 | --- | --- | --- |
-| **Tick** | Small crawler, leaps at you | Strafe or dodge-roll the leap |
-| **Pop** | Rolling bomb that beeps then explodes | Shoot it early; it still pops |
-| **Wasp** | Armed drone that circles and fires bursts | Its eye is a weak spot |
-| **Snitch** | Scout drone; if it watches you for a few seconds it calls in Wasps | Kill it fast or break line of sight |
-| **Leaper** | Armored jumper that slams down with a shockwave | Glowing core on top takes extra damage |
-| **Bastion** | Walking fortress with twin miniguns, guards the plaza | Core on its back takes triple damage; bring heavy ammo |
+| **Skitter** | Small crawler, leaps at you | Strafe or dodge-roll the leap |
+| **Buzzer** | Armed drone that circles and fires bursts | Its eye is a weak spot |
+| **Watcher** | Scout drone; if it watches you for a few seconds it calls in Buzzers | Kill it fast or break line of sight |
+| **Pouncer** | Armored jumper that slams down with a shockwave | Glowing core on top takes extra damage |
+| **Warden** | Walking fortress with twin miniguns, guards the plaza | Core on its back takes triple damage; bring heavy ammo |
 
 ## Phone controls
 
@@ -109,14 +108,14 @@ graphics; change it under **Settings** in the hub or in the pause menu.
 shooter/
   index.html, vite.config.js
   src/
-    config.js      every item, weapon, shield, ARC type, loot table, trader and recipe (balance here)
+    config.js      every item, weapon, shield, Husk type, loot table, trader and recipe (balance here)
     main.js        boot
     game.js        renderer, lighting, raid lifecycle, damage, explosions, interaction, lifts, camera
-    world.js       procedural Rust Belt map (ruined town, container yard, ARC hull, pylons, lifts…)
+    world.js       procedural Dustline map (ruined town, container yard, Husk hull, pylons, lifts…)
     collision.js   heightfield terrain + AABB grid: movement, line of sight, bullet raycasts
     player.js      raider model, movement, stamina, dodge roll, weapon models
     weapons.js     firing, spread/bloom, recoil, reloads, hit resolution
-    enemies.js     ARC models and AI
+    enemies.js     Husk models and AI
     inventory.js   slot inventory helpers and the saved profile
     ui.js          HUD, backpack/loot/map/pause menus, hub tabs, results screen
     effects.js     tracers, sparks, explosions, damage numbers

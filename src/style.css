@@ -189,7 +189,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .legend { display: flex; gap: 18px; padding: 10px 18px 14px; font-family: var(--font); font-size: 15px; }
 .lg.you { color: #ffd27a; }
 .lg.lift { color: var(--teal); }
-.lg.arc { color: #ff5530; }
+.lg.husk { color: #ff5530; }
 
 /* results */
 .results { padding: 30px 40px; text-align: center; min-width: 560px; }
