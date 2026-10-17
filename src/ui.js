@@ -114,6 +114,8 @@ export class UI {
         <div class="health-row"><div class="bar health"><div class="lag"></div><div class="fill"></div></div><span class="num h"></span></div>
         <div class="bar stamina"><div class="fill"></div></div>
         <div class="load-chip hidden"></div>
+        <div class="fx-chip latch hidden"></div>
+        <div class="fx-chip poison hidden"></div>
       </div>
       <div class="weapon-panel">
         <div class="slots"><div class="wslot" data-i="0"></div><div class="wslot" data-i="1"></div></div>
@@ -127,7 +129,7 @@ export class UI {
       </div>
       <div class="markers"></div>
       <div class="vignette"></div>
-      <div class="help">WASD move · Shift sprint · Space jump · C crouch · V roll · RMB aim · R reload · F stick · H holster · E interact · Tab bag · M map</div>
+      <div class="help">WASD move · Shift sprint · Space jump · C crouch · V roll · RMB aim · R reload · Q stick · F flashlight · H holster · E interact · Tab bag · M map</div>
     `;
     this.root.appendChild(hud);
     this.hud = hud;
@@ -141,7 +143,7 @@ export class UI {
       health: $('.bar.health .fill'), healthLag: $('.bar.health .lag'), healthNum: $('.num.h'), stamina: $('.bar.stamina .fill'),
       wslots: hud.querySelectorAll('.wslot'), mag: $('.ammo .mag'), reserve: $('.ammo .reserve'),
       quick: hud.querySelectorAll('.q'), markers: $('.markers'), vignette: $('.vignette'),
-      stance: $('.stance'), load: $('.load-chip'),
+      stance: $('.stance'), load: $('.load-chip'), latch: $('.fx-chip.latch'), poison: $('.fx-chip.poison'),
     };
     // compass ticks
     const strip = this.h.compass;
@@ -224,7 +226,7 @@ export class UI {
       this.h.mag.textContent = cur.mag;
       this.h.mag.classList.toggle('low', cur.mag <= Math.ceil(ITEMS[cur.id].mag * 0.25));
       this.h.reserve.textContent = `/ ${w.reserve()}`;
-      this.h.stance.textContent = `Stick${key('F')}`;
+      this.h.stance.textContent = `Stick${key('Q')}`;
     } else {
       this.h.mag.textContent = cur ? 'HOLSTERED' : 'STICK';
       this.h.mag.classList.remove('low');
@@ -276,6 +278,13 @@ export class UI {
     css(this.h.stamina, 'width', `${(p.stamina / PLAYER.stamina) * 100}%`);
     this.h.stamina.parentElement.classList.toggle('locked', p.staminaLock > 0);
     const load = g.loadRatio || 0;
+    // Skitters clinging on, and poison ticking
+    const latched = g.latchedCount || 0;
+    this.h.latch.classList.toggle('hidden', latched === 0);
+    if (latched) txt(this.h.latch, `${latched} SKITTER${latched > 1 ? 'S' : ''} ON YOU · SPRINT TO SHAKE OFF`);
+    const poison = (g.poisons || []).reduce((m, z) => Math.max(m, z.left), 0);
+    this.h.poison.classList.toggle('hidden', poison <= 0);
+    if (poison > 0) txt(this.h.poison, `POISONED · ${Math.ceil(poison)}s`);
     this.h.load.classList.toggle('hidden', load <= 0.75);
     if (load > 0.75) {
       txt(this.h.load, load > 1 ? 'OVERLOADED · no sprinting' : 'HEAVY LOAD · slower');
@@ -1639,7 +1648,7 @@ export class UI {
 
   // How a raid works, Husk notes and controls.
   guideHtml() {
-    const controls = 'WASD move · Shift sprint · Space jump · C crouch · V dodge roll · Mouse aim/fire · RMB aim down sights · R reload · 1/2 or wheel swap weapon · F swing your stick · H holster (move faster) · 3 heal · 4 recharge shield · G grenade · E interact (hold) · Tab backpack · M map · Esc pause';
+    const controls = 'WASD move · Shift sprint · Space jump · C crouch · V dodge roll · Mouse aim/fire · RMB aim down sights · R reload · 1/2 or wheel swap weapon · Q swing your stick · F flashlight on/off · H holster (move faster) · 3 heal · 4 recharge shield · G grenade · E interact (hold) · Tab backpack · M map · Esc pause';
     return `
       <div class="guide">
         <h3>How a raid works</h3>

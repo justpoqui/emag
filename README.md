@@ -109,11 +109,21 @@ them or aim at them. Push it, or shoot one, and they fight, and word spreads
 to the Husks nearby. Leave them be and they stand down. Pouncers and Wardens
 attack on sight.
 
+Husks see a limited distance and only in front of them (anything right next
+to them they sense). Break line of sight and they lose you: a **?** shows over
+them while they search round where they last saw you, and after a few seconds
+they give up.
+
 Every Husk has one critical spot, its eye. Hits anywhere else do 60% damage.
+
+**Latching Skitters:** a Skitter's leap has a 1-in-3 chance to latch on. Each
+one clinging to you drains 1 HP a second and 15% of your stamina regen.
+Sprint to shake them off (about a second and a half); each has a 15% chance
+to leave poison as it lets go (10 damage over 5 seconds).
 
 | Husk | HP | Behaviour | Tip |
 | --- | --- | --- | --- |
-| **Skitter** | 50 | Small crawler; backs off if you get close, leaps if provoked | The small eye at the front |
+| **Skitter** | 40 | Knee-high crawler; backs off if you get close, leaps (and may latch on) if provoked | Generous hitbox; the eye at the front crits |
 | **Buzzer** | 60 | Drone on vectoring thrusters; circles and fires bursts when hostile | The small eye on the nose |
 | **Watcher** | 45 | Sweeps a searchlight. It only sees what the light falls on; when hostile it calls in Buzzers | Stay out of the light; the eye is underneath |
 | **Pouncer** | 420 | Armored jumper that slams down with a shockwave | Glowing core on top takes extra damage |
@@ -148,14 +158,15 @@ The Raider Log tab shows what the network has learned about you.
 | V or Left Alt | Dodge roll (costs stamina, halves damage taken) |
 | Mouse / RMB | Shoot / aim down sights |
 | R | Reload |
-| F | Swing your stick (always carried, no slot, can't be dropped) |
+| Q | Swing your stick (always carried, no slot, can't be dropped) |
+| F | Flashlight on/off (clipped to your hip when off, your chest when on; starts on for night drops) |
 | H or X | Holster / draw your gun (holstered: ~12% faster, and the trigger swings the stick) |
 | 1 / 2 / wheel | Switch weapon |
 | 3 / 4 | Heal / recharge shield |
 | G | Throw a frag grenade |
 | E (hold) | Search, call a lift, extract |
 | Tab | Backpack (click to use or equip, shift-click for safe pocket, right-click to drop) |
-| F | Take everything in the open container |
+| F (loot window open) | Take everything; the window closes once the container is empty |
 | M | Map |
 | Esc | Pause (sensitivity, volume, abandon raid) |
 

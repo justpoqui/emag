@@ -138,8 +138,29 @@ export function buildRaiderModel(colors = {}) {
   backSocket.rotation.set(0.15, Math.PI / 2, -0.95);
   body.add(backSocket);
 
-  root.userData = { body, head, torso, legs, arms, backStick, handStick, gunSocket, backSocket };
+  // flashlight: clipped to the hip when off, to the chest strap (shining ahead) when on
+  const torch = new THREE.Group();
+  body.add(torch);
+  part(new THREE.CylinderGeometry(0.022, 0.019, 0.13, 12), gear, 0, 0, 0, torch);
+  part(new THREE.CylinderGeometry(0.03, 0.022, 0.04, 14), tape, 0, 0.08, 0, torch);
+  const torchLens = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, emissive: 0xfff2cc, emissiveIntensity: 0, roughness: 0.3 });
+  part(new THREE.CylinderGeometry(0.026, 0.026, 0.006, 14), torchLens, 0, 0.101, 0, torch);
+  setTorch({ torch, torchLens }, false);
+
+  root.userData = { body, head, torso, legs, arms, backStick, handStick, gunSocket, backSocket, torch, torchLens };
   return root;
+}
+
+// Flashlight on (chest strap, lens forward and lit) or off (hip, lens down).
+export function setTorch(u, on) {
+  if (on) {
+    u.torch.position.set(-0.11, 0.43, 0.145);
+    u.torch.rotation.set(Math.PI / 2, 0, 0);
+  } else {
+    u.torch.position.set(-0.178, -0.06, 0.07);
+    u.torch.rotation.set(Math.PI, 0, 0.12);
+  }
+  u.torchLens.emissiveIntensity = on ? 3 : 0;
 }
 
 const lerp = (a, b, t) => a + (b - a) * t;

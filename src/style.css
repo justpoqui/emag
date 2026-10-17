@@ -556,3 +556,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .fps-counter .bad, .q-tip .bad { color: var(--red); }
 .gpu-warn { background: rgba(120, 24, 16, 0.85); border-left: 3px solid var(--red); padding: 10px 14px; font-size: 13px; line-height: 1.45; margin-bottom: 10px; }
 .gpu-warn b { display: block; font-family: var(--font); font-size: 17px; margin-bottom: 2px; }
+.fx-chip { align-self: flex-start; font-family: var(--font); font-weight: 700; font-size: 13px; letter-spacing: 0.08em; padding: 2px 8px; color: #fff; }
+.fx-chip.latch { background: var(--red); animation: pulse 0.8s infinite; }
+.fx-chip.poison { background: #5a9a3a; }

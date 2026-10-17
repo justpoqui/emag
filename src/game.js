@@ -4,11 +4,11 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import {
-  ITEMS, MAPS, CARRY_LIMIT, HOLSTER_SPEED_BONUS, SHIELD_WEAR, MAX_DURABILITY, isDurable, LOOT_TABLES, ENEMIES, RAID_SECONDS, EXTRACT_CALL_SECONDS, EXTRACT_OPEN_SECONDS, PLAYER,
+  ITEMS, MAPS, LATCH, CARRY_LIMIT, HOLSTER_SPEED_BONUS, SHIELD_WEAR, MAX_DURABILITY, isDurable, LOOT_TABLES, ENEMIES, RAID_SECONDS, EXTRACT_CALL_SECONDS, EXTRACT_OPEN_SECONDS, PLAYER,
 } from './config.js';
 import { buildWorld } from './world.js';
 import { Player } from './player.js';
-import { Husk } from './enemies.js';
+import { Husk, LATCH_SLOTS } from './enemies.js';
 import { Weapons } from './weapons.js';
 import { Effects } from './effects.js';
 import { Input } from './input.js';
@@ -41,6 +41,8 @@ export class Game {
     this.using = null;
     this.enemies = [];
     this.grenades = [];
+    this.poisons = []; // { left, rate } damage over time from Skitters
+    this.latchedCount = 0;
     this.shakeAmt = 0;
     this.time = 0;
 
@@ -109,7 +111,7 @@ export class Game {
     scene.add(sun);
     scene.add(sun.target);
     this.sun = sun;
-    // headlamp for night raids
+    // the raider's flashlight beam (always in the scene, so toggling it never recompiles shaders)
     this.headlamp = new THREE.SpotLight(0xfff0d8, 0, 45, 0.45, 0.55, 1.4);
     scene.add(this.headlamp, this.headlamp.target);
     try {
@@ -401,7 +403,6 @@ export class Game {
     this.hemi.intensity = map.hemiI;
     scene.environmentIntensity = map.env;
     this.renderer.toneMappingExposure = map.exposure;
-    this.headlamp.intensity = map.headlamp ? 55 : 0;
   }
 
   selectMap(map) {
@@ -542,6 +543,8 @@ export class Game {
     this.yaw = yaw;
     this.pitch = -0.05;
     this.player.health = PLAYER.health;
+    this.setFlashlight(!!this.map.headlamp);
+    this.poisons = [];
     this.weapons.reset();
     this.player.model.visible = true;
     this.input.lock();
@@ -640,6 +643,85 @@ export class Game {
     this.paused = on;
     this.ui.showPause(on);
     if (!on) this.input.lock();
+  }
+
+  setFlashlight(on, click = false) {
+    this.player.setFlashlight(on);
+    this.headlamp.intensity = on ? 55 : 0;
+    if (click) Audio.playUI();
+  }
+
+  // ---------- Skitters latching on ----------
+  // A Skitter's leap connected and it grabbed on (enemies.js rolls the chance).
+  latchOn(e) {
+    const used = new Set(this.enemies.filter((x) => x.latch && !x.dead).map((x) => x.latch.slot));
+    let slot = -1;
+    for (let i = 0; i < LATCH_SLOTS; i++) if (!used.has(i)) { slot = i; break; }
+    if (slot < 0) return false;
+    const [lo, hi] = LATCH.shakeSeconds;
+    e.latch = { slot, shook: 0, need: lo + Math.random() * (hi - lo) };
+    e.leap = null;
+    this.ui.notify('A Skitter latched on! Sprint to shake it off.');
+    Audio.playHuskChirp(0);
+    return true;
+  }
+
+  // Thrown off by sprinting: lands behind the raider, dazed, and may leave poison.
+  unlatch(e) {
+    const p = this.player;
+    e.latch = null;
+    const back = Math.atan2(-p.vel.x, -p.vel.z) + (Math.random() - 0.5) * 1.4;
+    const x = p.pos.x + Math.sin(back) * 1.8;
+    const z = p.pos.z + Math.cos(back) * 1.8;
+    e.pos.set(x, this.col.groundHeight(x, z, p.pos.y + 1.5, e.def.radius), z);
+    e.model.rotation.set(0, 0, 0);
+    e.yaw = back + Math.PI;
+    e.cooldown = 2.5; // dazed before it can leap again
+    e.alert(p.pos, true);
+    Audio.playMetalHit(0);
+    if (Math.random() < LATCH.poisonChance) {
+      this.poisons.push({ left: LATCH.poison.seconds, rate: LATCH.poison.damage / LATCH.poison.seconds });
+      this.ui.notify(`Poisoned! ${LATCH.poison.damage} damage over ${LATCH.poison.seconds}s.`);
+    } else {
+      this.ui.notify('Shook it off!');
+    }
+  }
+
+  // Latched Skitters drain health and stamina regen; sprinting throws them off.
+  updateLatches(dt) {
+    const p = this.player;
+    const latched = this.enemies.filter((e) => e.latch && !e.dead);
+    this.latchedCount = latched.length;
+    p.regenMul = Math.max(0, 1 - LATCH.regenCut * latched.length);
+    if (!p.alive) return;
+    for (const e of latched) {
+      if (p.sprinting) {
+        e.latch.shook += dt;
+        if (e.latch.shook >= e.latch.need) this.unlatch(e);
+      }
+    }
+    let drain = LATCH.healthPerSec * latched.length;
+    for (const z of this.poisons) {
+      const t = Math.min(dt, z.left);
+      drain += (z.rate * t) / dt;
+      z.left -= dt;
+    }
+    this.poisons = this.poisons.filter((z) => z.left > 0);
+    if (drain > 0) this.drainPlayer(drain * dt, latched.length ? 'a Skitter' : 'Skitter poison');
+  }
+
+  // Damage straight to health (latches, poison): no shield, no hit flash.
+  drainPlayer(amount, cause) {
+    const p = this.player;
+    if (!p.alive || this.mode !== 'raid') return;
+    p.health -= amount;
+    p.lastDamage = this.time;
+    if (p.health <= 0) {
+      p.health = 0;
+      p.die();
+      this.ui.notify(`You were brought down by ${cause}.`);
+      setTimeout(() => this.endRaid(false, `Killed by ${cause}`), 2200);
+    }
   }
 
   // ---------- Husk ----------
@@ -1200,6 +1282,7 @@ export class Game {
       shake: (a) => this.shake(a),
       mind: this.mind || traits(this.profile.network),
       onSeen: () => recordSeen(this.profile.network),
+      latch: (e) => this.latchOn(e),
       onPeace: (e) => recordPeace(this.profile.network, e.pos.x, e.pos.z),
       // is the raider aiming down sights at this Husk?
       aimingAt: (e) => {
@@ -1230,7 +1313,8 @@ export class Game {
       if (input.hit('Digit3')) this.useQuick('heal');
       if (input.hit('Digit4')) this.useQuick('recharge');
       if (input.hit('KeyG')) this.throwGrenade();
-      if (input.hit('KeyF')) this.weapons.melee();
+      if (input.hit('KeyQ')) this.weapons.melee();
+      if (input.hit('KeyF')) this.setFlashlight(!this.player.flashlight, true);
       if (input.hit('KeyH') || input.hit('KeyX')) this.weapons.toggleHolster();
       if (input.mouse.right && this.weapons.holstered) this.weapons.draw();
       if (input.hit('KeyC')) p.crouch = !p.crouch;
@@ -1310,6 +1394,7 @@ export class Game {
       }
     }
     this.updateGrenades(dt);
+    this.updateLatches(dt);
     this.updateDebris(dt);
     this.updateLifts(dt);
     // skip drawing far-away things (fog hides them anyway)
@@ -1392,8 +1477,9 @@ export class Game {
     // hide the model when the camera is jammed into it
     p.model.visible = dist > 0.8 || !p.alive;
     if (this.headlamp.intensity > 0) {
-      this.headlamp.position.copy(eye).add(new THREE.Vector3(0, 0.15, 0));
-      this.headlamp.target.position.copy(eye).addScaledVector(look, 10);
+      // the beam comes from the chest-strap flashlight and points where the raider looks
+      p.flashlightPos(this.headlamp.position);
+      this.headlamp.target.position.copy(eye).addScaledVector(look, 12);
     }
   }
 }

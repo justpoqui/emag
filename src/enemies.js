@@ -1,7 +1,7 @@
 // Husks: models and AI.
 
 import * as THREE from 'three';
-import { ENEMIES } from './config.js';
+import { ENEMIES, SENSE_RADIUS, SEARCH_SECONDS, LATCH } from './config.js';
 import * as Audio from './audio.js';
 
 const _v = new THREE.Vector3();
@@ -9,6 +9,15 @@ const _w = new THREE.Vector3();
 const _u = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _down = new THREE.Vector3(0, -1, 0);
+// where latched Skitters cling, in the raider model's space: back, shoulders, thigh, calf
+const LATCH_SPOTS = [
+  new THREE.Vector3(0, 1.3, -0.42),
+  new THREE.Vector3(-0.33, 1.45, -0.08),
+  new THREE.Vector3(0.33, 1.4, -0.06),
+  new THREE.Vector3(0.2, 0.7, 0.14),
+  new THREE.Vector3(-0.2, 0.38, 0.12),
+];
+export const LATCH_SLOTS = LATCH_SPOTS.length;
 
 const shell = new THREE.MeshStandardMaterial({ color: 0xc9cbc6, roughness: 0.45, metalness: 0.7 });
 const plate = new THREE.MeshStandardMaterial({ color: 0x55595d, roughness: 0.5, metalness: 0.8 });
@@ -38,6 +47,25 @@ function curvedLimb(a, b, c, radius) {
   return new THREE.TubeGeometry(curve, 8, radius, 6);
 }
 
+// the "?" a Husk shows while it searches for a raider it lost sight of
+let huhMat = null;
+function huhMaterial() {
+  if (huhMat) return huhMat;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.font = '800 54px "Barlow Condensed", Arial, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineWidth = 6;
+  g.strokeStyle = '#1d1c1a';
+  g.strokeText('?', 32, 34);
+  g.fillStyle = '#f2c14e';
+  g.fillText('?', 32, 34);
+  huhMat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true });
+  return huhMat;
+}
+
 const thrustMat = new THREE.MeshBasicMaterial({ color: 0x2f9fff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
 
 // soft round spot for the Watcher's searchlight on the ground
@@ -63,6 +91,7 @@ function spotTex() {
 const BUILDERS = {
   skitter() {
     const root = new THREE.Group();
+    root.scale.setScalar(0.75); // a small thing, about knee-high
     const body = new THREE.Group();
     body.position.y = 0.32;
     root.add(body);
@@ -85,7 +114,8 @@ const BUILDERS = {
       root.add(leg);
       legs.push(leg);
     }
-    return { root, eye, body, legs, hitboxes: [{ node: body, r: 0.34, mult: 1 }, { node: eye, r: 0.085, mult: 2.2, weak: true }] };
+    // hitboxes are generous for its size (small, fast targets are hard to hit)
+    return { root, eye, body, legs, hitboxes: [{ node: body, r: 0.38, mult: 1 }, { node: eye, r: 0.1, mult: 2.2, weak: true }] };
   },
   buzzer() {
     const root = new THREE.Group();
@@ -253,6 +283,18 @@ export class Husk {
     this.beamAt = new THREE.Vector3(x, y, z);
     this.sweep = Math.random() * 6;
     this.beamRadius = 3;
+    this.lostFor = 0; // seconds since it last saw the raider
+    this.searchAt = null; // where it's hunting for them after losing sight
+    this.searchLeft = 0;
+    this.searchTimer = 0;
+    this.latch = null; // Skitters: { slot, shook, need } while clinging to the raider
+    // a "?" over its head while it's searching
+    this.huh = new THREE.Sprite(huhMaterial());
+    const top = this.def.flying ? 0.75 : { skitter: 0.75, pouncer: 4.2, warden: 7 }[type] || 1.6;
+    this.huh.position.y = top / (this.model.scale.y || 1);
+    this.huh.scale.setScalar((type === 'warden' || type === 'pouncer' ? 1.2 : 0.45) / (this.model.scale.y || 1));
+    this.huh.visible = false;
+    this.model.add(this.huh);
     if (this.def.flying) this.pos.y = y + this.def.hover;
     // only the big pieces cast shadows; legs, thrusters and eyes aren't worth a shadow pass each
     this.model.traverse((o) => {
@@ -266,7 +308,8 @@ export class Husk {
 
   get center() {
     if (this.def.flying) return this.pos;
-    const h = { skitter: 0.32, pouncer: 2.4, warden: 4.2 }[this.type] || 1;
+    if (this.latch) return this.pos;
+    const h = { skitter: 0.24, pouncer: 2.4, warden: 4.2 }[this.type] || 1;
     return _w.set(this.pos.x, this.pos.y + h, this.pos.z);
   }
 
@@ -298,6 +341,8 @@ export class Husk {
     this.alertTimer = strong ? 12 : 6;
     this.calmTimer = 0;
     this.lastSeen.copy(pos);
+    this.lostFor = 0;
+    this.searchAt = null;
   }
 
   // weak hits are the eye; anywhere else takes bodyMult. guard: learned eye shutters (0..1).
@@ -320,6 +365,11 @@ export class Husk {
   // ctx: { player, col, effects, mind (network traits), aimingAt, onSeen, onPeace, damagePlayer, spawnEnemy, ... }
   update(dt, ctx) {
     if (this.dead) return;
+    if (this.latch) {
+      this.anim += dt;
+      this.followLatch(ctx);
+      return;
+    }
     const p = ctx.player;
     const mind = ctx.mind;
     const playerPos = p.chest();
@@ -336,7 +386,33 @@ export class Husk {
       this.canSee = p.alive && this.perceive(ctx, playerPos, dist);
       if (this.canSee) this.sighted(ctx, playerPos, dist, could);
     }
-    if (this.canSee) this.lastSeen.copy(playerPos);
+    if (this.canSee) {
+      this.lastSeen.copy(playerPos);
+      this.lostFor = 0;
+      this.searchAt = null;
+    } else if (this.state === 'alert') {
+      // lost sight (something's in the way): it doesn't know where the raider
+      // went, so it hunts round the last place it saw them, then gives up
+      this.lostFor += dt;
+      if (this.lostFor > 0.6) {
+        if (!this.searchAt) {
+          this.searchAt = this.lastSeen.clone();
+          this.searchLeft = SEARCH_SECONDS;
+          this.searchTimer = 0;
+          this.alertTimer = Math.min(this.alertTimer, SEARCH_SECONDS);
+          this.burstLeft = 0;
+          Audio.playHuskChirp(dist);
+        }
+        this.searchTimer -= dt;
+        if (this.searchTimer <= 0) {
+          this.searchTimer = 1.4 + Math.random() * 1.2;
+          const a = Math.random() * Math.PI * 2;
+          const r = 3 + Math.random() * 6;
+          this.lastSeen.set(this.searchAt.x + Math.cos(a) * r, this.searchAt.y, this.searchAt.z + Math.sin(a) * r);
+        }
+      }
+    }
+    this.huh.visible = this.state === 'alert' && !!this.searchAt;
     if (this.state === 'alert') {
       this.alertTimer -= dt;
       if (this.alertTimer <= 0 && !this.canSee) this.state = this.def.neutral ? 'wary' : 'idle';
@@ -390,8 +466,15 @@ export class Husk {
     if (this.parts.beam) {
       const inSpot = Math.hypot(p.pos.x - this.beamAt.x, p.pos.z - this.beamAt.z) < this.beamRadius * 1.1;
       if (!inSpot && dist > 8) return false;
-    } else if (dist >= this.def.sight * (ctx.sightMul || 1) * (p.crouch ? 0.6 : 1)) {
-      return false;
+    } else {
+      if (dist >= this.def.sight * (ctx.sightMul || 1) * (p.crouch ? 0.6 : 1)) return false;
+      // only what's in front of it, unless the raider is right on top of it
+      if (dist > SENSE_RADIUS && this.def.fov) {
+        const dx = p.pos.x - this.pos.x;
+        const dz = p.pos.z - this.pos.z;
+        const facing = (dx * Math.sin(this.yaw) + dz * Math.cos(this.yaw)) / (Math.hypot(dx, dz) || 1);
+        if (facing < Math.cos(((this.def.fov / 2) * Math.PI) / 180)) return false;
+      }
     }
     return ctx.col.lineOfSight(this.center.clone(), playerPos);
   }
@@ -606,6 +689,19 @@ export class Husk {
     beam.visible = spot.visible = this.model.visible;
   }
 
+  // Clinging to the raider: ride along on its spot, legs scrabbling.
+  followLatch(ctx) {
+    const p = ctx.player;
+    p.model.updateMatrixWorld();
+    this.pos.copy(LATCH_SPOTS[this.latch.slot]).applyMatrix4(p.model.matrixWorld);
+    this.model.position.copy(this.pos);
+    this.model.lookAt(_u.set(p.pos.x, this.pos.y, p.pos.z));
+    this.huh.visible = false;
+    this.parts.legs.forEach((leg, i) => {
+      leg.rotation.y = Math.sin(this.anim * 22 + i) * 0.5;
+    });
+  }
+
   patrolTarget() {
     if (!this.patrol || Math.random() < 0.003) {
       const a = Math.random() * Math.PI * 2;
@@ -628,6 +724,10 @@ export class Husk {
       if (!this.leap.hit && p.alive && this.pos.distanceTo(p.chest()) < 1.1) {
         this.leap.hit = true;
         ctx.damagePlayer(a.damage, this.pos, this);
+        if (Math.random() < LATCH.chance && ctx.latch(this)) {
+          this.leap = null;
+          return;
+        }
       }
       if (t >= 1) {
         this.leap = null;
@@ -859,7 +959,7 @@ export class Husk {
       this.parts.spot.geometry.dispose();
     }
     this.model.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
+      if (o.geometry && !o.isSprite) o.geometry.dispose(); // sprites share one geometry
     });
   }
 }

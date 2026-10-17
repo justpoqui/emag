@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { PLAYER, ITEMS } from './config.js';
 import * as Audio from './audio.js';
-import { buildRaiderModel, poseRig } from './rig.js';
+import { buildRaiderModel, poseRig, setTorch } from './rig.js';
 
 export { buildRaiderModel };
 
@@ -124,6 +124,8 @@ export class Player {
     this.holstered = false;
     this.melee = -1; // 0..1 through a stick swing, -1 when not swinging
     this.speedMul = 1; // from carried weight and holstering
+    this.regenMul = 1; // stamina regen (latched Skitters cut it)
+    this.flashlight = false;
     this.canSprint = true;
     this.idle = 0;
     this.crouchBlend = 0;
@@ -172,6 +174,18 @@ export class Player {
       if (!holstered) this.gunModel.position.z = -butt * hold.scale + hold.out;
       (holstered ? u.backSocket : u.gunSocket).add(this.gunModel);
     }
+  }
+
+  setFlashlight(on) {
+    this.flashlight = on;
+    setTorch(this.model.userData, on);
+  }
+
+  // world position of the flashlight's lens
+  flashlightPos(out) {
+    const u = this.model.userData;
+    this.model.updateMatrixWorld();
+    return u.torch.localToWorld(out.set(0, 0.11, 0));
   }
 
   get armed() {
@@ -223,7 +237,7 @@ export class Player {
 
     // stamina
     if (this.sprinting) this.stamina = Math.max(0, this.stamina - PLAYER.sprintDrain * dt);
-    else if (this.staminaLock <= 0) this.stamina = Math.min(PLAYER.stamina, this.stamina + PLAYER.staminaRegen * dt);
+    else if (this.staminaLock <= 0) this.stamina = Math.min(PLAYER.stamina, this.stamina + PLAYER.staminaRegen * this.regenMul * dt);
     if (this.stamina <= 0.5 && this.sprinting) this.staminaLock = 1.2;
     this.staminaLock -= dt;
 
