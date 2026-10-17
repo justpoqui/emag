@@ -1575,11 +1575,11 @@ export class UI {
     body.appendChild(col);
     const data = await adminData();
     if (!data) {
-      col.innerHTML = '<div class="col-title">ADMIN</div><p class="muted">Admin tools work on the Claude page only.</p>';
+      col.innerHTML = '<div class="col-title">ADMIN</div><p class="muted">Admin tools are not available.</p>';
       return;
     }
     col.innerHTML = `
-      <div class="col-title">ADMIN <small>only you can see this</small></div>
+      <div class="col-title">ADMIN <small>${storageKind() === 'cloud' ? 'only you can see this' : 'offline mode: these settings apply to this browser only'}</small></div>
       <div class="admin-grid">
         <section>
           <div class="sect">PLAYERS · ${data.players.length}</div>

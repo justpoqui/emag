@@ -10,12 +10,11 @@
 //    their own entry.
 //  - admin/* (who the admin is, bulletin, bans) can only be written by the
 //    page's owner.
-//  - The admin is the first account created on the page. admin/meta records
-//    it, and only the page's owner can write that record, so the first
-//    account the owner creates becomes the one and only admin.
+//  - The admin is the account named Poqui. admin/meta records which Claude
+//    login owns it, and only the page's owner can write that record.
 //
-// Off the Claude page (GitHub Pages, local dev) there is no server, so
-// accounts live in this browser's storage and there is no admin.
+// Off the Claude page (or when its database isn't available) accounts live
+// in this browser's storage; Poqui is still the admin there, for this browser.
 //
 // Passwords are never stored: only a salted PBKDF2-SHA256 hash.
 
@@ -27,7 +26,7 @@ const LOCAL_SAVE = 'scrapfall_acct_';
 const SESSION = 'scrapfall_session_v3';
 // Storage from earlier versions, cleared on start (old accounts, sessions,
 // pre-account saves).
-const OLD_KEYS = ['scrapfall_accounts_v1', 'scrapfall_session_v1', 'scrapfall_session_v2', 'scrapfall_save_v1', 'scrapfall_login_throttle'];
+const OLD_KEYS = ['scrapfall_session_v1', 'scrapfall_session_v2', 'scrapfall_save_v1', 'scrapfall_login_throttle'];
 const THROTTLE = 'scrapfall_login_throttle_v2';
 const ITERATIONS = 150000;
 // Older records didn't store their iteration count; these are the counts
@@ -170,8 +169,14 @@ function localBackend() {
         console.warn('Save failed', err);
       }
     },
-    async readAdmin() {
-      return null;
+    async readAdmin(doc) {
+      return readLocal(`scrapfall_admin_${doc}`, null);
+    },
+    async writeAdmin(doc, data) {
+      writeLocal(`scrapfall_admin_${doc}`, data);
+    },
+    async listPlayers() {
+      return Object.keys(readLocal(LOCAL_ACCOUNTS, {})).sort();
     },
   };
 }
@@ -233,11 +238,11 @@ function cloudBackend(db, uid) {
   };
 }
 
-// Old browser-stored accounts and saves from earlier versions are removed.
+// Sessions and saves from earlier versions are removed. Browser-stored
+// accounts are kept: on the Claude page they move online at next sign-in.
 function clearOldStorage() {
   try {
     for (const k of OLD_KEYS) localStorage.removeItem(k);
-    for (const k of Object.keys(localStorage)) if (k.startsWith(LOCAL_SAVE)) localStorage.removeItem(k);
   } catch (err) {
     // storage blocked: nothing to clear
   }
@@ -257,7 +262,7 @@ export async function connect() {
   }
   const uid = user ? await user.id() : null;
   backend = db && uid ? cloudBackend(db, uid) : localBackend();
-  if (backend.kind === 'cloud') clearOldStorage();
+  clearOldStorage();
   return backend.kind;
 }
 
@@ -332,9 +337,13 @@ function remember(on) {
 
 async function finishSignIn(account, keep) {
   const key = keyFor(account.username);
-  const meta = backend.kind === 'cloud' ? await backend.readAdmin('meta').catch(() => null) : null;
+  let meta = await backend.readAdmin('meta').catch(() => null);
+  if (!(meta && meta.adminKey)) {
+    await claimAdminIfFirst(key);
+    meta = await backend.readAdmin('meta').catch(() => null);
+  }
   if (meta && meta.adminKey) adminKeyCache = meta.adminKey;
-  const admin = !!(meta && meta.adminKey === key && meta.adminUid === backend.uid);
+  const admin = !!(meta && meta.adminKey === key && meta.adminUid === (backend.uid || null));
   current = { key, username: account.username, hash: account.hash, salt: account.salt, iter: account.iter, created: account.created, admin };
   remember(keep);
   const saved = await backend.loadSave(key);
@@ -351,20 +360,22 @@ async function bannedName(key) {
   }
 }
 
-// The first account created on the page becomes the admin. Only the page's
-// owner can write admin/meta, so an account someone else creates first is
-// simply not recorded and the owner's first account takes the role.
+// Poqui is the admin. admin/meta records which Claude login owns it; on the
+// Claude page only the page's owner can write that record, so nobody else's
+// "Poqui" can take the role.
+export const ADMIN_NAME = 'Poqui';
+const ADMIN_KEY = ADMIN_NAME.toLowerCase();
 let adminKeyCache = null;
 
 async function claimAdminIfFirst(key) {
-  if (backend.kind !== 'cloud') return;
+  if (key !== ADMIN_KEY) return;
   try {
     const meta = await backend.readAdmin('meta');
     if (meta && meta.adminKey) {
       adminKeyCache = meta.adminKey;
       return;
     }
-    await backend.writeAdmin('meta', { adminKey: key, adminUid: backend.uid, since: Date.now() });
+    await backend.writeAdmin('meta', { adminKey: key, adminUid: backend.uid || null, since: Date.now() });
     adminKeyCache = key;
   } catch (err) {
     // not the page owner: no admin record for this account
@@ -403,6 +414,30 @@ export async function createAccount(username, password, keep) {
   return { profile };
 }
 
+// A browser-stored account (made while the online save wasn't available)
+// moves online the first time its owner signs in on the Claude page: same
+// username, same password, same progress.
+async function moveLocalAccountOnline(key, password) {
+  const all = readLocal(LOCAL_ACCOUNTS, {});
+  const old = all[key];
+  if (!old || !(await verify(password, old))) return null;
+  try {
+    if (!(await backend.createAccount(key, old))) return null;
+  } catch (err) {
+    return null;
+  }
+  const save = readLocal(LOCAL_SAVE + key, null);
+  if (save) await backend.writeSave(key, JSON.stringify(save));
+  delete all[key];
+  writeLocal(LOCAL_ACCOUNTS, all);
+  try {
+    localStorage.removeItem(LOCAL_SAVE + key);
+  } catch (err) {
+    // ignore
+  }
+  return old;
+}
+
 export async function signIn(username, password, keep) {
   if (lockedFor() > 0) return { error: lockMessage() };
   const key = keyFor(username);
@@ -411,6 +446,10 @@ export async function signIn(username, password, keep) {
     account = await backend.getAccount(key);
   } catch (err) {
     return { error: 'Could not reach the save server. Check your connection and try again.' };
+  }
+  if (!account && backend.kind === 'cloud') {
+    const moved = await moveLocalAccountOnline(key, password);
+    if (moved) account = moved;
   }
   // Same message and same work for a missing account as for a wrong
   // password, so the login form can't be used to find out which names exist.
@@ -495,7 +534,7 @@ export async function readBulletin() {
 }
 
 export async function adminData() {
-  if (!isAdmin() || backend.kind !== 'cloud') return null;
+  if (!isAdmin()) return null;
   const [players, bans, bulletin] = await Promise.all([
     backend.listPlayers().catch(() => []),
     backend.readAdmin('bans').catch(() => null),

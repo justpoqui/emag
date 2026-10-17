@@ -147,10 +147,13 @@ Players sign in with a username and password. On the Claude page:
   stay unique. Everyone can read it; each person can only write their own.
 - `admin/*` (who the admin is, Field Bulletin posts, suspended usernames) can
   only be written by the page's owner.
-- **The first account created on the page is the admin.** `admin/meta` records
-  it, and since only the page's owner can write that record, the first
-  account the owner creates becomes the one admin. The Admin tab only appears
-  for that account on that Claude login.
+- **Poqui is the admin.** `admin/meta` records which Claude login owns the
+  Poqui account, and only the page's owner can write that record, so nobody
+  else's Poqui can become admin. The Admin tab only appears for Poqui on that
+  Claude login.
+- An account made while the online save wasn't available (stored in the
+  browser) moves online, with its save, the first time it signs in on the
+  Claude page. Username and password stay the same.
 - Five wrong passwords lock sign-in for a minute (doubling each time), wrong
   usernames and wrong passwords give the same message, saves are clamped to
   values the game can produce when loaded, and release builds don't expose the
@@ -161,4 +164,4 @@ in their own browser. What the server guarantees is that nobody can reach
 anyone else's account or save, or the admin data.
 
 Off the Claude page there is no server: accounts are kept in that browser
-only, and there is no admin.
+only, and Poqui's admin tools only affect that browser.
