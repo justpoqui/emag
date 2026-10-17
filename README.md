@@ -26,7 +26,9 @@ claude.ai.
 
 If the game uses a lot of CPU:
 
-1. **Check the browser is drawing on your graphics card.** Open
+1. **Check the browser is drawing on your graphics card.** The game tells
+   you: if it's drawing in software, a red warning shows on the title screen,
+   and Settings and the *Show FPS* counter name the device in use. Or open
    `chrome://gpu` (Chrome or Edge). If WebGL says *Software only* or
    *SwiftShader*, turn on *Use graphics acceleration when available* in the
    browser's Settings → System and restart it.

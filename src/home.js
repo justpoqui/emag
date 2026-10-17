@@ -7,16 +7,18 @@ import { loadoutValue } from './inventory.js';
 import * as Audio from './audio.js';
 import { connect, createAccount, signIn, resumeSession, currentUser, isAdmin, readBulletin, passwordProblem, USERNAME_RULE } from './accounts.js';
 
-export const VERSION = '0.6';
+export const VERSION = '0.7';
 
 // Newest first. Shown in the Field Bulletin.
 const BULLETIN = [
+  { tag: 'New', title: 'The Husk Network', body: 'Skitters, Buzzers and Watchers leave you be unless provoked, and learn from how you treat them. See the Raider Log.' },
+  { tag: 'New', title: 'Performance settings', body: 'Frame-rate cap, resolution scale and an FPS counter in Settings.' },
+  { tag: 'Change', title: 'PC only', body: 'Scrapfall is now a mouse-and-keyboard game; phone controls are gone.' },
   { tag: 'New', title: 'Account security', body: 'Your account and save are private to your Claude login. Change your password in Settings.' },
-  { tag: 'New', title: 'Raider accounts', body: 'Sign in with a username and password. On the Claude page your progress follows you between PC and phone.' },
-  { tag: 'New', title: 'Item menus', body: 'Right-click (or hold on a phone) any item to sell, move or repair it.' },
+  { tag: 'New', title: 'Raider accounts', body: 'Sign in with a username and password. On the Claude page your progress follows your Claude login.' },
+  { tag: 'New', title: 'Item menus', body: 'Right-click any item to sell, move, repair or dismantle it.' },
   { tag: 'New', title: 'Title screen', body: 'The game now opens here instead of dropping you straight into your loadout.' },
   { tag: 'Change', title: 'Husks renamed', body: 'Skitter, Buzzer, Watcher, Pouncer and Warden. The exploding Pop is gone.' },
-  { tag: 'New', title: 'Play on your phone', body: 'Touch controls, a phone layout and Low graphics for mobile. Turn the phone sideways.' },
 ];
 
 const el = (tag, cls, html) => {
@@ -53,6 +55,7 @@ export function renderHome(ui) {
       </nav>
     </section>
     <aside class="home-side">
+      ${g.softwareGpu ? `<div class="gpu-warn"><b>Your graphics card isn't being used.</b> The browser is drawing the game on your processor (${escapeHtml(g.gpuName)}), which is why CPU use is high. Fix: browser Settings → System → turn on <i>Use graphics acceleration when available</i>, then fully restart the browser. Check <i>chrome://gpu</i> afterwards: WebGL should say <i>Hardware accelerated</i>.</div>` : ''}
       <div class="home-card">
         <div class="hc-head"><span class="hc-name">${escapeHtml(currentUser() || 'Raider')}${isAdmin() ? ' <i class="admin-badge">ADMIN</i>' : ''}</span><span class="hc-level">LVL ${p.level}</span></div>
         <div class="hc-xp"><div style="width:${Math.min(100, (p.xp / need) * 100)}%"></div></div>

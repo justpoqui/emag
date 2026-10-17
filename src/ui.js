@@ -17,17 +17,14 @@ import { renderHome, renderLogin } from './home.js';
 import { describe as describeNetwork } from './network.js';
 import { signOut, currentUser, isAdmin, storageKind, changePassword, passwordProblem, adminData, adminSetBans, adminSetBulletin, adminName } from './accounts.js';
 
-// Fullscreen + landscape on phones (Android honours the orientation lock; on
-// iPhone, add the game to the home screen for fullscreen).
+// Fullscreen (from the Settings button).
 export function goFullscreen() {
   const doc = document.documentElement;
   const req = doc.requestFullscreen || doc.webkitRequestFullscreen;
   if (!req || document.fullscreenElement || document.webkitFullscreenElement) return;
   try {
     const p = req.call(doc, { navigationUI: 'hide' });
-    const lock = () => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {});
-    if (p && p.then) p.then(lock).catch(() => {});
-    else lock();
+    if (p && p.catch) p.catch(() => {});
   } catch (err) {
     // not allowed here; ignore
   }
@@ -1053,7 +1050,8 @@ export class UI {
       <div class="setting">Frame-rate cap <span class="seg fps">${FPS_CAPS.map((v) => `<button class="seg-b ${v === this.game.fpsCap ? 'on' : ''}" data-v="${v}">${v || 'Off'}</button>`).join('')}</span></div>
       <div class="setting">Resolution <span class="seg res">${RES_SCALES.map((v) => `<button class="seg-b ${v === getResScale() ? 'on' : ''}" data-v="${v}">${Math.round(v * 100)}%</button>`).join('')}</span></div>
       <label class="setting">Show FPS <input type="checkbox" class="showfps" ${this.game.showFps ? 'checked' : ''}></label>
-      <div class="q-tip">Using a lot of CPU? Lower the frame-rate cap and resolution first, then graphics.</div>
+      <div class="q-tip">Drawing with: <b class="${this.game.softwareGpu ? 'bad' : ''}">${this.game.gpuName.replace(/[<>&]/g, '')}</b>${this.game.softwareGpu ? ' — software rendering: your graphics card isn’t being used. Turn on graphics acceleration in the browser’s settings and restart the browser.' : ''}</div>
+      <div class="q-tip">Graphics changes apply after a restart; frame-rate cap and resolution apply right away.</div>
       <button class="btn ghost fs">Fullscreen</button>`;
     if (!inRaid && currentUser()) box.prepend(this.accountBlock());
     const sens = box.querySelector('.sens');
@@ -1637,7 +1635,7 @@ export class UI {
     body.appendChild(shop);
   }
 
-  // How a raid works, Husk notes and controls (PC or phone).
+  // How a raid works, Husk notes and controls.
   guideHtml() {
     const controls = 'WASD move · Shift sprint · Space jump · C crouch · V dodge roll · Mouse aim/fire · RMB aim down sights · R reload · 1/2 or wheel swap weapon · F swing your stick · H holster (move faster) · 3 heal · 4 recharge shield · G grenade · E interact (hold) · Tab backpack · M map · Esc pause';
     return `

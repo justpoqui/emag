@@ -58,6 +58,17 @@ export class Game {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
     this.renderer = renderer;
+    // Which device the browser draws with. A software renderer (SwiftShader,
+    // llvmpipe, Microsoft Basic Render Driver) means the CPU does all the 3D.
+    this.gpuName = 'unknown';
+    try {
+      const gl = renderer.getContext();
+      const info = gl.getExtension('WEBGL_debug_renderer_info');
+      this.gpuName = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+    } catch (err) {
+      // not available
+    }
+    this.softwareGpu = /swiftshader|llvmpipe|softpipe|software|basic render/i.test(this.gpuName);
 
     const scene = new THREE.Scene();
     this.scene = scene;
@@ -1121,21 +1132,30 @@ export class Game {
     this.countFps(now);
     const dt = Math.min(0.05, this.clock.getDelta());
     this.time += dt;
+    const t0 = performance.now();
+    let t1;
     if (this.mode === 'raid') {
       if (!this.paused) this.updateRaid(dt);
       this.effects.update(dt);
       this.updateSun();
+      t1 = performance.now();
       this.renderer.render(this.scene, this.camera);
     } else if (this.mode === 'explore') {
       if (!this.paused) this.updateExplore(dt);
+      t1 = performance.now();
       if (this.preview) this.renderPreview(dt);
       else this.renderer.render(this.sanctuary.scene, this.sanctuary.camera);
     } else {
       // menus show the Patron's Sanctuary with the raider and their gear
       this.sanctuary.refresh(this.mode === 'login' ? null : this.profile);
       this.sanctuary.update(dt, this.mode);
+      t1 = performance.now();
       this.renderer.render(this.sanctuary.scene, this.sanctuary.camera);
     }
+    // smoothed CPU time per frame: game logic, and handing the frame to the browser to draw
+    const t2 = performance.now();
+    this.logicMs = (this.logicMs || 0) * 0.9 + (t1 - t0) * 0.1;
+    this.drawMs = (this.drawMs || 0) * 0.9 + (t2 - t1) * 0.1;
     this.input.endFrame();
   }
 
@@ -1154,7 +1174,10 @@ export class Game {
     this.fpsFrames = (this.fpsFrames || 0) + 1;
     if (!this.fpsStart) this.fpsStart = now;
     if (now - this.fpsStart >= 500) {
-      this.fpsEl.textContent = `${Math.round((this.fpsFrames * 1000) / (now - this.fpsStart))} FPS`;
+      const fps = Math.round((this.fpsFrames * 1000) / (now - this.fpsStart));
+      const calls = this.renderer.info.render.calls;
+      this.fpsEl.innerHTML = `${fps} FPS · logic ${this.logicMs.toFixed(1)} ms · draw ${this.drawMs.toFixed(1)} ms · ${calls} draw calls`
+        + `<small class="${this.softwareGpu ? 'bad' : ''}">${this.softwareGpu ? '⚠ SOFTWARE RENDERING: ' : ''}${this.gpuName.replace(/[<>&]/g, '')}</small>`;
       this.fpsFrames = 0;
       this.fpsStart = now;
     }
@@ -1289,7 +1312,7 @@ export class Game {
     this.updateGrenades(dt);
     this.updateDebris(dt);
     this.updateLifts(dt);
-    // skip drawing far-away things (fog hides them anyway); big win on phones
+    // skip drawing far-away things (fog hides them anyway)
     const drawDist = this.quality.drawDist;
     for (const e of this.enemies) e.model.visible = e.pos.distanceTo(p.pos) < (e.small ? drawDist * 0.6 : drawDist);
     const lootDist = Math.min(70, drawDist * 0.45);
