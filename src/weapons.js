@@ -106,7 +106,8 @@ export class Weapons {
     if (this.switching > 0) this.switching -= dt;
     const w = this.current();
     const d = this.def();
-    p.setGun(w ? w.id : null, this.holstered);
+    const other = this.game.profile.loadout.weapons[1 - this.active];
+    p.setGuns(w ? w.id : null, this.holstered, other ? other.id : null);
     this.updateMelee(dt);
     // no gun in hand: the trigger swings the stick
     if (!w || this.holstered) {

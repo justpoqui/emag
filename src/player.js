@@ -18,79 +18,116 @@ const _pivot = new THREE.Vector3();
 const _box = new THREE.Box3();
 const _ground = [0, 0];
 
-// Weapon models, built from rounded parts
+// Weapon models, built from rounded parts. Every gun has its own model, and
+// says where the hands go (gun space: +z forward), where the back of the stock
+// is, how it's held (scale, how side-on the stance is, a pistol's reach) and
+// where it's carried when not in the hands: big guns on the back, the pistol
+// on the left hip, the SMG on the right.
 const rbox = (w, h, d) => new RoundedBoxGeometry(w, h, d, 2, Math.min(w, h, d) * 0.32);
+const tube = (r1, r2, len, seg = 12) => new THREE.CylinderGeometry(r1, r2, len, seg).rotateX(Math.PI / 2); // along z
+
 export function buildGunModel(id) {
   const item = ITEMS[id];
   const g = new THREE.Group();
-  const body = new THREE.MeshStandardMaterial({ color: item.color, roughness: 0.6, metalness: 0.5 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.7 });
+  const paint = new THREE.MeshStandardMaterial({ color: item.color, roughness: 0.6, metalness: 0.45 });
+  const steel = new THREE.MeshStandardMaterial({ color: 0x26282b, roughness: 0.45, metalness: 0.75 });
+  const poly = new THREE.MeshStandardMaterial({ color: 0x1c1d1f, roughness: 0.85 });
   const wood = new THREE.MeshStandardMaterial({ color: 0x7a5232, roughness: 0.8 });
-  const add = (geo, m, x, y, z) => {
+  const glass = new THREE.MeshStandardMaterial({ color: 0x0c1418, emissive: 0x30d0ff, emissiveIntensity: 0.25, metalness: 0.9, roughness: 0.1 });
+  const dot = new THREE.MeshStandardMaterial({ color: 0x300000, emissive: 0xff2010, emissiveIntensity: 1.6 });
+  const add = (geo, m, x, y, z, rx = 0) => {
     const mesh = new THREE.Mesh(geo, m);
     mesh.position.set(x, y, z);
+    mesh.rotation.x = rx;
     mesh.castShadow = true;
     g.add(mesh);
     return mesh;
   };
-  let muzzle = 0.7;
-  // where the hands go (gun space), the back of the stock, and how it's held:
-  // scale to suit the body, and how far the upper body turns side-on
-  let grip = new THREE.Vector3(0, -0.1, -0.06);
-  let fore = new THREE.Vector3(0, -0.06, 0.33);
-  let butt = -0.45;
-  let hold = { scale: 0.75, twist: 0.8, out: 0 };
-  switch (item.shape) {
-    case 'smg':
-      add(rbox(0.09, 0.14, 0.42), body, 0, 0, 0.1);
-      add(rbox(0.05, 0.05, 0.2), dark, 0, 0.02, 0.4);
-      add(rbox(0.06, 0.2, 0.08), dark, 0, -0.14, 0.12);
-      add(rbox(0.06, 0.08, 0.2), dark, 0, -0.02, -0.18);
-      muzzle = 0.5;
-      grip = new THREE.Vector3(0, -0.1, 0.1);
-      fore = new THREE.Vector3(0, -0.05, 0.36);
-      butt = -0.28;
+  let spec;
+  switch (id) {
+    case 'mule': // an old wood-stocked carbine with iron sights
+      add(rbox(0.065, 0.095, 0.3), steel, 0, 0, 0.04);
+      add(rbox(0.058, 0.115, 0.34), wood, 0, -0.035, -0.29, -0.12);
+      add(rbox(0.066, 0.06, 0.32), wood, 0, -0.012, 0.35);
+      add(tube(0.015, 0.015, 0.6), steel, 0, 0.022, 0.5);
+      add(rbox(0.012, 0.035, 0.012), steel, 0, 0.055, 0.78);
+      add(rbox(0.03, 0.025, 0.03), steel, 0, 0.06, -0.04);
+      add(rbox(0.045, 0.1, 0.065), steel, 0, -0.09, 0.08);
+      add(new THREE.TorusGeometry(0.03, 0.006, 6, 14, Math.PI), steel, 0, -0.06, -0.04).rotation.set(0, Math.PI / 2, Math.PI);
+      spec = { muzzle: 0.8, butt: -0.46, grip: [0, -0.08, -0.07], fore: [0, -0.05, 0.33], carry: 'back' };
       break;
-    case 'pistol':
-      add(rbox(0.08, 0.13, 0.32), body, 0, 0, 0.12);
-      add(new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8), dark, 0, 0, 0.08).rotation.x = Math.PI / 2;
-      add(rbox(0.07, 0.17, 0.08), wood, 0, -0.12, -0.02);
-      muzzle = 0.3;
-      // held out in front in both hands, support hand cupping the grip
-      grip = new THREE.Vector3(0, -0.11, -0.02);
-      fore = new THREE.Vector3(-0.05, -0.12, 0.0);
-      butt = 0;
-      hold = { scale: 0.85, twist: 0.3, out: 0.36 };
+    case 'badger': // an assault rifle: rail, red-dot sight, curved magazine
+      add(rbox(0.07, 0.085, 0.42), paint, 0, 0.01, 0.04);
+      add(rbox(0.062, 0.07, 0.26), poly, 0, -0.06, 0.0);
+      add(rbox(0.045, 0.12, 0.05), poly, 0, -0.11, -0.08, 0.35);
+      add(rbox(0.05, 0.16, 0.075), steel, 0, -0.15, 0.1, -0.32);
+      add(rbox(0.05, 0.095, 0.2), paint, 0, -0.025, -0.33);
+      add(tube(0.017, 0.017, 0.2), poly, 0, 0.005, -0.2);
+      add(rbox(0.075, 0.075, 0.3), poly, 0, 0.005, 0.38);
+      add(rbox(0.03, 0.012, 0.5), steel, 0, 0.06, 0.12); // top rail
+      add(tube(0.013, 0.013, 0.24), steel, 0, 0.012, 0.63);
+      add(tube(0.022, 0.022, 0.06), steel, 0, 0.012, 0.77);
+      add(tube(0.024, 0.024, 0.075), poly, 0, 0.1, 0.04);
+      add(new THREE.CircleGeometry(0.018, 14), dot, 0, 0.1, 0.004).rotation.y = Math.PI;
+      spec = { muzzle: 0.8, butt: -0.43, grip: [0, -0.12, -0.08], fore: [0, -0.06, 0.34], carry: 'back' };
       break;
-    case 'shotgun':
-      add(rbox(0.1, 0.13, 0.5), body, 0, 0, 0.1);
-      add(new THREE.CylinderGeometry(0.035, 0.035, 0.6, 8), dark, 0, 0.03, 0.55).rotation.x = Math.PI / 2;
-      add(rbox(0.09, 0.08, 0.2), wood, 0, -0.04, 0.45);
-      add(rbox(0.08, 0.14, 0.32), wood, 0, -0.05, -0.28);
-      muzzle = 0.85;
-      grip = new THREE.Vector3(0, -0.07, -0.1);
-      fore = new THREE.Vector3(0, -0.07, 0.32);
+    case 'sparrow': // a compact SMG: boxy, mag ahead of the grip, folding wire stock
+      add(rbox(0.07, 0.115, 0.34), paint, 0, 0, 0.06);
+      add(tube(0.028, 0.028, 0.14), steel, 0, 0.015, 0.29);
+      add(rbox(0.044, 0.17, 0.058), steel, 0, -0.14, 0.12);
+      add(rbox(0.045, 0.11, 0.05), poly, 0, -0.1, -0.05, 0.25);
+      add(new THREE.CylinderGeometry(0.016, 0.016, 0.08, 10), poly, 0, -0.085, 0.22);
+      for (const y of [-0.03, 0.03]) add(tube(0.007, 0.007, 0.22), steel, 0, y, -0.22);
+      add(rbox(0.05, 0.085, 0.016), steel, 0, 0, -0.33);
+      add(rbox(0.02, 0.03, 0.06), steel, 0, 0.07, 0.04);
+      spec = { muzzle: 0.37, butt: -0.34, grip: [0, -0.12, -0.05], fore: [0, -0.12, 0.22], carry: 'hipR', scale: 0.8 };
       break;
-    case 'long':
-      add(rbox(0.08, 0.12, 0.5), body, 0, 0, 0.05);
-      add(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 8), dark, 0, 0.02, 0.65).rotation.x = Math.PI / 2;
-      add(new THREE.CylinderGeometry(0.045, 0.045, 0.3, 8), dark, 0, 0.12, 0.05).rotation.x = Math.PI / 2;
-      add(rbox(0.07, 0.15, 0.36), wood, 0, -0.04, -0.34);
-      muzzle = 1.05;
-      grip = new THREE.Vector3(0, -0.08, -0.12);
-      fore = new THREE.Vector3(0, -0.04, 0.26);
-      butt = -0.52;
+    case 'hammerhead': // a heavy revolver
+      add(rbox(0.05, 0.08, 0.14), steel, 0, 0.005, 0.02);
+      add(tube(0.036, 0.036, 0.07, 10), paint, 0, 0.01, 0.05);
+      add(rbox(0.038, 0.05, 0.22), steel, 0, 0.022, 0.2);
+      add(rbox(0.03, 0.03, 0.16), steel, 0, -0.012, 0.18);
+      add(rbox(0.04, 0.12, 0.05), wood, 0, -0.085, -0.06, 0.3);
+      add(rbox(0.012, 0.03, 0.02), steel, 0, 0.055, -0.04);
+      add(rbox(0.01, 0.02, 0.012), steel, 0, 0.055, 0.3);
+      spec = { muzzle: 0.32, butt: 0, grip: [0, -0.1, -0.05], fore: [-0.045, -0.11, -0.03], carry: 'hipL', scale: 0.85, twist: 0.3, out: 0.36 };
       break;
-    default: // rifle
-      add(rbox(0.09, 0.14, 0.55), body, 0, 0, 0.1);
-      add(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), dark, 0, 0.02, 0.58).rotation.x = Math.PI / 2;
-      add(rbox(0.06, 0.2, 0.08), dark, 0, -0.15, 0.18);
-      add(rbox(0.07, 0.13, 0.3), wood, 0, -0.03, -0.3);
-      add(rbox(0.05, 0.06, 0.14), dark, 0, 0.1, 0.05);
-      muzzle = 0.8;
+    case 'boar': // a pump shotgun with a wood stock and tube magazine
+      add(rbox(0.075, 0.1, 0.26), steel, 0, 0, 0.02);
+      add(tube(0.021, 0.021, 0.56), steel, 0, 0.03, 0.43);
+      add(tube(0.017, 0.017, 0.42), steel, 0, -0.022, 0.36);
+      add(rbox(0.07, 0.06, 0.17), paint, 0, -0.026, 0.34); // pump
+      for (const z of [-0.05, -0.02, 0.01, 0.04]) add(rbox(0.074, 0.008, 0.008), poly, 0, -0.026, 0.34 + z);
+      add(rbox(0.06, 0.12, 0.34), wood, 0, -0.04, -0.29, -0.15);
+      add(new THREE.SphereGeometry(0.008, 8, 6), steel, 0, 0.055, 0.7);
+      spec = { muzzle: 0.71, butt: -0.46, grip: [0, -0.07, -0.1], fore: [0, -0.05, 0.32], carry: 'back' };
+      break;
+    case 'heron': // a long rifle: scope, muzzle brake, folded bipod, cheek rest
+    default:
+      add(rbox(0.07, 0.09, 0.4), paint, 0, 0, 0.0);
+      add(tube(0.018, 0.015, 0.74), steel, 0, 0.015, 0.56);
+      add(rbox(0.045, 0.04, 0.08), steel, 0, 0.015, 0.95);
+      add(tube(0.028, 0.028, 0.3), poly, 0, 0.105, 0.02);
+      add(tube(0.04, 0.03, 0.07), poly, 0, 0.105, 0.19);
+      add(tube(0.03, 0.036, 0.05), poly, 0, 0.105, -0.15);
+      add(new THREE.CircleGeometry(0.036, 16), glass, 0, 0.105, 0.226);
+      for (const z of [-0.06, 0.1]) add(rbox(0.02, 0.05, 0.02), steel, 0, 0.065, z);
+      add(new THREE.SphereGeometry(0.016, 8, 6), steel, 0.05, 0.02, -0.08);
+      add(rbox(0.05, 0.07, 0.09), poly, 0, -0.08, 0.04);
+      add(rbox(0.06, 0.14, 0.4), paint, 0, -0.03, -0.38, -0.08);
+      add(rbox(0.05, 0.05, 0.16), paint, 0, 0.07, -0.4);
+      for (const x of [-0.02, 0.02]) add(tube(0.007, 0.007, 0.26), steel, x, -0.04, 0.38);
+      spec = { muzzle: 0.99, butt: -0.58, grip: [0, -0.09, -0.13], fore: [0, -0.05, 0.21], carry: 'back' };
   }
-  g.userData.muzzle = new THREE.Vector3(0, 0.02, muzzle);
-  Object.assign(g.userData, { grip, fore, butt, hold });
+  g.userData.muzzle = new THREE.Vector3(0, 0.02, spec.muzzle);
+  Object.assign(g.userData, {
+    grip: new THREE.Vector3(...spec.grip),
+    fore: new THREE.Vector3(...spec.fore),
+    butt: spec.butt,
+    length: spec.muzzle - spec.butt,
+    carry: spec.carry,
+    hold: { scale: spec.scale ?? 0.75, twist: spec.twist ?? 0.8, out: spec.out ?? 0 },
+  });
   return g;
 }
 
@@ -159,21 +196,49 @@ export class Player {
     this.model.rotation.set(0, 0, 0);
   }
 
-  // id: the drawn weapon (or null). holstered: show it on the back instead.
-  setGun(id, holstered = false) {
-    if (this.gunId === id && this.gunHolstered === holstered) return;
+  // The weapon in use (in the hands, or holstered) and the other one carried.
+  // Holstered guns go where their size says: big ones on the back (two cross
+  // over), a pistol on the left hip, an SMG on the right.
+  setGuns(activeId, holstered = false, otherId = null) {
+    const key = `${activeId}|${holstered}|${otherId}`;
+    if (key === this.gunKey) return;
+    this.gunKey = key;
     const u = this.model.userData;
-    if (this.gunModel) this.gunModel.parent.remove(this.gunModel);
-    this.gunModel = id ? buildGunModel(id) : null;
-    this.gunId = id;
+    for (const m of this.gunModels || []) m.parent.remove(m);
+    this.gunModels = [];
+    this.gunModel = null;
+    this.gunId = activeId;
     this.gunHolstered = holstered;
-    if (this.gunModel) {
-      const { hold, butt } = this.gunModel.userData;
-      this.gunModel.scale.setScalar(hold.scale);
-      // drawn: the back of the stock sits at the socket (the shoulder pocket); a pistol is held out
-      if (!holstered) this.gunModel.position.z = -butt * hold.scale + hold.out;
-      (holstered ? u.backSocket : u.gunSocket).add(this.gunModel);
-    }
+    const used = new Set();
+    const holster = (m) => {
+      const want = m.userData.carry;
+      const order = want === 'hipL' ? ['hipL', 'hipR', 'back', 'back2'] : want === 'hipR' ? ['hipR', 'hipL', 'back', 'back2'] : ['back', 'back2'];
+      const spot = order.find((o) => !used.has(o)) || 'back2';
+      used.add(spot);
+      // centre long guns on the sling; hip guns hang from their grip
+      if (spot.startsWith('back')) m.position.z = -(m.userData.butt + m.userData.length / 2) * m.userData.hold.scale;
+      ({ back: u.backSocket, back2: u.backSocket2, hipL: u.hipLSocket, hipR: u.hipRSocket })[spot].add(m);
+    };
+    const make = (id, inHand) => {
+      const m = buildGunModel(id);
+      const { hold, butt } = m.userData;
+      m.scale.setScalar(hold.scale);
+      if (inHand) {
+        // the back of the stock sits at the socket (the shoulder pocket); a pistol is held out
+        m.position.z = -butt * hold.scale + hold.out;
+        u.gunSocket.add(m);
+        this.gunModel = m;
+      } else {
+        holster(m);
+      }
+      this.gunModels.push(m);
+    };
+    if (activeId) make(activeId, !holstered);
+    if (otherId) make(otherId, false);
+  }
+
+  setGun(id, holstered = false) {
+    this.setGuns(id, holstered, null);
   }
 
   setFlashlight(on) {

@@ -9,7 +9,7 @@ const _w = new THREE.Vector3();
 const _u = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _down = new THREE.Vector3(0, -1, 0);
-const BEAM_HALF_ANGLE = 0.24; // radians, the Watcher's lamp
+const BEAM_HALF_ANGLE = 0.15; // radians, the Watcher's lamp (about 2.5 m wide on the ground)
 // where latched Skitters cling, in the raider model's space: back, shoulders, thigh, calf
 const LATCH_SPOTS = [
   new THREE.Vector3(0, 1.3, -0.42),
@@ -165,16 +165,29 @@ const BUILDERS = {
     // the eye (and its lamp) faces forward, so the light comes from the Watcher itself
     add(root, new THREE.TorusGeometry(0.1, 0.022, 6, 18), dark, 0, -0.05, 0.345);
     const eye = add(root, new THREE.SphereGeometry(0.075, 12, 10), eyeMat, 0, -0.05, 0.35);
+    // the lamp: a glow at the eye, so the beam visibly starts there
+    const lamp = new THREE.Sprite(new THREE.SpriteMaterial({ map: spotTex(), color: 0xffe08a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    lamp.position.set(0, -0.05, 0.42);
+    lamp.scale.setScalar(0.55);
+    root.add(lamp);
     add(root, new THREE.CylinderGeometry(0.012, 0.02, 0.7, 6), dark, 0, 0.9, 0);
     // searchlight: a faint beam and a bright spot on the ground (placed in world space each frame)
-    const coneGeo = new THREE.ConeGeometry(1, 1, 24, 1, true);
+    // the beam is brightest at the lamp and fades towards the ground (vertex colours)
+    const coneGeo = new THREE.ConeGeometry(1, 1, 24, 6, true);
     coneGeo.translate(0, -0.5, 0);
-    const beam = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.06, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const shade = [];
+    const cp = coneGeo.attributes.position;
+    for (let i = 0; i < cp.count; i++) {
+      const v = 0.12 + 0.88 * Math.pow(1 + cp.getY(i), 2.2); // 1 at the lamp (y=0), dim at the ground (y=-1)
+      shade.push(v, v, v);
+    }
+    coneGeo.setAttribute('color', new THREE.Float32BufferAttribute(shade, 3));
+    const beam = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({ color: 0xffe08a, vertexColors: true, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     const spotGeo = new THREE.CircleGeometry(1, 32);
     spotGeo.rotateX(-Math.PI / 2);
     const spot = new THREE.Mesh(spotGeo, new THREE.MeshBasicMaterial({ color: 0xffe08a, map: spotTex(), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
     beam.frustumCulled = false;
-    return { root, eye, ring, beam, spot, hitboxes: [{ node: body, r: 0.44, mult: 1 }, { node: eye, r: 0.11, mult: 2.2, weak: true }] };
+    return { root, eye, ring, beam, spot, lamp, hitboxes: [{ node: body, r: 0.44, mult: 1 }, { node: eye, r: 0.11, mult: 2.2, weak: true }] };
   },
   pouncer() {
     const root = new THREE.Group();
@@ -667,8 +680,9 @@ export class Husk {
   // The Watcher's searchlight: sweeps the ground below it while idle, locks on
   // to the raider while wary or hostile. Its pool of light is what it can see.
   updateSearchlight(dt, ctx) {
-    const { beam, spot, eye } = this.parts;
+    const { beam, spot, eye, lamp } = this.parts;
     const p = ctx.player;
+    this.syncModel(); // place the beam from where the Watcher is this frame
     let tx;
     let tz;
     if (this.state === 'idle') {
@@ -694,7 +708,7 @@ export class Husk {
     dir.divideScalar(len);
     this.beamDir = (this.beamDir || new THREE.Vector3()).copy(dir);
     this.beamLen = len;
-    this.beamRadius = Math.max(1.8, len * Math.tan(BEAM_HALF_ANGLE));
+    this.beamRadius = Math.max(1.2, len * Math.tan(BEAM_HALF_ANGLE));
     beam.position.copy(from);
     beam.quaternion.setFromUnitVectors(_down, dir);
     beam.scale.set(this.beamRadius, len, this.beamRadius);
@@ -703,6 +717,7 @@ export class Husk {
     const color = this.state === 'alert' ? 0xff4a2a : this.state === 'wary' ? 0xffa040 : 0xffe08a;
     beam.material.color.setHex(color);
     spot.material.color.setHex(color);
+    lamp.material.color.setHex(color);
     beam.visible = spot.visible = this.model.visible;
   }
 

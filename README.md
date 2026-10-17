@@ -128,7 +128,7 @@ to leave poison as it lets go (10 damage over 5 seconds).
 | --- | --- | --- | --- |
 | **Skitter** | 40 | Knee-high crawler; backs off if you get close, leaps (and may latch on) if provoked | Generous hitbox; the eye at the front crits |
 | **Buzzer** | 60 | Drone on vectoring thrusters; circles and fires bursts when hostile | The small eye on the nose |
-| **Watcher** | 45 | Sweeps a lamp ahead of itself. It only sees what's in the beam; when hostile it calls in Buzzers | Stay out of the light; the eye is the lamp |
+| **Watcher** | 45 | Sweeps a narrow lamp ahead of itself from its eye. It only sees what's in the beam; when hostile it calls in Buzzers | Stay out of the light; the eye is the lamp |
 | **Pouncer** | 420 | Armored jumper that slams down with a shockwave | Glowing core on top takes extra damage |
 | **Warden** | 1400 | Walking fortress with twin miniguns, guards the plaza | Core on its back takes triple damage; bring heavy ammo |
 
@@ -151,6 +151,16 @@ The Husks learn. Every raid they remember what you did to them and where
   where you don't.
 
 The Raider Log tab shows what the network has learned about you.
+
+## Weapons
+
+Each gun has its own model: the **Mule** (wood-stocked carbine), **Badger**
+(assault rifle with a red-dot sight), **Sparrow** (compact SMG with a folding
+stock), **Hammerhead** (heavy revolver), **Boar** (pump shotgun) and **Heron**
+(scoped long rifle). Both your weapons are always visible: the one you're
+using is in your hands, the other is carried by size. Long guns sling across
+your back (two cross over), the pistol sits in a holster on your left hip and
+the SMG hangs on your right.
 
 ## Controls
 

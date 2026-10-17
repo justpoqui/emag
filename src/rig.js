@@ -137,6 +137,22 @@ export function buildRaiderModel(colors = {}) {
   backSocket.position.set(-0.05, 0.36, -0.37);
   backSocket.rotation.set(0.15, Math.PI / 2, -0.95);
   body.add(backSocket);
+  // a second long gun crosses the first on the back
+  const backSocket2 = new THREE.Group();
+  backSocket2.position.set(0.05, 0.34, -0.41);
+  backSocket2.rotation.set(0.15, Math.PI / 2, 0.95);
+  body.add(backSocket2);
+  // hip carry: muzzle down, grip forward (pistol in a left-hip holster, SMG slung on the right)
+  const hipLSocket = new THREE.Group();
+  hipLSocket.rotation.order = 'YXZ';
+  hipLSocket.position.set(-0.215, -0.02, 0.03);
+  hipLSocket.rotation.set(Math.PI / 2, Math.PI, 0);
+  body.add(hipLSocket);
+  const hipRSocket = new THREE.Group();
+  hipRSocket.rotation.order = 'YXZ';
+  hipRSocket.position.set(0.235, 0.02, 0.02);
+  hipRSocket.rotation.set(Math.PI / 2 - 0.22, Math.PI, 0);
+  body.add(hipRSocket);
 
   // flashlight: a GI angle-head torch (olive drab, head bent forward) clipped
   // to the front of the belt; it shines from there when switched on
@@ -154,7 +170,7 @@ export function buildRaiderModel(colors = {}) {
   // sits on the belt, just left of the buckle, facing forward
   torch.position.set(-0.075, 0.035, 0.13);
 
-  root.userData = { body, head, torso, legs, arms, backStick, handStick, gunSocket, backSocket, torch, torchLens };
+  root.userData = { body, head, torso, legs, arms, backStick, handStick, gunSocket, backSocket, backSocket2, hipLSocket, hipRSocket, torch, torchLens };
   return root;
 }
 
