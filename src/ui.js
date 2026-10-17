@@ -12,7 +12,7 @@ import { MAP_HALF } from './collision.js';
 import * as Audio from './audio.js';
 import { QUALITY, getQualityName, setQualityName } from './settings.js';
 import { renderHome, renderLogin } from './home.js';
-import { signOut } from './accounts.js';
+import { signOut, currentUser, isAdmin, storageKind, changePassword, passwordProblem, adminData, adminSetBans, adminSetBulletin, ADMIN_NAME } from './accounts.js';
 
 // Fullscreen + landscape on phones (Android honours the orientation lock; on
 // iPhone, add the game to the home screen for fullscreen).
@@ -961,6 +961,7 @@ export class UI {
       <div class="setting">Graphics <span class="seg">${Object.entries(QUALITY).map(([k, v]) => `<button class="seg-b ${k === q ? 'on' : ''}" data-q="${k}">${v.label}</button>`).join('')}</span></div>
       <div class="q-note hidden"></div>
       <button class="btn ghost fs">Fullscreen</button>`;
+    if (!inRaid && currentUser()) box.prepend(this.accountBlock());
     const sens = box.querySelector('.sens');
     sens.value = this.game.input.sensitivity;
     sens.oninput = () => {
@@ -992,6 +993,50 @@ export class UI {
       if (document.fullscreenElement) document.exitFullscreen();
       else goFullscreen();
     };
+    return box;
+  }
+
+  // Username, where the account lives, and a change-password form.
+  accountBlock() {
+    const box = el('div', 'account');
+    const cloud = storageKind() === 'cloud';
+    box.innerHTML = `
+      <div class="acct-row"><span class="acct-label">Username</span><b class="acct-name"></b>${isAdmin() ? '<i class="admin-badge">ADMIN</i>' : ''}</div>
+      <div class="acct-row"><span class="acct-label">Saved</span><span>${cloud ? 'Private to your Claude login · works on all your devices' : 'In this browser only'}</span></div>
+      <form class="pw-form" novalidate>
+        <div class="acct-label">Change password</div>
+        <input id="pw-old" type="password" placeholder="Current password" autocomplete="current-password">
+        <input id="pw-new" type="password" placeholder="New password (8+ characters, a letter and a number)" autocomplete="new-password">
+        <input id="pw-new2" type="password" placeholder="Confirm new password" autocomplete="new-password">
+        <div class="pw-msg" role="status"></div>
+        <button type="submit" class="btn small">Change password</button>
+      </form>`;
+    box.querySelector('.acct-name').textContent = currentUser();
+    const form = box.querySelector('.pw-form');
+    const msg = box.querySelector('.pw-msg');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const oldPw = form.querySelector('#pw-old').value;
+      const newPw = form.querySelector('#pw-new').value;
+      msg.className = 'pw-msg';
+      const problem = passwordProblem(newPw);
+      if (problem) return void (msg.textContent = problem);
+      if (newPw !== form.querySelector('#pw-new2').value) return void (msg.textContent = 'The new passwords don’t match.');
+      const btn = form.querySelector('button');
+      btn.disabled = true;
+      msg.textContent = 'Saving…';
+      const res = await changePassword(oldPw, newPw);
+      btn.disabled = false;
+      if (res.error) {
+        msg.textContent = res.error;
+        Audio.playDeny();
+        return;
+      }
+      form.reset();
+      msg.classList.add('ok');
+      msg.textContent = 'Password changed. Other devices will need the new password.';
+      Audio.playChime();
+    });
     return box;
   }
 
@@ -1049,7 +1094,7 @@ export class UI {
         <button class="home-btn" title="Title screen">◂</button>
         <div class="logo">SCRAP<span>FALL</span><small>THE BURROW · UNDERGROUND</small></div>
         <div class="tabs">
-          ${['loadout', 'traders', 'workbench', 'log', 'settings'].map((t) => `<button class="tab ${this.hubTab === t ? 'on' : ''}" data-t="${t}">${{ loadout: 'Loadout', traders: 'Traders', workbench: 'Workbench', log: 'Raider Log', settings: 'Settings' }[t]}</button>`).join('')}
+          ${['loadout', 'traders', 'workbench', 'log', 'settings', ...(isAdmin() ? ['admin'] : [])].map((t) => `<button class="tab ${this.hubTab === t ? 'on' : ''}" data-t="${t}">${{ loadout: 'Loadout', traders: 'Traders', workbench: 'Workbench', log: 'Raider Log', settings: 'Settings', admin: 'Admin' }[t]}</button>`).join('')}
         </div>
         <div class="wallet">
           <div class="lvl">LVL ${p.level}<div class="xp"><div style="width:${(p.xp / need) * 100}%"></div></div></div>
@@ -1075,6 +1120,7 @@ export class UI {
     if (this.hubTab === 'traders') this.renderTradersTab(body);
     if (this.hubTab === 'workbench') this.renderWorkbenchTab(body);
     if (this.hubTab === 'log') this.renderLogTab(body);
+    if (this.hubTab === 'admin' && isAdmin()) this.renderAdminTab(body);
     if (this.hubTab === 'settings') {
       body.className = 'hub-body settings-tab';
       const box = el('div', 'hub-col');
@@ -1519,6 +1565,104 @@ export class UI {
     Audio.initAudio();
     if (this.game.input.touch) goFullscreen();
     this.game.enterHub();
+  }
+
+  // Only Poqui, signed in on the page owner's Claude login. The server also
+  // refuses admin writes from anyone else.
+  async renderAdminTab(body) {
+    body.className = 'hub-body admin-tab';
+    const col = el('div', 'hub-col wide');
+    col.innerHTML = '<div class="col-title">ADMIN <small>only you can see this</small></div><div class="muted">Loading…</div>';
+    body.appendChild(col);
+    const data = await adminData();
+    if (!data) {
+      col.innerHTML = '<div class="col-title">ADMIN</div><p class="muted">Admin tools work on the Claude page only.</p>';
+      return;
+    }
+    col.innerHTML = `
+      <div class="col-title">ADMIN <small>only you can see this</small></div>
+      <div class="admin-grid">
+        <section>
+          <div class="sect">PLAYERS · ${data.players.length}</div>
+          <ul class="admin-list players"></ul>
+        </section>
+        <section>
+          <div class="sect">SUSPENDED ACCOUNTS</div>
+          <form class="row ban-form"><input class="admin-input" id="ban-name" placeholder="Username" maxlength="16" autocomplete="off"><button class="btn small">Suspend</button></form>
+          <ul class="admin-list bans"></ul>
+        </section>
+        <section class="wide">
+          <div class="sect">FIELD BULLETIN POSTS</div>
+          <form class="bulletin-form">
+            <div class="row"><select id="post-tag" class="admin-input"><option>News</option><option>New</option><option>Event</option><option>Fix</option></select><input id="post-title" class="admin-input" placeholder="Title" maxlength="40"></div>
+            <textarea id="post-body" class="admin-input" placeholder="Message" maxlength="200" rows="2"></textarea>
+            <button class="btn small">Post to the title screen</button>
+          </form>
+          <ul class="admin-list posts"></ul>
+        </section>
+      </div>`;
+    const li = (text, btnLabel, fn) => {
+      const item = el('li');
+      const span = el('span');
+      span.textContent = text;
+      item.appendChild(span);
+      if (btnLabel) {
+        const b = el('button', 'btn small ghost', btnLabel);
+        b.onclick = fn;
+        item.appendChild(b);
+      }
+      return item;
+    };
+    const players = col.querySelector('.players');
+    for (const n of data.players) players.appendChild(li(n + (n === ADMIN_NAME.toLowerCase() ? ' (admin)' : ''), null));
+    if (!data.players.length) players.appendChild(li('No players yet.'));
+    const renderBans = () => {
+      const ul = col.querySelector('.bans');
+      ul.innerHTML = '';
+      for (const n of data.bans) {
+        ul.appendChild(li(n, 'Restore', async () => {
+          data.bans = data.bans.filter((x) => x !== n);
+          await adminSetBans(data.bans);
+          renderBans();
+        }));
+      }
+      if (!data.bans.length) ul.appendChild(li('Nobody is suspended.'));
+    };
+    renderBans();
+    col.querySelector('.ban-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = col.querySelector('#ban-name');
+      const n = input.value.trim().toLowerCase();
+      if (!n || n === ADMIN_NAME.toLowerCase() || data.bans.includes(n)) return;
+      data.bans.push(n);
+      await adminSetBans(data.bans);
+      input.value = '';
+      renderBans();
+    });
+    const renderPosts = () => {
+      const ul = col.querySelector('.posts');
+      ul.innerHTML = '';
+      data.bulletin.forEach((p, i) => {
+        ul.appendChild(li(`[${p.tag}] ${p.title}: ${p.body}`, 'Remove', async () => {
+          data.bulletin.splice(i, 1);
+          await adminSetBulletin(data.bulletin);
+          renderPosts();
+        }));
+      });
+      if (!data.bulletin.length) ul.appendChild(li('No posts. The built-in notes show on the title screen.'));
+    };
+    renderPosts();
+    col.querySelector('.bulletin-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = col.querySelector('#post-title').value.trim();
+      const bodyText = col.querySelector('#post-body').value.trim();
+      if (!title || !bodyText) return;
+      data.bulletin.unshift({ tag: col.querySelector('#post-tag').value, title, body: bodyText, at: Date.now() });
+      data.bulletin = data.bulletin.slice(0, 10);
+      await adminSetBulletin(data.bulletin);
+      e.target.reset();
+      renderPosts();
+    });
   }
 
   renderLogTab(body) {

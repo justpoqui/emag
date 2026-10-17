@@ -512,3 +512,26 @@ body.touch .use-bar { bottom: 140px; }
   .hm.subtle { font-size: 13px; padding: 4px 14px; }
   .hc-name { font-size: 16px; }
 }
+
+/* account + admin */
+.account { display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.acct-row { display: flex; align-items: baseline; gap: 10px; font-size: 15px; }
+.acct-label { font-family: var(--font); font-weight: 700; font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--cream-dim); min-width: 84px; }
+.acct-name { font-family: var(--font); font-size: 22px; }
+.admin-badge { font-style: normal; font-family: var(--font); font-weight: 800; font-size: 11px; letter-spacing: 0.12em; color: var(--ink); background: var(--yellow); padding: 1px 6px; vertical-align: middle; }
+.pw-form { display: flex; flex-direction: column; gap: 6px; max-width: 380px; margin-top: 6px; }
+.pw-form input, .admin-input { font-family: var(--body); font-size: 15px; color: var(--cream); background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line); padding: 7px 9px; }
+.pw-form input:focus, .admin-input:focus { outline: none; border-color: var(--teal); }
+.pw-form .btn { align-self: flex-start; margin-top: 2px; }
+.pw-msg { min-height: 18px; font-size: 13px; color: var(--red); }
+.pw-msg.ok { color: var(--teal); }
+.admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+.admin-grid .wide { grid-column: 1 / -1; }
+.admin-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow-y: auto; }
+.admin-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: rgba(255, 255, 255, 0.04); padding: 5px 8px; font-size: 14px; }
+.admin-list li span { min-width: 0; overflow-wrap: anywhere; }
+.bulletin-form { display: flex; flex-direction: column; gap: 6px; }
+.bulletin-form .row input { flex: 1; }
+.bulletin-form .btn, .ban-form .btn { margin-top: 0; }
+.ban-form input { flex: 1; }
+.tab { white-space: nowrap; padding: 8px 12px; }

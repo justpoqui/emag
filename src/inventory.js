@@ -85,11 +85,52 @@ export function normalizeProfile(data) {
     fitArray(data.stash, STASH_SLOTS);
     fitArray(data.loadout.bag, BAG_SLOTS);
     fitArray(data.loadout.safe, SAFE_SLOTS);
+    sanitize(data);
     return data;
   } catch (err) {
     console.warn('Save could not be read, starting fresh', err);
     return template();
   }
+}
+
+// Clamp everything to values the game can actually produce, so a hand-edited
+// save can't carry impossible stacks, ammo, credits or stats.
+function int(v, min, max, fallback = min) {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+}
+
+function cleanStack(s) {
+  if (!s || typeof s !== 'object' || !ITEMS[s.id]) return null;
+  const def = ITEMS[s.id];
+  const out = { id: s.id, n: int(s.n, 1, stackSize(s.id), 1) };
+  if (def.type === 'weapon') out.mag = int(s.mag, 0, def.mag, def.mag);
+  if (def.type === 'shield') out.charge = Math.min(def.capacity, Math.max(0, Number(s.charge) || 0));
+  if (isDurable(s.id)) out.dur = s.dur === undefined ? MAX_DURABILITY : Math.min(MAX_DURABILITY, Math.max(0, Number(s.dur) || 0));
+  return out;
+}
+
+function sanitize(p) {
+  p.credits = int(p.credits, 0, 1e9, 0);
+  p.level = int(p.level, 1, 999, 1);
+  p.xp = int(p.xp, 0, 1e9, 0);
+  const st = p.stats && typeof p.stats === 'object' ? p.stats : {};
+  p.stats = { raids: int(st.raids, 0, 1e7), extracts: int(st.extracts, 0, 1e7), deaths: int(st.deaths, 0, 1e7), kills: int(st.kills, 0, 1e9) };
+  p.stats.extracts = Math.min(p.stats.extracts, p.stats.raids);
+  p.stash = p.stash.map(cleanStack);
+  const lo = p.loadout;
+  lo.weapons = [0, 1].map((i) => {
+    const w = cleanStack(lo.weapons[i]);
+    return w && ITEMS[w.id].type === 'weapon' ? w : null;
+  });
+  const sh = cleanStack(lo.shield);
+  lo.shield = sh && ITEMS[sh.id].type === 'shield' ? sh : null;
+  lo.bag = lo.bag.map(cleanStack);
+  lo.safe = lo.safe.map(cleanStack);
+  p.inRaid = !!p.inRaid;
+  // drop any keys the game doesn't use
+  for (const k of Object.keys(p)) if (!['credits', 'stash', 'loadout', 'stats', 'level', 'xp', 'inRaid'].includes(k)) delete p[k];
+  for (const k of Object.keys(lo)) if (!['weapons', 'shield', 'bag', 'safe'].includes(k)) delete lo[k];
 }
 
 // The progress this browser kept before accounts existed, if any.

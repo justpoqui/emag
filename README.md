@@ -134,3 +134,30 @@ shooter/
 - Quests from traders; a skill tree.
 - Proper character animations and imported models.
 - Downed state with self-revive.
+
+## Accounts and security
+
+Players sign in with a username and password. On the Claude page:
+
+- Each player's account (a salted PBKDF2 password hash, never the password)
+  and save live under `data/users/<their Claude id>/`. The page's access
+  rules make that private to that Claude login: no other player, and not the
+  page's owner, can read or change it.
+- `registry/<Claude id>` lists the usernames each person has claimed, so names
+  stay unique. Everyone can read it; each person can only write their own.
+- `admin/*` (Field Bulletin posts, suspended usernames) can only be written by
+  the page's owner.
+- **Poqui** is the only admin account: the name is reserved for the page's
+  owner, and the Admin tab only appears when Poqui is signed in on the owner's
+  Claude login.
+- Five wrong passwords lock sign-in for a minute (doubling each time), wrong
+  usernames and wrong passwords give the same message, saves are clamped to
+  values the game can produce when loaded, and release builds don't expose the
+  game object to the browser console.
+
+The game runs in the browser, so a player can still change their *own* game
+in their own browser. What the server guarantees is that nobody can reach
+anyone else's account or save, or the admin data.
+
+Off the Claude page there is no server: accounts are kept in that browser
+only, and there is no admin.

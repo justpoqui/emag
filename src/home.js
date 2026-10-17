@@ -5,12 +5,13 @@
 import { ITEMS, RARITY } from './config.js';
 import { loadoutValue } from './inventory.js';
 import * as Audio from './audio.js';
-import { connect, createAccount, signIn, resumeSession, currentUser, USERNAME_RULE, MIN_PASSWORD } from './accounts.js';
+import { connect, createAccount, signIn, resumeSession, currentUser, isAdmin, readBulletin, passwordProblem, USERNAME_RULE } from './accounts.js';
 
-export const VERSION = '0.5';
+export const VERSION = '0.6';
 
 // Newest first. Shown in the Field Bulletin.
 const BULLETIN = [
+  { tag: 'New', title: 'Account security', body: 'Your account and save are private to your Claude login. Change your password in Settings.' },
   { tag: 'New', title: 'Raider accounts', body: 'Sign in with a username and password. On the Claude page your progress follows you between PC and phone.' },
   { tag: 'New', title: 'Item menus', body: 'Right-click (or hold on a phone) any item to sell, move or repair it.' },
   { tag: 'New', title: 'Title screen', body: 'The game now opens here instead of dropping you straight into your loadout.' },
@@ -53,7 +54,7 @@ export function renderHome(ui) {
     </section>
     <aside class="home-side">
       <div class="home-card">
-        <div class="hc-head"><span class="hc-name">${escapeHtml(currentUser() || 'Raider')}</span><span class="hc-level">LVL ${p.level}</span></div>
+        <div class="hc-head"><span class="hc-name">${escapeHtml(currentUser() || 'Raider')}${isAdmin() ? ' <i class="admin-badge">ADMIN</i>' : ''}</span><span class="hc-level">LVL ${p.level}</span></div>
         <div class="hc-xp"><div style="width:${Math.min(100, (p.xp / need) * 100)}%"></div></div>
         <div class="hc-xp-text">${p.xp} / ${need} XP to level ${p.level + 1}</div>
         <div class="hc-stats">
@@ -67,13 +68,18 @@ export function renderHome(ui) {
       </div>
       <div class="home-card bulletin">
         <div class="hc-label">FIELD BULLETIN</div>
-        ${BULLETIN.map((b) => `<div class="news"><span class="news-tag">${b.tag}</span><b>${b.title}</b><p>${b.body}</p></div>`).join('')}
+        <div class="news-list">${newsHtml(BULLETIN)}</div>
       </div>
     </aside>
     <footer class="home-foot">
       <span>v${VERSION}</span>
       <span>${g.input.touch ? 'Progress saves on this device' : 'Press Enter to play · progress saves in this browser'}</span>
     </footer>`;
+
+  // posts from the admin go above the built-in notes
+  readBulletin().then((posted) => {
+    if (posted && posted.length) home.querySelector('.news-list').innerHTML = newsHtml([...posted, ...BULLETIN]);
+  });
 
   const actions = {
     play: () => ui.leaveHome(),
@@ -101,7 +107,11 @@ export function renderHome(ui) {
   return home;
 }
 
-function escapeHtml(s) {
+function newsHtml(items) {
+  return items.slice(0, 6).map((b) => `<div class="news"><span class="news-tag">${escapeHtml(b.tag || 'News')}</span><b>${escapeHtml(b.title || '')}</b><p>${escapeHtml(b.body || '')}</p></div>`).join('');
+}
+
+export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
@@ -158,7 +168,8 @@ export function renderLogin(ui) {
     err.textContent = '';
     if (mode === 'up') {
       if (!USERNAME_RULE.test(user.value.trim())) return void (err.textContent = 'Usernames are 3–16 letters, numbers or underscores.');
-      if (pass.value.length < MIN_PASSWORD) return void (err.textContent = `Passwords need at least ${MIN_PASSWORD} characters.`);
+      const problem = passwordProblem(pass.value);
+      if (problem) return void (err.textContent = problem);
       if (pass.value !== pass2.value) return void (err.textContent = 'The two passwords don’t match.');
     } else if (!user.value.trim() || !pass.value) {
       return void (err.textContent = 'Enter your username and password.');
