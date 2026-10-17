@@ -3,14 +3,15 @@
 
 import * as THREE from 'three';
 import {
-  ITEMS, RARITY, AMMO, TRADERS, BUY_MARKUP, RECIPES, PLAYER, RAID_SECONDS,
+  ITEMS, RARITY, AMMO, TRADERS, BUY_MARKUP, RECIPES, BENCH_SECTIONS, PLAYER, RAID_SECONDS, MAX_DURABILITY, REPAIR, isDurable,
 } from './config.js';
 import {
-  addToSlots, countIn, moveStack, freeSlots, loadoutIsEmpty, applyFreeKit, countOwned, removeOwned, saveProfile, resetProfile, makeStack,
+  addToSlots, durability, stackValue, countIn, moveStack, freeSlots, loadoutIsEmpty, applyFreeKit, countOwned, removeOwned, saveProfile, resetProfile, makeStack,
 } from './inventory.js';
 import { MAP_HALF } from './collision.js';
 import * as Audio from './audio.js';
 import { QUALITY, getQualityName, setQualityName } from './settings.js';
+import { renderHome } from './home.js';
 
 // Fullscreen + landscape on phones (Android honours the orientation lock; on
 // iPhone, add the game to the home screen for fullscreen).
@@ -189,7 +190,7 @@ export class UI {
     const lo = this.game.profile.loadout;
     this.h.wslots.forEach((s, i) => {
       const stack = lo.weapons[i];
-      s.className = 'wslot' + (i === w.active ? ' active' : '') + (stack ? '' : ' empty');
+      s.className = 'wslot' + (i === w.active ? ' active' : '') + (stack ? '' : ' empty') + (stack && isDurable(stack.id) && durability(stack) <= 0 ? ' broken' : '');
       s.innerHTML = stack ? `<b>${i + 1}</b> ${ITEMS[stack.id].name}` : `<b>${i + 1}</b> —`;
       if (stack) s.style.borderColor = RARITY[ITEMS[stack.id].rarity].color;
     });
@@ -374,10 +375,16 @@ export class UI {
     const r = RARITY[def.rarity];
     t.style.setProperty('--rarity', r.color);
     const extra = def.type === 'weapon' ? `<span class="sub">${stack.mag}/${def.mag}</span>` : def.type === 'shield' ? `<span class="sub">${Math.ceil(stack.charge)}/${def.capacity}</span>` : '';
+    let durBar = '';
+    if (isDurable(stack.id)) {
+      const pct = durability(stack) / MAX_DURABILITY;
+      durBar = `<span class="dur ${pct <= 0 ? 'broken' : pct < 0.25 ? 'low' : ''}"><i style="width:${pct * 100}%"></i></span>`;
+      if (pct <= 0) t.classList.add('is-broken');
+    }
     t.innerHTML = `
       <span class="glyph" style="color:#${def.color.toString(16).padStart(6, '0')}">${TYPE_GLYPH[def.type] || '?'}</span>
       <span class="name">${def.name}</span>
-      ${stack.n > 1 ? `<span class="count">${stack.n}</span>` : ''}${extra}`;
+      ${stack.n > 1 ? `<span class="count">${stack.n}</span>` : ''}${extra}${durBar}`;
     if (this.game.input.touch) {
       // tap = main action, long-press = item info and every other action
       let timer = null;
@@ -465,7 +472,8 @@ export class UI {
       <div class="tt-name" style="color:${r.color}">${def.name}</div>
       <div class="tt-rarity">${r.name} · ${def.type}</div>
       <div class="tt-desc">${def.desc || ''}</div>${stats}
-      <div class="tt-value">Value ⌬ ${def.value}${stack.n > 1 ? ` (⌬ ${def.value * stack.n} total)` : ''}</div>
+      ${isDurable(stack.id) ? `<div class="tt-dur">Durability ${Math.ceil(durability(stack))} / ${MAX_DURABILITY}${durability(stack) <= 0 ? ' · BROKEN' : ''}</div>` : ''}
+      <div class="tt-value">Value ⌬ ${isDurable(stack.id) ? stackValue(stack) : def.value}${stack.n > 1 ? ` (⌬ ${stackValue(stack)} total)` : ''}</div>
       ${hint ? `<div class="tt-hint">${hint}</div>` : ''}`;
     this.tooltip.classList.remove('hidden');
   }
@@ -855,6 +863,7 @@ export class UI {
     const need = g.xpForLevel(p.level);
     hub.innerHTML = `
       <div class="hub-top">
+        <button class="home-btn" title="Title screen">◂</button>
         <div class="logo">SCRAP<span>FALL</span><small>THE BURROW · UNDERGROUND</small></div>
         <div class="tabs">
           ${['loadout', 'traders', 'workbench', 'log', 'settings'].map((t) => `<button class="tab ${this.hubTab === t ? 'on' : ''}" data-t="${t}">${{ loadout: 'Loadout', traders: 'Traders', workbench: 'Workbench', log: 'Raider Log', settings: 'Settings' }[t]}</button>`).join('')}
@@ -877,6 +886,7 @@ export class UI {
       };
     });
     hub.querySelector('.deploy').onclick = () => this.deploy();
+    hub.querySelector('.home-btn').onclick = () => this.game.goHome();
     const body = hub.querySelector('.hub-body');
     if (this.hubTab === 'loadout') this.renderLoadoutTab(body);
     if (this.hubTab === 'traders') this.renderTradersTab(body);
@@ -999,7 +1009,7 @@ export class UI {
     right.appendChild(el('div', 'col-title', `STASH <small>${freeSlots(p.stash)} / ${p.stash.length} free · ${g.input.touch ? 'tap to load, hold for more' : 'click to load, right-click to sell'}</small>`));
     const stash = el('div', 'grid stash');
     p.stash.forEach((s, i) => stash.appendChild(this.tile(s, {
-      hint: s ? `Click: load · Right-click: sell for ⌬ ${ITEMS[s.id].value * s.n}` : '',
+      hint: s ? `Click: load · Right-click: sell for ⌬ ${stackValue(s)}` : '',
       onClick: () => this.stashToLoadout(i),
       labels: { tap: 'Load into loadout', right: 'Sell' },
       onRight: () => this.sellStash(i),
@@ -1051,7 +1061,7 @@ export class UI {
     const p = this.game.profile;
     const s = p.stash[i];
     if (!s) return;
-    const value = ITEMS[s.id].value * s.n;
+    const value = stackValue(s);
     p.credits += value;
     p.stash[i] = null;
     Audio.playPickup();
@@ -1088,19 +1098,24 @@ export class UI {
 
     const shop = el('div', 'shop');
     if (this.trader === 'sell') {
-      shop.appendChild(el('div', 'col-title', 'SELL FROM STASH <small>traders pay full value</small>'));
+      shop.appendChild(el('div', 'col-title', 'SELL FROM STASH <small>worn weapons and shields sell for less</small>'));
       const rows = el('div', 'rows');
       const seen = {};
-      p.stash.forEach((s) => { if (s) seen[s.id] = (seen[s.id] || 0) + s.n; });
+      const worth = {};
+      p.stash.forEach((s) => {
+        if (!s) return;
+        seen[s.id] = (seen[s.id] || 0) + s.n;
+        worth[s.id] = (worth[s.id] || 0) + stackValue(s);
+      });
       const ids = Object.keys(seen).sort((a, b) => ITEMS[b].value - ITEMS[a].value);
       if (!ids.length) rows.appendChild(el('div', 'muted', 'Your stash is empty.'));
       for (const id of ids) {
         const d = ITEMS[id];
         const row = el('div', 'row item-row');
-        row.innerHTML = `<span class="r-name" style="color:${RARITY[d.rarity].color}">${d.name}</span><span class="r-own">×${seen[id]}</span><span class="r-price">⌬ ${d.value} ea</span>`;
+        row.innerHTML = `<span class="r-name" style="color:${RARITY[d.rarity].color}">${d.name}</span><span class="r-own">×${seen[id]}</span><span class="r-price">${isDurable(id) ? `up to ⌬ ${d.value}` : `⌬ ${d.value} ea`}</span>`;
         const one = el('button', 'btn small', 'Sell 1');
         one.onclick = () => this.sellId(id, 1);
-        const all = el('button', 'btn small', `Sell all (⌬ ${d.value * seen[id]})`);
+        const all = el('button', 'btn small', `Sell all (⌬ ${worth[id]})`);
         all.onclick = () => this.sellId(id, seen[id]);
         row.append(one, all);
         rows.appendChild(row);
@@ -1138,27 +1153,125 @@ export class UI {
   sellId(id, n) {
     const p = this.game.profile;
     let left = n;
+    let credits = 0;
     for (let i = p.stash.length - 1; i >= 0 && left > 0; i--) {
       const s = p.stash[i];
       if (s && s.id === id) {
         const take = Math.min(left, s.n);
+        credits += stackValue({ ...s, n: take });
         s.n -= take;
         left -= take;
         if (s.n <= 0) p.stash[i] = null;
       }
     }
-    const sold = n - left;
-    p.credits += sold * ITEMS[id].value;
+    p.credits += credits;
     Audio.playPickup();
     this.afterHubChange();
   }
 
+  // Every worn weapon/shield you own: { stack, where, missing }.
+  repairList() {
+    const p = this.game.profile;
+    const lo = p.loadout;
+    const out = [];
+    const add = (s, where) => {
+      if (s && isDurable(s.id) && durability(s) < MAX_DURABILITY) out.push({ stack: s, where, missing: MAX_DURABILITY - durability(s) });
+    };
+    lo.weapons.forEach((s) => add(s, 'Loadout'));
+    add(lo.shield, 'Loadout');
+    lo.bag.forEach((s) => add(s, 'Bag'));
+    lo.safe.forEach((s) => add(s, 'Safe pocket'));
+    p.stash.forEach((s) => add(s, 'Stash'));
+    return out;
+  }
+
+  repairCost(stack, missing) {
+    const def = ITEMS[stack.id];
+    const steps = Math.ceil(missing / REPAIR.step);
+    const cost = {};
+    const per = def.type === 'shield' ? REPAIR.shield : { ...REPAIR.weapon, ...(['rare', 'epic', 'legendary'].includes(def.rarity) ? REPAIR.weaponRare : {}) };
+    for (const [id, n] of Object.entries(per)) cost[id] = n * steps;
+    const credits = Math.max(10, Math.ceil(def.value * REPAIR.creditRate * (missing / MAX_DURABILITY)));
+    return { cost, credits };
+  }
+
+  renderRepair(shop, list) {
+    const p = this.game.profile;
+    shop.appendChild(el('div', 'col-title', 'REPAIR <small>restores durability to 100 · pay with materials or credits</small>'));
+    const rows = el('div', 'rows recipes');
+    if (!list.length) rows.appendChild(el('div', 'muted', 'Everything you own is in perfect shape.'));
+    for (const { stack, where, missing } of list) {
+      const d = ITEMS[stack.id];
+      const { cost, credits } = this.repairCost(stack, missing);
+      const canMats = Object.entries(cost).every(([id, n]) => countOwned(p, id) >= n);
+      const dur = Math.ceil(durability(stack));
+      const row = el('div', `row recipe repair ${canMats ? 'can' : ''}`);
+      const costHtml = Object.entries(cost).map(([id, n]) => {
+        const have = countOwned(p, id);
+        return `<span class="cost ${have >= n ? 'ok' : 'no'}">${ITEMS[id].name} ${have}/${n}</span>`;
+      }).join('');
+      row.innerHTML = `
+        <span class="r-name" style="color:${RARITY[d.rarity].color}">${d.name}<small>${where}</small></span>
+        <span class="dur-wide ${dur <= 0 ? 'broken' : dur < 25 ? 'low' : ''}"><i style="width:${dur}%"></i><b>${dur <= 0 ? 'BROKEN' : `${dur}/${MAX_DURABILITY}`}</b></span>
+        <span class="costs">${costHtml}</span>`;
+      const fix = () => {
+        stack.dur = MAX_DURABILITY;
+        Audio.playPickup();
+        this.notifyHub(`Repaired ${d.name}.`);
+        this.afterHubChange();
+      };
+      const mats = el('button', 'btn small', 'Repair');
+      mats.disabled = !canMats;
+      mats.onclick = () => {
+        if (!Object.entries(cost).every(([id, n]) => countOwned(p, id) >= n)) return;
+        for (const [id, n] of Object.entries(cost)) removeOwned(p, id, n);
+        fix();
+      };
+      const pay = el('button', 'btn small ghost', `Pay ⌬ ${credits}`);
+      pay.disabled = p.credits < credits;
+      pay.onclick = () => {
+        if (p.credits < credits) return Audio.playDeny();
+        p.credits -= credits;
+        fix();
+      };
+      row.append(mats, pay);
+      rows.appendChild(row);
+    }
+    shop.appendChild(rows);
+  }
+
   renderWorkbenchTab(body) {
     const p = this.game.profile;
-    body.className = 'hub-body workbench-tab';
-    body.appendChild(el('div', 'col-title', 'WORKBENCH <small>uses materials from your stash, then your bag · output goes to the stash</small>'));
+    body.className = 'hub-body traders-tab workbench-tab';
+    const canCraft = (r) => Object.entries(r.cost).every(([id, n]) => countOwned(p, id) >= n);
+    const inSection = (sec) => RECIPES.filter((r) => sec.types.includes(ITEMS[r.out].type));
+    const repairable = this.repairList();
+    if (!this.benchSection) this.benchSection = BENCH_SECTIONS[0].id;
+    const section = BENCH_SECTIONS.find((s) => s.id === this.benchSection) || BENCH_SECTIONS[0];
+
+    // section list, with how many recipes you can afford right now
+    const list = el('div', 'trader-list');
+    for (const sec of BENCH_SECTIONS) {
+      const ready = sec.repair ? repairable.length : inSection(sec).filter(canCraft).length;
+      const b = el('button', `trader ${sec.id === section.id ? 'on' : ''}`, `<b>${sec.name}${ready ? ` <i class="ready">${ready}</i>` : ''}</b><span>${sec.blurb}</span>`);
+      b.onclick = () => {
+        this.benchSection = sec.id;
+        Audio.playUI();
+        this.renderHub();
+      };
+      list.appendChild(b);
+    }
+    body.appendChild(list);
+
+    const shop = el('div', 'shop');
+    if (section.repair) {
+      this.renderRepair(shop, repairable);
+      body.appendChild(shop);
+      return;
+    }
+    shop.appendChild(el('div', 'col-title', `${section.name.toUpperCase()} <small>uses materials from your stash, then your bag · output goes to the stash</small>`));
     const rows = el('div', 'rows recipes');
-    for (const r of RECIPES) {
+    for (const r of inSection(section)) {
       const d = ITEMS[r.out];
       const can = Object.entries(r.cost).every(([id, n]) => countOwned(p, id) >= n);
       const row = el('div', `row recipe ${can ? 'can' : ''}`);
@@ -1181,7 +1294,53 @@ export class UI {
       row.appendChild(btn);
       rows.appendChild(row);
     }
-    body.appendChild(rows);
+    shop.appendChild(rows);
+    body.appendChild(shop);
+  }
+
+  // How a raid works, Husk notes and controls (PC or phone).
+  guideHtml() {
+    const touch = this.game.input.touch;
+    const controls = touch
+      ? 'Left thumb: move (push to the edge to sprint) · Right thumb: look · FIRE (hold and drag to aim) · AIM · RELOAD · JUMP · CROUCH · ROLL · USE appears near loot and lifts · SWAP, HEAL, SHIELD and NADE on the left · tap an item to use it, hold it for more'
+      : 'WASD move · Shift sprint · Space jump · C crouch · V dodge roll · Mouse aim/fire · RMB aim down sights · R reload · 1/2 or wheel swap weapon · 3 heal · 4 recharge shield · G grenade · E interact (hold) · Tab backpack · M map · Esc pause';
+    return `
+      <div class="guide">
+        <h3>How a raid works</h3>
+        <p>Everything in your loadout comes topside with you. Search crates, lockers, cars and Husk pods for materials and valuables, destroy Husks and loot their wrecks, then <b>call a lift</b> at one of the four extraction points. Hold out while it arrives (the noise draws Husks in), step inside and hold <b>${touch ? 'USE' : 'E'}</b>.</p>
+        <p>Die, or still be topside when the ${Math.round(RAID_SECONDS / 60)}-minute raid clock runs out, and you lose everything you carried except your <b>safe pocket</b>.</p>
+        <h3>Between raids</h3>
+        <p>In the Burrow, move gear between your stash and loadout, buy from Tobias and Nia, sell loot, and craft at the Workbench. Broke? Take the free kit.</p>
+        <h3>Husk field notes</h3>
+        <p><b>Skitter</b>: small crawler that leaps at you. <b>Buzzer</b>: armed drone that strafes; its eye is a weak spot. <b>Watcher</b>: scout drone; if it sees you for a few seconds it calls Buzzers. <b>Pouncer</b>: armored jumper; aim for the glowing core on top. <b>Warden</b>: walking fortress in the plaza; its core is on its back.</p>
+        <h3>Controls</h3>
+        <p>${controls}</p>
+      </div>`;
+  }
+
+  // ================= title screen =================
+  showHome() {
+    this.hud.classList.add('hidden');
+    this.open = null;
+    this.closeSheet();
+    this.hideTooltip();
+    this.menus.innerHTML = '';
+    this.menus.appendChild(renderHome(this));
+    if (!this._homeKeys) {
+      this._homeKeys = (e) => {
+        if (this.game.mode !== 'home') return;
+        if (e.code === 'Escape' && this.modal) this.modal.close();
+        else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && !this.modal) this.leaveHome();
+      };
+      window.addEventListener('keydown', this._homeKeys);
+    }
+  }
+
+  leaveHome() {
+    if (this.modal) this.modal.close();
+    Audio.initAudio();
+    if (this.game.input.touch) goFullscreen();
+    this.game.enterHub();
   }
 
   renderLogTab(body) {
@@ -1198,15 +1357,7 @@ export class UI {
         <div><b>${s.deaths}</b><span>Deaths</span></div>
         <div><b>${s.kills}</b><span>Husks destroyed</span></div>
       </div>
-      <div class="guide">
-        <h3>How a raid works</h3>
-        <p>Everything in your loadout comes topside with you. Search crates, lockers, cars and Husk pods for materials and valuables, destroy Husks and loot their wrecks, then <b>call a lift</b> at one of the four extraction points. Hold out while it arrives (the noise draws Husks in), step inside and hold <b>E</b>.</p>
-        <p>Die, or still be topside when the ${Math.round(RAID_SECONDS / 60)}-minute raid clock runs out, and you lose everything you carried except your <b>safe pocket</b>.</p>
-        <h3>Husk field notes</h3>
-        <p><b>Skitter</b>: small crawler that leaps at you. <b>Buzzer</b>: armed drone that strafes; its eye is a weak spot. <b>Watcher</b>: scout drone; if it sees you for a few seconds it calls Buzzers. <b>Pouncer</b>: armored jumper; aim for the glowing core on top. <b>Warden</b>: walking fortress in the plaza; its core is on its back.</p>
-        <h3>Controls</h3>
-        <p>WASD move · Shift sprint · Space jump · C crouch · V dodge roll · Mouse aim/fire · RMB aim down sights · R reload · 1/2 or wheel swap weapon · 3 heal · 4 recharge shield · G grenade · E interact (hold) · Tab backpack · M map · Esc pause</p>
-      </div>
+      ${this.guideHtml()}
       <button class="btn danger reset">Wipe save and start over</button>`;
     body.querySelector('.reset').onclick = () => {
       this.ask('Delete your stash, credits and progress?', 'Wipe save', () => {

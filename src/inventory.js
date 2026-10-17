@@ -1,6 +1,6 @@
 // Slot-based inventory helpers, plus the saved profile (localStorage).
 
-import { ITEMS, BAG_SLOTS, SAFE_SLOTS, STASH_SLOTS, START_CREDITS, stackSize, FREE_KIT } from './config.js';
+import { ITEMS, BAG_SLOTS, SAFE_SLOTS, STASH_SLOTS, START_CREDITS, stackSize, FREE_KIT, MAX_DURABILITY, isDurable } from './config.js';
 
 const SAVE_KEY = 'scrapfall_save_v1';
 
@@ -9,7 +9,20 @@ export function makeStack(id, n = 1) {
   const stack = { id, n };
   if (item.type === 'weapon') stack.mag = item.mag;
   if (item.type === 'shield') stack.charge = item.capacity;
+  if (isDurable(id)) stack.dur = MAX_DURABILITY;
   return stack;
+}
+
+// Durability of a weapon/shield stack (older saves have none: treat as new).
+export function durability(stack) {
+  return stack.dur ?? MAX_DURABILITY;
+}
+
+// What a trader pays for a stack; worn gear sells for less.
+export function stackValue(stack) {
+  const base = ITEMS[stack.id].value * stack.n;
+  if (!isDurable(stack.id)) return base;
+  return Math.round(base * (0.4 + 0.6 * (durability(stack) / MAX_DURABILITY)));
 }
 
 function clone(value) {
@@ -152,6 +165,7 @@ export function moveStack(stack, slots) {
   const extra = {};
   if (stack.mag !== undefined) extra.mag = stack.mag;
   if (stack.charge !== undefined) extra.charge = stack.charge;
+  if (stack.dur !== undefined) extra.dur = stack.dur;
   const left = addToSlots(slots, stack.id, stack.n, extra);
   if (left <= 0) return null;
   return { ...stack, n: left };

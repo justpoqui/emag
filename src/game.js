@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import {
-  ITEMS, LOOT_TABLES, ENEMIES, RAID_SECONDS, EXTRACT_CALL_SECONDS, EXTRACT_OPEN_SECONDS, PLAYER,
+  ITEMS, SHIELD_WEAR, MAX_DURABILITY, isDurable, LOOT_TABLES, ENEMIES, RAID_SECONDS, EXTRACT_CALL_SECONDS, EXTRACT_OPEN_SECONDS, PLAYER,
 } from './config.js';
 import { buildWorld } from './world.js';
 import { Player } from './player.js';
@@ -14,7 +14,7 @@ import { Input } from './input.js';
 import { UI } from './ui.js';
 import { rollTable, makeRng } from './rng.js';
 import {
-  loadProfile, saveProfile, addToSlots, removeFrom, loadoutValue, emptyLoadout, countIn,
+  loadProfile, durability, saveProfile, addToSlots, removeFrom, loadoutValue, emptyLoadout, countIn,
 } from './inventory.js';
 import * as Audio from './audio.js';
 import { getQuality, IS_TOUCH } from './settings.js';
@@ -37,7 +37,7 @@ export class Game {
       saveProfile(this.profile);
       this.lostOnLoad = true;
     }
-    this.mode = 'hub';
+    this.mode = 'home';
     this.paused = false;
     this.using = null;
     this.enemies = [];
@@ -147,7 +147,9 @@ export class Game {
 
     window.addEventListener('resize', () => this.resize());
     this.clock = new THREE.Clock();
-    this.ui.showHub();
+    this.player.alive = false; // keeps menu-scene Husks from noticing the hidden player
+    this.spawnAmbient();
+    this.ui.showHome();
     if (this.lostOnLoad) this.ui.notifyHub('You left mid-raid last time, so that loadout was lost topside.');
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
@@ -263,6 +265,8 @@ export class Game {
   resetContainers() {
     for (const c of this.containers) {
       c.items = rollTable(LOOT_TABLES[c.type]);
+      // gear found topside is used
+      for (const it of c.items) if (isDurable(it.id)) it.dur = Math.round(MAX_DURABILITY * (0.35 + Math.random() * 0.55));
       c.searched = false;
       c.marker.visible = true;
       if (c.lid) {
@@ -328,6 +332,7 @@ export class Game {
     saveProfile(this.profile);
 
     this.resetContainers();
+    this.ambient = false;
     for (const e of this.enemies) e.destroy();
     this.enemies = [];
     this.grenades = [];
@@ -401,12 +406,36 @@ export class Game {
   }
 
   returnToHub() {
-    this.mode = 'hub';
     for (const e of this.enemies) e.destroy();
     this.enemies = [];
     this.effects.clear();
     this.player.model.visible = false;
+    this.player.alive = false;
+    this.spawnAmbient();
+    this.enterHub();
+  }
+
+  enterHub() {
+    this.mode = 'hub';
     this.ui.showHub();
+  }
+
+  goHome() {
+    this.mode = 'home';
+    this.ui.showHome();
+  }
+
+  // A few idle Husks wandering the plaza behind the menus.
+  spawnAmbient() {
+    if (this.ambient) return;
+    this.ambient = true;
+    const t = this.world.town;
+    const px = t.x + 32;
+    const pz = t.z + 32;
+    this.spawnEnemyAt('warden', px, pz + 6, null, { x: px, z: pz, radius: 10 });
+    for (let i = 0; i < 3; i++) this.spawnEnemyAt('buzzer', px + (i - 1) * 10, pz - 8, null, { x: px, z: pz, radius: 26 });
+    this.spawnEnemyAt('watcher', px - 10, pz + 12, null, { x: px, z: pz, radius: 34 });
+    for (let i = 0; i < 2; i++) this.spawnEnemyAt('skitter', px + 12, pz + i * 4, null, { x: px, z: pz, radius: 14 });
   }
 
   setPaused(on) {
@@ -489,10 +518,13 @@ export class Game {
     if (p.roll > 0.15) amount *= 0.5; // dodging takes the edge off
     const shield = this.profile.loadout.shield;
     let toHealth = amount;
-    if (shield && shield.charge > 0) {
+    if (shield && shield.charge > 0 && durability(shield) > 0) {
       const def = ITEMS[shield.id];
       const absorbed = Math.min(shield.charge, amount * def.absorb);
       shield.charge -= absorbed;
+      const before = durability(shield);
+      shield.dur = Math.max(0, before - absorbed * SHIELD_WEAR);
+      if (before > 0 && shield.dur <= 0) this.ui.notify(`${def.name} broke! Repair it at the Workbench.`);
       toHealth = amount - absorbed;
       if (shield.charge <= 0) {
         shield.charge = 0;
@@ -786,7 +818,7 @@ export class Game {
     const dt = Math.min(0.05, this.clock.getDelta());
     this.time += dt;
     if (this.mode === 'raid' && !this.paused) this.updateRaid(dt);
-    else if (this.mode === 'hub' || this.mode === 'results') this.updateHubCamera(dt);
+    else if (this.mode === 'home' || this.mode === 'hub' || this.mode === 'results') this.updateMenuScene(dt);
     this.effects.update(dt);
     this.updateSun();
     this.renderer.render(this.scene, this.camera);
@@ -800,16 +832,45 @@ export class Game {
     this.sky.position.copy(this.camera.position);
   }
 
-  updateHubCamera(dt) {
-    const t = this.time * 0.03;
-    const r = 120;
-    this.hubFocus = new THREE.Vector3(-20, 0, -10);
-    this.camera.position.set(-20 + Math.cos(t) * r, 48, -10 + Math.sin(t) * r);
-    this.camera.lookAt(-20, 6, -10);
-    this.camera.fov = 60;
-    this.camera.updateProjectionMatrix();
+  // Camera and ambient Husks behind the title screen, hub and results.
+  updateMenuScene(dt) {
+    const town = this.world.town;
+    if (this.mode === 'home') {
+      // low, slow drift around the Warden's plaza
+      const px = town.x + 32;
+      const pz = town.z + 32;
+      const t = this.time * 0.045;
+      const r = 34;
+      const camX = px + Math.cos(t) * r;
+      const camZ = pz + Math.sin(t) * r;
+      this.hubFocus = new THREE.Vector3(px, 0, pz);
+      this.camera.position.set(camX, this.col.groundHeight(camX, camZ, 200, 0.3, 300) + 11, camZ);
+      this.camera.lookAt(px, 3, pz);
+    } else {
+      const t = this.time * 0.03;
+      const r = 120;
+      this.hubFocus = new THREE.Vector3(town.x, 0, town.z);
+      this.camera.position.set(town.x + Math.cos(t) * r, 48, town.z + Math.sin(t) * r);
+      this.camera.lookAt(town.x, 6, town.z);
+    }
+    if (this.camera.fov !== 60) {
+      this.camera.fov = 60;
+      this.camera.updateProjectionMatrix();
+    }
     for (const ex of this.world.extractions) ex.lamp.material.emissiveIntensity = 1.5;
-    void dt;
+    const ctx = this.getHuskCtx();
+    for (const e of this.enemies) e.update(dt, ctx);
+  }
+
+  getHuskCtx() {
+    return this.huskCtx || (this.huskCtx = {
+      player: this.player, col: this.col, effects: this.effects,
+      damagePlayer: (a, from, src) => this.damagePlayer(a, from, src),
+      spawnEnemy: (type, x, z, alertAt) => this.spawnEnemyAt(type, x, z, alertAt),
+      explode: (pos, r, dmg, src) => this.explode(pos, r, dmg, src),
+      notify: (t) => this.ui.notify(t),
+      shake: (a) => this.shake(a),
+    });
   }
 
   updateRaid(dt) {
@@ -877,14 +938,7 @@ export class Game {
     }
 
     // ---- world ----
-    const ctx = this.huskCtx || (this.huskCtx = {
-      player: p, col: this.col, effects: this.effects,
-      damagePlayer: (a, from, src) => this.damagePlayer(a, from, src),
-      spawnEnemy: (type, x, z, alertAt) => this.spawnEnemyAt(type, x, z, alertAt),
-      explode: (pos, r, dmg, src) => this.explode(pos, r, dmg, src),
-      notify: (t) => this.ui.notify(t),
-      shake: (a) => this.shake(a),
-    });
+    const ctx = this.getHuskCtx();
     for (const e of this.enemies) {
       // far-away Husks think less often
       const far = e.pos.distanceTo(p.pos) > 120;

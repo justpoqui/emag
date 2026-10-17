@@ -2,7 +2,7 @@
 
 import * as THREE from 'three';
 import { ITEMS, AMMO } from './config.js';
-import { countIn, removeFrom } from './inventory.js';
+import { countIn, removeFrom, durability } from './inventory.js';
 import { raySphere } from './enemies.js';
 import * as Audio from './audio.js';
 
@@ -70,6 +70,7 @@ export class Weapons {
     if (!d) return 0;
     const p = this.game.player;
     let s = p.ads ? d.spreadAds : d.spreadHip;
+    if (durability(this.current()) < 25) s *= 1.5; // worn weapons shoot loose
     const speed = Math.hypot(p.vel.x, p.vel.z);
     s *= 1 + speed * 0.12;
     if (!p.onGround) s *= 2;
@@ -102,6 +103,13 @@ export class Weapons {
     if (blocked) return;
     const wantFire = d.auto ? input.fire : input.firePressed;
     if (wantFire && this.fireCd <= 0) {
+      if (durability(w) <= 0) {
+        if (input.firePressed) {
+          Audio.playEmpty();
+          this.game.ui.notify(`${d.name} is broken. Repair it at the Workbench.`);
+        }
+        return;
+      }
       if (w.mag <= 0) {
         if (input.firePressed) Audio.playEmpty();
         if (this.reserve() > 0) this.startReload();
@@ -116,6 +124,10 @@ export class Weapons {
     const p = game.player;
     this.fireCd = 60 / d.rpm;
     w.mag--;
+    const before = durability(w);
+    w.dur = Math.max(0, before - (d.wear || 0.1));
+    if (before > 25 && w.dur <= 25) game.ui.notify(`${d.name} is badly worn. Its accuracy is dropping.`);
+    if (before > 0 && w.dur <= 0) game.ui.notify(`${d.name} broke!`);
     const cam = game.camera;
     const camDir = new THREE.Vector3();
     cam.getWorldDirection(camDir);

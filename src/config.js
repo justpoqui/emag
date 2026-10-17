@@ -44,37 +44,37 @@ export const ITEMS = {
     name: 'Mule', type: 'weapon', rarity: 'common', value: 260, color: 0x8a7a5a,
     desc: 'Reliable semi-auto rifle. Every raider starts with one.',
     ammo: 'light', damage: 16, rpm: 450, auto: false, mag: 18, reload: 1.7,
-    spreadHip: 2.4, spreadAds: 0.35, recoil: 1.1, range: 140, pellets: 1, shape: 'rifle',
+    spreadHip: 2.4, spreadAds: 0.35, recoil: 1.1, range: 140, wear: 0.12, pellets: 1, shape: 'rifle',
   },
   sparrow: {
     name: 'Sparrow', type: 'weapon', rarity: 'uncommon', value: 650, color: 0x4f6b6a,
     desc: 'Compact SMG. Shreds small Husks up close.',
     ammo: 'light', damage: 9, rpm: 820, auto: true, mag: 32, reload: 1.9,
-    spreadHip: 3.0, spreadAds: 1.0, recoil: 0.55, range: 70, pellets: 1, shape: 'smg',
+    spreadHip: 3.0, spreadAds: 1.0, recoil: 0.55, range: 70, wear: 0.07, pellets: 1, shape: 'smg',
   },
   badger: {
     name: 'Badger', type: 'weapon', rarity: 'uncommon', value: 900, color: 0x6c5a3d,
     desc: 'Full-auto rifle on medium rounds. A good all-rounder.',
     ammo: 'medium', damage: 15, rpm: 600, auto: true, mag: 26, reload: 2.2,
-    spreadHip: 2.6, spreadAds: 0.55, recoil: 0.85, range: 150, pellets: 1, shape: 'rifle',
+    spreadHip: 2.6, spreadAds: 0.55, recoil: 0.85, range: 150, wear: 0.09, pellets: 1, shape: 'rifle',
   },
   hammerhead: {
     name: 'Hammerhead', type: 'weapon', rarity: 'rare', value: 1300, color: 0x3d3d44,
     desc: 'Heavy hand cannon. Punches through Husk plating.',
     ammo: 'heavy', damage: 52, rpm: 140, auto: false, mag: 6, reload: 2.4,
-    spreadHip: 1.6, spreadAds: 0.25, recoil: 3.4, range: 120, pellets: 1, armorPierce: 0.6, shape: 'pistol',
+    spreadHip: 1.6, spreadAds: 0.25, recoil: 3.4, range: 120, wear: 0.4, pellets: 1, armorPierce: 0.6, shape: 'pistol',
   },
   boar: {
     name: 'Boar', type: 'weapon', rarity: 'rare', value: 1400, color: 0x7a3b2a,
     desc: 'Pump shotgun. Devastating up close, useless far away.',
     ammo: 'shotgun', damage: 11, rpm: 75, auto: false, mag: 5, reload: 2.8,
-    spreadHip: 5.5, spreadAds: 4.0, recoil: 4.5, range: 35, pellets: 9, shape: 'shotgun',
+    spreadHip: 5.5, spreadAds: 4.0, recoil: 4.5, range: 35, wear: 0.6, pellets: 9, shape: 'shotgun',
   },
   heron: {
     name: 'Heron', type: 'weapon', rarity: 'epic', value: 2400, color: 0x2f3a46,
     desc: 'Break-action marksman rifle. One shell, one hole.',
     ammo: 'heavy', damage: 95, rpm: 55, auto: false, mag: 1, reload: 1.3,
-    spreadHip: 3.5, spreadAds: 0.05, recoil: 6, range: 260, pellets: 1, armorPierce: 0.9, zoom: 2.2, shape: 'long',
+    spreadHip: 3.5, spreadAds: 0.05, recoil: 6, range: 260, wear: 1.1, pellets: 1, armorPierce: 0.9, zoom: 2.2, shape: 'long',
   },
 
   // ---- ammo ----
@@ -208,6 +208,35 @@ export const TRADERS = {
   },
 };
 export const BUY_MARKUP = 2.5; // traders sell for value * markup, buy back at value
+
+// Durability: weapons and shields wear down and can be repaired at the
+// Workbench. Weapons lose `wear` per shot (set per weapon above); shields lose
+// SHIELD_WEAR per point of damage they absorb. Under 25% a weapon's spread
+// gets worse; at 0 it can't fire and a shield stops absorbing.
+export const MAX_DURABILITY = 100;
+export const SHIELD_WEAR = 0.12;
+export const REPAIR = {
+  step: 25, // costs are charged per 25 points of missing durability
+  weapon: { scrap: 2, rubber: 1 },
+  weaponRare: { husk_plating: 1 }, // added for rare, epic and legendary weapons
+  shield: { fabric: 1, husk_plating: 1 },
+  creditRate: 0.35, // or pay a trader: value × rate × (missing / 100)
+};
+
+export function isDurable(id) {
+  const t = ITEMS[id].type;
+  return t === 'weapon' || t === 'shield';
+}
+
+// Workbench sections, by what the recipe makes.
+export const BENCH_SECTIONS = [
+  { id: 'weapons', name: 'Weapons', blurb: 'Gunsmithing', types: ['weapon'] },
+  { id: 'ammo', name: 'Ammo', blurb: 'Reloading press', types: ['ammo'] },
+  { id: 'shields', name: 'Shields', blurb: 'Energy shields', types: ['shield'] },
+  { id: 'medical', name: 'Medical', blurb: 'Heals and shield cells', types: ['heal', 'recharge'] },
+  { id: 'explosives', name: 'Explosives', blurb: 'Grenades', types: ['grenade'] },
+  { id: 'repair', name: 'Repair', blurb: 'Fix worn weapons and shields', types: [], repair: true },
+];
 
 export const RECIPES = [
   { out: 'bandage', n: 2, cost: { fabric: 3 } },
