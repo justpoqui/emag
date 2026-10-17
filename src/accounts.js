@@ -27,6 +27,9 @@ const LOCAL_SAVE = 'scrapfall_acct_';
 const SESSION = 'scrapfall_session_v2';
 const THROTTLE = 'scrapfall_login_throttle';
 const ITERATIONS = 150000;
+// Older records didn't store their iteration count; these are the counts
+// earlier versions used.
+const LEGACY_ITERATIONS = [150000, 120000];
 const MAX_FAILS = 5;
 const LOCKOUT_MS = 60 * 1000;
 
@@ -41,16 +44,31 @@ function toHex(buf) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function hashPassword(password, saltHex) {
+async function hashPassword(password, saltHex, iterations = ITERATIONS) {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
   const salt = new Uint8Array(saltHex.match(/../g).map((h) => parseInt(h, 16)));
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: ITERATIONS }, keyMaterial, 256);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, keyMaterial, 256);
   return toHex(bits);
 }
 
 function newSalt() {
   return toHex(crypto.getRandomValues(new Uint8Array(16)));
+}
+
+// Does this password match a stored record (of any version)?
+async function verify(password, record) {
+  if (!record || !record.salt || !record.hash) return false;
+  const counts = record.iter ? [record.iter] : LEGACY_ITERATIONS;
+  for (const it of counts) {
+    if (sameHash(await hashPassword(password, record.salt, it), record.hash)) return true;
+  }
+  return false;
+}
+
+async function newRecord(username, password, created) {
+  const salt = newSalt();
+  return { username, salt, hash: await hashPassword(password, salt), iter: ITERATIONS, created: created || Date.now() };
 }
 
 // Compare without stopping at the first difference.
@@ -307,7 +325,7 @@ function remember(on) {
 async function finishSignIn(account, keep) {
   const key = keyFor(account.username);
   const admin = key === ADMIN_KEY && (await backend.ownerCheck());
-  current = { key, username: account.username, hash: account.hash, salt: account.salt, created: account.created, admin };
+  current = { key, username: account.username, hash: account.hash, salt: account.salt, iter: account.iter, created: account.created, admin };
   remember(keep);
   const saved = await backend.loadSave(key);
   return normalizeProfile(saved || blankProfile());
@@ -336,9 +354,7 @@ export async function createAccount(username, password, keep) {
   if (problem) return { error: problem };
   if (key === ADMIN_KEY && !(await backend.ownerCheck())) return { error: 'That username is reserved.' };
   if (await bannedName(key)) return { error: 'That username is not available.' };
-  const salt = newSalt();
-  const hash = await hashPassword(password, salt);
-  const record = { username, salt, hash, created: Date.now() };
+  const record = await newRecord(username, password);
   let ok;
   try {
     ok = await backend.createAccount(key, record);
@@ -355,6 +371,29 @@ export async function createAccount(username, password, keep) {
   return { profile: start, imported: !!legacy };
 }
 
+async function migrateLocalAccount(key, username, password) {
+  const all = readLocal(LOCAL_ACCOUNTS, {});
+  const old = all[key];
+  if (!old || !(await verify(password, old))) return null;
+  if (key === ADMIN_KEY && !(await backend.ownerCheck())) return null;
+  const record = await newRecord(old.username || username, password, old.created);
+  try {
+    if (!(await backend.createAccount(key, record))) return null;
+  } catch (err) {
+    return null;
+  }
+  const save = readLocal(LOCAL_SAVE + key, null);
+  if (save) await backend.writeSave(key, JSON.stringify(save));
+  delete all[key];
+  writeLocal(LOCAL_ACCOUNTS, all);
+  try {
+    localStorage.removeItem(LOCAL_SAVE + key);
+  } catch (err) {
+    // ignore
+  }
+  return record;
+}
+
 export async function signIn(username, password, keep) {
   if (lockedFor() > 0) return { error: lockMessage() };
   const key = keyFor(username);
@@ -364,10 +403,16 @@ export async function signIn(username, password, keep) {
   } catch (err) {
     return { error: 'Could not reach the save server. Check your connection and try again.' };
   }
+  // An account made before the move to private cloud storage is still in
+  // this browser: move it (and its save) over when its password checks out.
+  if (!account && backend.kind === 'cloud') {
+    const moved = await migrateLocalAccount(key, username.trim(), password);
+    if (moved) account = moved;
+  }
   // Same message and same work for a missing account as for a wrong
   // password, so the login form can't be used to find out which names exist.
-  const hash = await hashPassword(password, account ? account.salt : newSalt());
-  if (!account || !sameHash(hash, account.hash)) {
+  const ok = account ? await verify(password, account) : (await hashPassword(password, newSalt()), false);
+  if (!ok) {
     noteFailure();
     if (lockedFor() > 0) return { error: lockMessage() };
     return { error: 'Wrong username or password.' };
@@ -409,24 +454,22 @@ export async function changePassword(oldPassword, newPassword) {
   const problem = passwordProblem(newPassword);
   if (problem) return { error: problem };
   if (lockedFor() > 0) return { error: lockMessage() };
-  const check = await hashPassword(oldPassword, current.salt);
-  if (!sameHash(check, current.hash)) {
+  if (!(await verify(oldPassword, { salt: current.salt, hash: current.hash, iter: current.iter }))) {
     noteFailure();
     return { error: lockedFor() > 0 ? lockMessage() : 'Your current password is wrong.' };
   }
   if (oldPassword === newPassword) return { error: 'Pick a password you haven’t used here.' };
   clearFailures();
-  const salt = newSalt();
-  const hash = await hashPassword(newPassword, salt);
-  const record = { username: current.username, salt, hash, created: current.created || Date.now(), changed: Date.now() };
+  const record = { ...(await newRecord(current.username, newPassword, current.created)), changed: Date.now() };
   try {
     await backend.updateAccount(current.key, record);
   } catch (err) {
     return { error: 'Could not save the new password. Try again.' };
   }
   const keep = !!readLocal(SESSION, null);
-  current.hash = hash;
-  current.salt = salt;
+  current.hash = record.hash;
+  current.salt = record.salt;
+  current.iter = record.iter;
   remember(keep);
   return { ok: true };
 }
