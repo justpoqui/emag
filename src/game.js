@@ -14,7 +14,7 @@ import { Input } from './input.js';
 import { UI } from './ui.js';
 import { rollTable, makeRng } from './rng.js';
 import {
-  loadProfile, durability, saveProfile, addToSlots, removeFrom, loadoutValue, emptyLoadout, countIn,
+  blankProfile, durability, saveProfile, addToSlots, removeFrom, loadoutValue, emptyLoadout, countIn,
 } from './inventory.js';
 import * as Audio from './audio.js';
 import { getQuality, IS_TOUCH } from './settings.js';
@@ -26,18 +26,8 @@ const MAX_HUSKS = 40;
 export class Game {
   constructor(container) {
     this.container = container;
-    this.profile = loadProfile();
-    if (this.profile.inRaid) {
-      // the game was closed mid-raid: that counts as dying topside
-      const kept = this.profile.loadout.safe;
-      this.profile.loadout = emptyLoadout();
-      this.profile.loadout.safe = kept;
-      this.profile.stats.deaths++;
-      this.profile.inRaid = false;
-      saveProfile(this.profile);
-      this.lostOnLoad = true;
-    }
-    this.mode = 'home';
+    this.profile = blankProfile(); // replaced when a player signs in
+    this.mode = 'login';
     this.paused = false;
     this.using = null;
     this.enemies = [];
@@ -149,8 +139,7 @@ export class Game {
     this.clock = new THREE.Clock();
     this.player.alive = false; // keeps menu-scene Husks from noticing the hidden player
     this.spawnAmbient();
-    this.ui.showHome();
-    if (this.lostOnLoad) this.ui.notifyHub('You left mid-raid last time, so that loadout was lost topside.');
+    this.ui.showLogin();
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
   }
@@ -413,6 +402,23 @@ export class Game {
     this.player.alive = false;
     this.spawnAmbient();
     this.enterHub();
+  }
+
+  // Called after sign-in with that account's save.
+  useProfile(profile) {
+    this.profile = profile;
+    if (profile.inRaid) {
+      // the game was closed mid-raid: that counts as dying topside
+      const kept = profile.loadout.safe;
+      profile.loadout = emptyLoadout();
+      profile.loadout.safe = kept;
+      profile.stats.deaths++;
+      profile.inRaid = false;
+      saveProfile(profile);
+      setTimeout(() => this.ui.notifyHub('You left mid-raid last time, so that loadout was lost topside.'), 600);
+    }
+    this.weapons.reset();
+    this.goHome();
   }
 
   enterHub() {
@@ -818,7 +824,7 @@ export class Game {
     const dt = Math.min(0.05, this.clock.getDelta());
     this.time += dt;
     if (this.mode === 'raid' && !this.paused) this.updateRaid(dt);
-    else if (this.mode === 'home' || this.mode === 'hub' || this.mode === 'results') this.updateMenuScene(dt);
+    else if (this.mode !== 'raid') this.updateMenuScene(dt);
     this.effects.update(dt);
     this.updateSun();
     this.renderer.render(this.scene, this.camera);
@@ -835,7 +841,7 @@ export class Game {
   // Camera and ambient Husks behind the title screen, hub and results.
   updateMenuScene(dt) {
     const town = this.world.town;
-    if (this.mode === 'home') {
+    if (this.mode === 'home' || this.mode === 'login') {
       // low, slow drift around the Warden's plaza
       const px = town.x + 32;
       const pz = town.z + 32;

@@ -5,11 +5,14 @@
 import { ITEMS, RARITY } from './config.js';
 import { loadoutValue } from './inventory.js';
 import * as Audio from './audio.js';
+import { connect, createAccount, signIn, resumeSession, currentUser, USERNAME_RULE, MIN_PASSWORD } from './accounts.js';
 
-export const VERSION = '0.4';
+export const VERSION = '0.5';
 
 // Newest first. Shown in the Field Bulletin.
 const BULLETIN = [
+  { tag: 'New', title: 'Raider accounts', body: 'Sign in with a username and password. On the Claude page your progress follows you between PC and phone.' },
+  { tag: 'New', title: 'Item menus', body: 'Right-click (or hold on a phone) any item to sell, move or repair it.' },
   { tag: 'New', title: 'Title screen', body: 'The game now opens here instead of dropping you straight into your loadout.' },
   { tag: 'Change', title: 'Husks renamed', body: 'Skitter, Buzzer, Watcher, Pouncer and Warden. The exploding Pop is gone.' },
   { tag: 'New', title: 'Play on your phone', body: 'Touch controls, a phone layout and Low graphics for mobile. Turn the phone sideways.' },
@@ -45,11 +48,12 @@ export function renderHome(ui) {
         <button class="hm" data-a="how"><span>How to Play</span></button>
         <button class="hm" data-a="settings"><span>Settings</span></button>
         <button class="hm" data-a="credits"><span>Credits</span></button>
+        <button class="hm subtle" data-a="signout"><span>Sign out</span></button>
       </nav>
     </section>
     <aside class="home-side">
       <div class="home-card">
-        <div class="hc-head"><span class="hc-label">RAIDER</span><span class="hc-level">LVL ${p.level}</span></div>
+        <div class="hc-head"><span class="hc-name">${escapeHtml(currentUser() || 'Raider')}</span><span class="hc-level">LVL ${p.level}</span></div>
         <div class="hc-xp"><div style="width:${Math.min(100, (p.xp / need) * 100)}%"></div></div>
         <div class="hc-xp-text">${p.xp} / ${need} XP to level ${p.level + 1}</div>
         <div class="hc-stats">
@@ -73,6 +77,7 @@ export function renderHome(ui) {
 
   const actions = {
     play: () => ui.leaveHome(),
+    signout: () => ui.signOut(),
     how: () => openModal(ui, 'HOW TO PLAY', ui.guideHtml()),
     settings: () => {
       const m = openModal(ui, 'SETTINGS', '');
@@ -94,6 +99,102 @@ export function renderHome(ui) {
     });
   }
   return home;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+// Sign-in / create-account screen, shown before the title menu.
+export function renderLogin(ui) {
+  const wrap = el('div', 'home login');
+  wrap.innerHTML = `
+    <div class="home-shade"></div>
+    <section class="home-main">
+      <div class="home-logo">SCRAP<span>FALL</span></div>
+      <p class="home-tag">Scavenge the Dustline. Outlast the Husks. Get out alive.</p>
+      <form class="auth" novalidate>
+        <div class="auth-tabs" role="tablist">
+          <button type="button" class="auth-tab on" data-m="in">Sign in</button>
+          <button type="button" class="auth-tab" data-m="up">Create account</button>
+        </div>
+        <label class="field"><span>Username</span><input id="auth-user" name="username" autocomplete="username" maxlength="16" spellcheck="false" autocapitalize="off"></label>
+        <label class="field"><span>Password</span><input id="auth-pass" name="password" type="password" autocomplete="current-password"></label>
+        <label class="field confirm hidden"><span>Confirm password</span><input id="auth-pass2" name="password2" type="password" autocomplete="new-password"></label>
+        <label class="keep"><input id="auth-keep" type="checkbox" checked> Keep me signed in on this device</label>
+        <div class="auth-error" role="alert"></div>
+        <button type="submit" class="hm primary auth-go" disabled><span>Connecting…</span></button>
+        <p class="auth-note"></p>
+      </form>
+    </section>
+    <footer class="home-foot"><span>v${VERSION}</span><span></span></footer>`;
+
+  const form = wrap.querySelector('form');
+  const user = wrap.querySelector('#auth-user');
+  const pass = wrap.querySelector('#auth-pass');
+  const pass2 = wrap.querySelector('#auth-pass2');
+  const keep = wrap.querySelector('#auth-keep');
+  const err = wrap.querySelector('.auth-error');
+  const go = wrap.querySelector('.auth-go');
+  const note = wrap.querySelector('.auth-note');
+  let mode = 'in';
+  let ready = false;
+  let busy = false;
+
+  const setMode = (m) => {
+    mode = m;
+    for (const t of wrap.querySelectorAll('.auth-tab')) t.classList.toggle('on', t.dataset.m === m);
+    wrap.querySelector('.confirm').classList.toggle('hidden', m !== 'up');
+    pass.autocomplete = m === 'up' ? 'new-password' : 'current-password';
+    err.textContent = '';
+    if (ready) go.querySelector('span').textContent = m === 'up' ? 'Create account' : 'Sign in';
+  };
+  for (const t of wrap.querySelectorAll('.auth-tab')) t.addEventListener('click', () => setMode(t.dataset.m));
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!ready || busy) return;
+    Audio.initAudio();
+    err.textContent = '';
+    if (mode === 'up') {
+      if (!USERNAME_RULE.test(user.value.trim())) return void (err.textContent = 'Usernames are 3–16 letters, numbers or underscores.');
+      if (pass.value.length < MIN_PASSWORD) return void (err.textContent = `Passwords need at least ${MIN_PASSWORD} characters.`);
+      if (pass.value !== pass2.value) return void (err.textContent = 'The two passwords don’t match.');
+    } else if (!user.value.trim() || !pass.value) {
+      return void (err.textContent = 'Enter your username and password.');
+    }
+    busy = true;
+    go.disabled = true;
+    go.querySelector('span').textContent = mode === 'up' ? 'Creating…' : 'Signing in…';
+    const res = mode === 'up' ? await createAccount(user.value, pass.value, keep.checked) : await signIn(user.value, pass.value, keep.checked);
+    busy = false;
+    go.disabled = false;
+    go.querySelector('span').textContent = mode === 'up' ? 'Create account' : 'Sign in';
+    if (res.error) {
+      err.textContent = res.error;
+      Audio.playDeny();
+      return;
+    }
+    Audio.playChime();
+    ui.signedIn(res.profile, res.imported);
+  });
+
+  // connect to storage, then try the remembered session
+  connect().then(async (kind) => {
+    note.textContent = kind === 'cloud'
+      ? 'Your account works on any device where you open this game in Claude.'
+      : 'Accounts are saved in this browser only.';
+    const resumed = await resumeSession();
+    if (resumed) {
+      ui.signedIn(resumed.profile, false);
+      return;
+    }
+    ready = true;
+    go.disabled = false;
+    setMode(mode);
+    if (!ui.game.input.touch) user.focus();
+  });
+  return wrap;
 }
 
 function openModal(ui, title, html) {

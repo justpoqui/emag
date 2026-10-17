@@ -11,7 +11,8 @@ import {
 import { MAP_HALF } from './collision.js';
 import * as Audio from './audio.js';
 import { QUALITY, getQualityName, setQualityName } from './settings.js';
-import { renderHome } from './home.js';
+import { renderHome, renderLogin } from './home.js';
+import { signOut } from './accounts.js';
 
 // Fullscreen + landscape on phones (Android honours the orientation lock; on
 // iPhone, add the game to the home screen for fullscreen).
@@ -319,6 +320,7 @@ export class UI {
 
   closeMenus() {
     this.closeSheet();
+    this.closeContextMenu();
     this.open = null;
     this.lootTarget = null;
     this.menus.innerHTML = '';
@@ -407,8 +409,163 @@ export class UI {
     t.addEventListener('mouseenter', () => this.showTooltip(stack, opts.hint));
     t.addEventListener('mouseleave', () => this.hideTooltip());
     if (opts.onClick) t.addEventListener('click', (e) => { e.stopPropagation(); opts.onClick(e); });
-    if (opts.onRight) t.addEventListener('contextmenu', (e) => { e.preventDefault(); opts.onRight(e); });
+    if (opts.menu) {
+      t.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        this.hideTooltip();
+        this.showContextMenu(e.clientX, e.clientY, stack, opts.menu());
+      });
+    } else if (opts.onRight) {
+      t.addEventListener('contextmenu', (e) => { e.preventDefault(); opts.onRight(e); });
+    }
     return t;
+  }
+
+  // Right-click menu: [{ label, fn, disabled, danger, note }]
+  showContextMenu(x, y, stack, items) {
+    this.closeContextMenu();
+    const def = ITEMS[stack.id];
+    const menu = el('div', 'ctx-menu');
+    const dur = isDurable(stack.id) ? ` · ${Math.ceil(durability(stack))}/${MAX_DURABILITY}` : '';
+    menu.appendChild(el('div', 'ctx-head', `<b style="color:${RARITY[def.rarity].color}">${def.name}${stack.n > 1 ? ` ×${stack.n}` : ''}</b><span>${RARITY[def.rarity].name}${dur}</span>`));
+    for (const it of items) {
+      const b = el('button', `ctx-item${it.danger ? ' danger' : ''}`, `<span>${it.label}</span>${it.note ? `<small>${it.note}</small>` : ''}`);
+      b.disabled = !!it.disabled;
+      b.onclick = (e) => {
+        e.stopPropagation();
+        this.closeContextMenu();
+        it.fn();
+      };
+      menu.appendChild(b);
+    }
+    this.root.appendChild(menu);
+    // keep it on screen
+    const r = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - r.width - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - r.height - 8))}px`;
+    this.ctxMenu = menu;
+    const away = (e) => {
+      if (this.ctxMenu && !this.ctxMenu.contains(e.target)) this.closeContextMenu();
+    };
+    const esc = (e) => {
+      if (e.code === 'Escape') this.closeContextMenu();
+    };
+    setTimeout(() => {
+      document.addEventListener('mousedown', away);
+      document.addEventListener('contextmenu', away, true);
+      window.addEventListener('keydown', esc);
+    });
+    this._ctxCleanup = () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('contextmenu', away, true);
+      window.removeEventListener('keydown', esc);
+    };
+  }
+
+  closeContextMenu() {
+    if (this._ctxCleanup) this._ctxCleanup();
+    this._ctxCleanup = null;
+    if (this.ctxMenu) this.ctxMenu.remove();
+    this.ctxMenu = null;
+  }
+
+  // Menu entries for an item in the hub. slot = { get, set, where } where
+  // where is 'stash' | 'weapon' | 'shield' | 'bag' | 'safe'.
+  hubItemMenu(slot, stashIndex) {
+    const p = this.game.profile;
+    const lo = p.loadout;
+    const s = slot.get();
+    const items = [];
+    if (slot.where === 'stash') {
+      items.push({ label: 'Move to loadout', fn: () => this.stashToLoadout(stashIndex) });
+    } else {
+      items.push({
+        label: 'Move to stash',
+        fn: () => {
+          const left = moveStack(s, p.stash);
+          if (left) this.notifyHub('Stash is full.');
+          slot.set(left);
+          this.afterHubChange();
+        },
+      });
+    }
+    if (slot.where === 'bag' || slot.where === 'stash') {
+      const free = lo.safe.findIndex((x) => !x);
+      items.push({
+        label: 'Move to safe pocket',
+        note: free === -1 ? 'Safe pocket is full' : 'Kept if you die',
+        disabled: free === -1,
+        fn: () => {
+          lo.safe[free] = s;
+          slot.set(null);
+          this.afterHubChange();
+        },
+      });
+    }
+    if (slot.where === 'safe') {
+      items.push({
+        label: 'Move to bag',
+        fn: () => {
+          slot.set(moveStack(s, lo.bag));
+          this.afterHubChange();
+        },
+      });
+    }
+    if (isDurable(s.id) && durability(s) < MAX_DURABILITY) {
+      const { cost, credits } = this.repairCost(s, MAX_DURABILITY - durability(s));
+      const canMats = Object.entries(cost).every(([id, n]) => countOwned(p, id) >= n);
+      items.push({
+        label: 'Repair with materials',
+        note: Object.entries(cost).map(([id, n]) => `${ITEMS[id].name} ${countOwned(p, id)}/${n}`).join(' · '),
+        disabled: !canMats,
+        fn: () => this.repairItem(s, 'materials'),
+      });
+      items.push({ label: `Repair for ⌬ ${credits}`, disabled: p.credits < credits, fn: () => this.repairItem(s, 'credits') });
+    }
+    const value = stackValue(s);
+    items.push({
+      label: `Sell for ⌬ ${value}`,
+      danger: true,
+      fn: () => {
+        p.credits += value;
+        slot.set(null);
+        Audio.playPickup();
+        this.notifyHub(`Sold ${ITEMS[s.id].name}${s.n > 1 ? ` ×${s.n}` : ''} for ⌬ ${value}.`);
+        this.afterHubChange();
+      },
+    });
+    if (s.n > 1) {
+      const one = stackValue({ ...s, n: 1 });
+      items.push({
+        label: `Sell 1 for ⌬ ${one}`,
+        danger: true,
+        fn: () => {
+          p.credits += one;
+          s.n -= 1;
+          Audio.playPickup();
+          this.afterHubChange();
+        },
+      });
+    }
+    return items;
+  }
+
+  repairItem(stack, mode) {
+    const p = this.game.profile;
+    const missing = MAX_DURABILITY - durability(stack);
+    if (missing <= 0) return;
+    const { cost, credits } = this.repairCost(stack, missing);
+    if (mode === 'materials') {
+      if (!Object.entries(cost).every(([id, n]) => countOwned(p, id) >= n)) return Audio.playDeny();
+      for (const [id, n] of Object.entries(cost)) removeOwned(p, id, n);
+    } else {
+      if (p.credits < credits) return Audio.playDeny();
+      p.credits -= credits;
+    }
+    stack.dur = MAX_DURABILITY;
+    Audio.playPickup();
+    this.notifyHub(`Repaired ${ITEMS[stack.id].name}.`);
+    this.afterHubChange();
   }
 
   // Touch: item details plus buttons for the actions a mouse gets from
@@ -421,8 +578,9 @@ export class UI {
     this.hideTooltip();
     const btns = sheet.querySelector('.sheet-btns');
     const labels = opts.labels || {};
-    const add = (label, fn) => {
+    const add = (label, fn, disabled) => {
       const b = el('button', 'btn', label);
+      b.disabled = !!disabled;
       b.onclick = (e) => {
         e.stopPropagation();
         this.closeSheet();
@@ -430,9 +588,13 @@ export class UI {
       };
       btns.appendChild(b);
     };
-    if (opts.onClick && labels.tap) add(labels.tap, () => opts.onClick({ shiftKey: false }));
-    if (opts.onClick && labels.shift) add(labels.shift, () => opts.onClick({ shiftKey: true }));
-    if (opts.onRight && labels.right) add(labels.right, () => opts.onRight({}));
+    if (opts.menu) {
+      for (const it of opts.menu()) add(it.label, it.fn, it.disabled);
+    } else {
+      if (opts.onClick && labels.tap) add(labels.tap, () => opts.onClick({ shiftKey: false }));
+      if (opts.onClick && labels.shift) add(labels.shift, () => opts.onClick({ shiftKey: true }));
+      if (opts.onRight && labels.right) add(labels.right, () => opts.onRight({}));
+    }
     add('Close', () => {});
     btns.lastChild.classList.add('ghost');
     // the finger that long-pressed lifts onto the backdrop; ignore that first release
@@ -486,12 +648,22 @@ export class UI {
   equipmentColumn(lo, handlers) {
     const col = el('div', 'equip');
     col.appendChild(el('div', 'sect', 'WEAPONS'));
-    lo.weapons.forEach((w, i) => col.appendChild(this.tile(w, { cls: 'wide', label: `Weapon ${i + 1}`, onClick: () => handlers.weapon(i), hint: handlers.weaponHint })));
+    const menu = (slot) => (handlers.menu ? () => handlers.menu(slot) : undefined);
+    lo.weapons.forEach((w, i) => col.appendChild(this.tile(w, {
+      cls: 'wide', label: `Weapon ${i + 1}`, onClick: () => handlers.weapon(i), hint: handlers.weaponHint,
+      menu: menu({ where: 'weapon', get: () => lo.weapons[i], set: (v) => { lo.weapons[i] = v; } }),
+    })));
     col.appendChild(el('div', 'sect', 'SHIELD'));
-    col.appendChild(this.tile(lo.shield, { cls: 'wide', label: 'Shield', onClick: () => handlers.shield(), hint: handlers.shieldHint }));
+    col.appendChild(this.tile(lo.shield, {
+      cls: 'wide', label: 'Shield', onClick: () => handlers.shield(), hint: handlers.shieldHint,
+      menu: menu({ where: 'shield', get: () => lo.shield, set: (v) => { lo.shield = v; } }),
+    }));
     col.appendChild(el('div', 'sect', 'SAFE POCKET <small>(kept if you die)</small>'));
     const safe = el('div', 'grid small');
-    lo.safe.forEach((s, i) => safe.appendChild(this.tile(s, { label: 'Safe', onClick: () => handlers.safe(i), hint: handlers.safeHint })));
+    lo.safe.forEach((s, i) => safe.appendChild(this.tile(s, {
+      label: 'Safe', onClick: () => handlers.safe(i), hint: handlers.safeHint,
+      menu: menu({ where: 'safe', get: () => lo.safe[i], set: (v) => { lo.safe[i] = v; } }),
+    })));
     col.appendChild(safe);
     return col;
   }
@@ -521,14 +693,24 @@ export class UI {
     lo.bag.forEach((s, i) => {
       grid.appendChild(this.tile(s, {
         hint: s ? this.bagHint(s) : '',
-        labels: s ? { tap: this.bagTapLabel(s), shift: 'Move to safe pocket', right: 'Drop' } : null,
         onClick: (e) => this.bagClick(i, e.shiftKey),
-        onRight: () => {
-          if (!lo.bag[i]) return;
-          this.notify(`Dropped ${ITEMS[lo.bag[i].id].name}.`);
-          lo.bag[i] = null;
-          this.hideTooltip();
-          this.refreshInventory();
+        menu: () => {
+          const st = lo.bag[i];
+          const items = [];
+          const tap = this.bagTapLabel(st);
+          if (tap) items.push({ label: tap, fn: () => this.bagClick(i, false) });
+          const free = lo.safe.findIndex((x) => !x);
+          items.push({ label: 'Move to safe pocket', note: free === -1 ? 'Safe pocket is full' : 'Kept if you die', disabled: free === -1, fn: () => this.bagClick(i, true) });
+          items.push({
+            label: 'Drop',
+            danger: true,
+            fn: () => {
+              this.notify(`Dropped ${ITEMS[st.id].name}.`);
+              lo.bag[i] = null;
+              this.refreshInventory();
+            },
+          });
+          return items;
         },
       }));
     });
@@ -547,9 +729,9 @@ export class UI {
 
   bagHint(s) {
     const t = ITEMS[s.id].type;
-    if (t === 'heal' || t === 'recharge') return 'Click: use · Shift-click: safe pocket · Right-click: drop';
-    if (t === 'weapon' || t === 'shield') return 'Click: equip · Shift-click: safe pocket · Right-click: drop';
-    return 'Shift-click: safe pocket · Right-click: drop';
+    if (t === 'heal' || t === 'recharge') return 'Click: use · Right-click: more';
+    if (t === 'weapon' || t === 'shield') return 'Click: equip · Right-click: more';
+    return 'Right-click: move to safe pocket or drop';
   }
 
   bagClick(i, shift) {
@@ -858,6 +1040,7 @@ export class UI {
     const p = g.profile;
     this.hideTooltip();
     this.closeSheet();
+    this.closeContextMenu();
     this.menus.innerHTML = '';
     const hub = el('div', 'hub');
     const need = g.xpForLevel(p.level);
@@ -964,14 +1147,15 @@ export class UI {
       weapon: (i) => { if (lo.weapons[i]) { lo.weapons[i] = toStash(lo.weapons[i]); this.afterHubChange(); } },
       shield: () => { if (lo.shield) { lo.shield = toStash(lo.shield); this.afterHubChange(); } },
       safe: (i) => { if (lo.safe[i]) { lo.safe[i] = toStash(lo.safe[i]); this.afterHubChange(); } },
-      weaponHint: 'Click: move to stash', shieldHint: 'Click: move to stash', safeHint: 'Click: move to stash',
+      weaponHint: 'Click: move to stash · Right-click: more', shieldHint: 'Click: move to stash · Right-click: more', safeHint: 'Click: move to stash · Right-click: more',
+      menu: (slot) => this.hubItemMenu(slot),
     }));
     const bagTitle = el('div', 'sect', `BAG <small>${freeSlots(lo.bag)} free</small>`);
     left.appendChild(bagTitle);
     const bag = el('div', 'grid');
     lo.bag.forEach((s, i) => bag.appendChild(this.tile(s, {
-      hint: 'Click: move to stash · Shift-click: safe pocket',
-      labels: { tap: 'Move to stash', shift: 'Move to safe pocket' },
+      hint: 'Click: move to stash · Right-click: more',
+      menu: () => this.hubItemMenu({ where: 'bag', get: () => lo.bag[i], set: (v) => { lo.bag[i] = v; } }),
       onClick: (e) => {
         if (!lo.bag[i]) return;
         if (e.shiftKey) {
@@ -1006,13 +1190,12 @@ export class UI {
     left.appendChild(kitRow);
 
     const right = el('div', 'hub-col wide');
-    right.appendChild(el('div', 'col-title', `STASH <small>${freeSlots(p.stash)} / ${p.stash.length} free · ${g.input.touch ? 'tap to load, hold for more' : 'click to load, right-click to sell'}</small>`));
+    right.appendChild(el('div', 'col-title', `STASH <small>${freeSlots(p.stash)} / ${p.stash.length} free · ${g.input.touch ? 'tap to load, hold for more' : 'click to load, right-click for more'}</small>`));
     const stash = el('div', 'grid stash');
     p.stash.forEach((s, i) => stash.appendChild(this.tile(s, {
-      hint: s ? `Click: load · Right-click: sell for ⌬ ${stackValue(s)}` : '',
+      hint: s ? 'Click: move to loadout · Right-click: sell, move, repair' : '',
       onClick: () => this.stashToLoadout(i),
-      labels: { tap: 'Load into loadout', right: 'Sell' },
-      onRight: () => this.sellStash(i),
+      menu: () => this.hubItemMenu({ where: 'stash', get: () => p.stash[i], set: (v) => { p.stash[i] = v; } }, i),
     })));
     right.appendChild(stash);
     const sortBtn = el('button', 'btn ghost', 'Sort stash');
@@ -1054,18 +1237,6 @@ export class UI {
       p.stash[i] = left;
       if (left) this.notifyHub('Bag is full.');
     }
-    this.afterHubChange();
-  }
-
-  sellStash(i) {
-    const p = this.game.profile;
-    const s = p.stash[i];
-    if (!s) return;
-    const value = stackValue(s);
-    p.credits += value;
-    p.stash[i] = null;
-    Audio.playPickup();
-    this.notifyHub(`Sold ${ITEMS[s.id].name} ×${s.n} for ⌬ ${value}.`);
     this.afterHubChange();
   }
 
@@ -1214,26 +1385,12 @@ export class UI {
         <span class="r-name" style="color:${RARITY[d.rarity].color}">${d.name}<small>${where}</small></span>
         <span class="dur-wide ${dur <= 0 ? 'broken' : dur < 25 ? 'low' : ''}"><i style="width:${dur}%"></i><b>${dur <= 0 ? 'BROKEN' : `${dur}/${MAX_DURABILITY}`}</b></span>
         <span class="costs">${costHtml}</span>`;
-      const fix = () => {
-        stack.dur = MAX_DURABILITY;
-        Audio.playPickup();
-        this.notifyHub(`Repaired ${d.name}.`);
-        this.afterHubChange();
-      };
       const mats = el('button', 'btn small', 'Repair');
       mats.disabled = !canMats;
-      mats.onclick = () => {
-        if (!Object.entries(cost).every(([id, n]) => countOwned(p, id) >= n)) return;
-        for (const [id, n] of Object.entries(cost)) removeOwned(p, id, n);
-        fix();
-      };
+      mats.onclick = () => this.repairItem(stack, 'materials');
       const pay = el('button', 'btn small ghost', `Pay ⌬ ${credits}`);
       pay.disabled = p.credits < credits;
-      pay.onclick = () => {
-        if (p.credits < credits) return Audio.playDeny();
-        p.credits -= credits;
-        fix();
-      };
+      pay.onclick = () => this.repairItem(stack, 'credits');
       row.append(mats, pay);
       rows.appendChild(row);
     }
@@ -1336,6 +1493,27 @@ export class UI {
     }
   }
 
+  showLogin() {
+    this.hud.classList.add('hidden');
+    this.open = null;
+    this.closeSheet();
+    this.hideTooltip();
+    this.menus.innerHTML = '';
+    this.menus.appendChild(renderLogin(this));
+  }
+
+  signedIn(profile, imported) {
+    this.game.useProfile(profile);
+    if (imported) setTimeout(() => this.notifyHub('Your progress from this browser was moved into your new account.'), 400);
+  }
+
+  async signOut() {
+    await signOut();
+    this.game.profile = resetProfile();
+    this.game.mode = 'login';
+    this.showLogin();
+  }
+
   leaveHome() {
     if (this.modal) this.modal.close();
     Audio.initAudio();
@@ -1360,8 +1538,9 @@ export class UI {
       ${this.guideHtml()}
       <button class="btn danger reset">Wipe save and start over</button>`;
     body.querySelector('.reset').onclick = () => {
-      this.ask('Delete your stash, credits and progress?', 'Wipe save', () => {
+      this.ask('Delete this account’s stash, credits and progress?', 'Wipe save', () => {
         this.game.profile = resetProfile();
+        saveProfile(this.game.profile);
         this.renderHub();
       });
     };

@@ -69,23 +69,39 @@ function migrateIds(data) {
   lo.safe = lo.safe.map(fix);
 }
 
-export function loadProfile() {
+// A fresh profile for a new account.
+export function blankProfile() {
+  return template();
+}
+
+// Bring a saved profile (any age) up to date: renamed items, missing fields,
+// slot counts.
+export function normalizeProfile(data) {
+  if (!data || typeof data !== 'object' || !Array.isArray(data.stash) || !data.loadout) return template();
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (raw) {
-      const data = JSON.parse(raw);
-      migrateIds(data);
-      const base = template();
-      for (const key of Object.keys(base)) if (data[key] === undefined) data[key] = base[key];
-      fitArray(data.stash, STASH_SLOTS);
-      fitArray(data.loadout.bag, BAG_SLOTS);
-      fitArray(data.loadout.safe, SAFE_SLOTS);
-      return data;
-    }
+    migrateIds(data);
+    const base = template();
+    for (const key of Object.keys(base)) if (data[key] === undefined) data[key] = base[key];
+    fitArray(data.stash, STASH_SLOTS);
+    fitArray(data.loadout.bag, BAG_SLOTS);
+    fitArray(data.loadout.safe, SAFE_SLOTS);
+    return data;
   } catch (err) {
     console.warn('Save could not be read, starting fresh', err);
+    return template();
   }
-  return template();
+}
+
+// The progress this browser kept before accounts existed, if any.
+export function takeLegacySave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    localStorage.removeItem(SAVE_KEY);
+    return normalizeProfile(JSON.parse(raw));
+  } catch (err) {
+    return null;
+  }
 }
 
 function fitArray(arr, size) {
@@ -93,20 +109,19 @@ function fitArray(arr, size) {
   arr.length = size;
 }
 
+// Saving goes to the signed-in account (see accounts.js), which registers
+// itself here. Before sign-in nothing is saved.
+let saver = null;
+
+export function setSaver(fn) {
+  saver = fn;
+}
+
 export function saveProfile(profile) {
-  try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(profile));
-  } catch (err) {
-    console.warn('Save failed', err);
-  }
+  if (saver) saver(profile);
 }
 
 export function resetProfile() {
-  try {
-    localStorage.removeItem(SAVE_KEY);
-  } catch (err) {
-    // ignore
-  }
   return template();
 }
 
