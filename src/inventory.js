@@ -1,5 +1,6 @@
 // Slot-based inventory helpers, plus the saved profile (localStorage).
 
+import { DEFAULT_OUTFIT, cleanOutfit } from './outfit.js';
 import { ITEMS, BAG_SLOTS, SAFE_SLOTS, STASH_SLOTS, START_CREDITS, stackSize, FREE_KIT, MAX_DURABILITY, isDurable, RECIPES } from './config.js';
 import { cleanMemory, blankMemory } from './network.js';
 
@@ -46,7 +47,7 @@ function template() {
   stash[3] = makeStack('fabric', 4);
   const loadout = emptyLoadout();
   applyFreeKit(loadout);
-  return { credits: START_CREDITS, stash, loadout, stats: { raids: 0, extracts: 0, deaths: 0, kills: 0 }, level: 1, xp: 0, network: blankMemory(), pins: [] };
+  return { credits: START_CREDITS, stash, loadout, stats: { raids: 0, extracts: 0, deaths: 0, kills: 0 }, level: 1, xp: 0, network: blankMemory(), pins: [], outfit: { ...DEFAULT_OUTFIT } };
 }
 
 // Item ids from older saves, renamed since.
@@ -134,7 +135,8 @@ function sanitize(p) {
   // pinned recipes (by what they make)
   p.pins = Array.isArray(p.pins) ? [...new Set(p.pins.filter((id) => RECIPES.some((r) => r.out === id)))].slice(0, MAX_PINS) : [];
   // drop any keys the game doesn't use
-  for (const k of Object.keys(p)) if (!['credits', 'stash', 'loadout', 'stats', 'level', 'xp', 'inRaid', 'network', 'pins'].includes(k)) delete p[k];
+  p.outfit = cleanOutfit(p.outfit);
+  for (const k of Object.keys(p)) if (!['credits', 'stash', 'loadout', 'stats', 'level', 'xp', 'inRaid', 'network', 'pins', 'outfit'].includes(k)) delete p[k];
   for (const k of Object.keys(lo)) if (!['weapons', 'shield', 'bag', 'safe'].includes(k)) delete lo[k];
 }
 

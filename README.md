@@ -96,6 +96,16 @@ out at their ends. Meadows of long grass, wildflowers and ferns sway with the
 wind, and so do the bushes, tree crowns and camp tarps. The wind picks up and
 dies down over a minute or two.
 
+## Your look
+
+The full-length **mirror** in your quarters (east wall) opens the wardrobe:
+walk up to it and press **E**. Pick a shirt (Field Jacket or Work Tee),
+trousers (Cargo Pants or Utility Shorts), a hat (Work Cap, Boonie Hat or none)
+and hair (Short Crop or Ponytail). You see the change in the mirror at once,
+and your raider wears it topside too. Clothes sit over the body and hang from
+the same joints, with rounded sleeve and trouser ends meeting over the elbows
+and knees, so nothing shows through as you move.
+
 ## The loop
 
 1. **The Burrow (hub)**: manage your **loadout** and **stash**, buy from
@@ -229,6 +239,7 @@ shooter/
     collision.js   heightfield terrain + AABB grid: movement, line of sight, bullet raycasts
     player.js      movement, stamina, dodge roll, holstering, weapon models
     rig.js         the raider model (knees and elbows) and its animation
+    outfit.js      clothes, hats and hair (the wardrobe) and how they go on over the body
     sanctuary.js   the walkable Patron's Sanctuary (quarters, hallway, Trade Hall, Workshop, Checkout, Lift)
     weapons.js     firing, spread/bloom, recoil, reloads, hit resolution
     enemies.js     Husk models and AI (neutral / wary / hostile)

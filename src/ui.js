@@ -15,6 +15,7 @@ import {
 } from './settings.js';
 import { renderHome, renderLogin } from './home.js';
 import { describe as describeNetwork } from './network.js';
+import { WARDROBE, applyOutfit } from './outfit.js';
 import { signOut, currentUser, isAdmin, storageKind, changePassword, passwordProblem, adminData, adminSetBans, adminSetBulletin, adminName } from './accounts.js';
 
 // Fullscreen (from the Settings button).
@@ -382,6 +383,7 @@ export class UI {
   closeMenus() {
     this.closeContextMenu();
     if (this.game.mode === 'explore') {
+      this.game.sanctuary.stopMirror();
       this.open = null;
       this.rerender = null;
       this.game.preview = null;
@@ -1785,7 +1787,9 @@ export class UI {
       trader: arg === 'sell' ? 'PELL · SCRAP BUYER' : arg ? `${(TRADERS[arg] || {}).name || ''} · ${((TRADERS[arg] || {}).title || '').toUpperCase()}` : 'TRADE HALL',
       bench: 'WORKSHOP',
       checkout: 'CHECKOUT',
+      mirror: 'MIRROR · WARDROBE',
     };
+    if (kind !== 'mirror') g.sanctuary.stopMirror();
     const panel = el('div', `panel explore-panel ${kind}-panel`);
     const bar = this.titleBar(titles[kind], 'Backspace to close');
     const wallet = el('span', 'panel-creds', `⌬ ${g.profile.credits.toLocaleString()}`);
@@ -1802,8 +1806,42 @@ export class UI {
       this.renderWorkbenchTab(body);
     }
     if (kind === 'checkout') this.renderCheckout(body);
+    if (kind === 'mirror') this.renderMirror(body);
     panel.appendChild(body);
     this.menus.appendChild(panel);
+  }
+
+  // The mirror: pick a shirt, trousers, hat and hair. Changes show at once
+  // on the raider (and in the mirror) and are saved with the profile.
+  renderMirror(body) {
+    const g = this.game;
+    body.className = 'hub-body mirror-body';
+    const labels = { shirt: 'Shirt', pants: 'Trousers', hat: 'Hat', hair: 'Hair' };
+    for (const slot of Object.keys(WARDROBE)) {
+      const row = el('div', 'wardrobe-row');
+      row.appendChild(el('div', 'col-title', labels[slot].toUpperCase()));
+      const opts = el('div', 'wardrobe-opts');
+      for (const w of WARDROBE[slot]) {
+        const on = g.profile.outfit[slot] === w.id;
+        const swatch = w.color !== undefined ? `<i style="background:#${w.color.toString(16).padStart(6, '0')}"></i>` : '<i class="none"></i>';
+        const b = el('button', `wardrobe-opt ${on ? 'on' : ''}`, `${swatch}<b>${w.name}</b>`);
+        b.title = w.desc;
+        b.onclick = () => {
+          if (on) return;
+          g.profile.outfit[slot] = w.id;
+          saveProfile(g.profile);
+          applyOutfit(g.sanctuary.player.model, g.profile.outfit);
+          Audio.playUI();
+          this.refresh();
+        };
+        opts.appendChild(b);
+      }
+      row.appendChild(opts);
+      const cur = WARDROBE[slot].find((w) => w.id === g.profile.outfit[slot]);
+      if (cur && cur.desc) row.appendChild(el('p', 'muted', cur.desc));
+      body.appendChild(row);
+    }
+    body.appendChild(el('p', 'muted', 'Your raider wears this topside too.'));
   }
 
   renderCheckout(body) {

@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { applyOutfit, DEFAULT_OUTFIT } from './outfit.js';
 
 function part(geo, material, x, y, z, parent) {
   const mesh = new THREE.Mesh(geo, material);
@@ -30,12 +31,15 @@ const rounded = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, 3, r);
 // shin to sole 0.49, a shaped torso that ends over a separate pelvis (the
 // thighs sit inside it, so the top of a leg never shows), and a head that
 // floats just clear of the shoulders with no neck.
-export function buildRaiderModel(colors = {}) {
-  const jacket = new THREE.MeshStandardMaterial({ color: colors.jacket ?? 0xc4672f, roughness: 0.9 });
-  const pants = new THREE.MeshStandardMaterial({ color: colors.pants ?? 0x4a5242, roughness: 0.95 });
+//
+// This builds the bare body (skin, with a grey base layer on the torso and
+// hips) plus the gear; clothes, hair and hats go on over it (outfit.js).
+// colors: { jacket, scarf, pack } tints the default outfit (the traders).
+export function buildRaiderModel(colors = {}, outfit = DEFAULT_OUTFIT) {
   const skin = new THREE.MeshStandardMaterial({ color: 0xc89a7a, roughness: 0.8 });
+  const jacket = new THREE.MeshStandardMaterial({ color: 0x5a5650, roughness: 0.9 }); // base layer
+  const pants = jacket;
   const gear = new THREE.MeshStandardMaterial({ color: 0x3b3833, roughness: 0.8 });
-  const scarf = new THREE.MeshStandardMaterial({ color: colors.scarf ?? 0x2f8f8a, roughness: 0.95 });
   const lens = new THREE.MeshStandardMaterial({ color: 0x1a2a2a, emissive: 0x40ffd0, emissiveIntensity: 0.6, metalness: 0.8, roughness: 0.2 });
   const pack = new THREE.MeshStandardMaterial({ color: colors.pack ?? 0x8a7a55, roughness: 0.95 });
   const wood = new THREE.MeshStandardMaterial({ color: 0x6e4f30, roughness: 0.85 });
@@ -47,7 +51,9 @@ export function buildRaiderModel(colors = {}) {
   root.add(body);
 
   // pelvis: the thighs' sockets sit inside it
+  const base = { arms: [], legs: [] }; // the bare body parts clothes can cover
   const pelvis = part(new THREE.SphereGeometry(0.16, 20, 14), pants, 0, -0.03, 0, body);
+  base.pelvis = pelvis;
   pelvis.scale.set(1.04, 0.78, 0.7);
   // torso: waist, chest, rounded shoulders; its hem sits over the top of the pelvis
   const torsoGeo = new THREE.LatheGeometry([
@@ -55,13 +61,10 @@ export function buildRaiderModel(colors = {}) {
   ].map(([r, y]) => new THREE.Vector2(r, y)), 24);
   const torso = part(torsoGeo, jacket, 0, 0, 0, body);
   torso.scale.z = 0.72;
+  base.torso = torso;
   const belt = part(new THREE.TorusGeometry(0.172, 0.022, 8, 28), gear, 0, 0.0, 0, body);
   belt.rotation.x = Math.PI / 2;
   belt.scale.set(1, 0.72, 1);
-  // scarf: a flat collar resting on the shoulders (there is no neck)
-  const collar = part(new THREE.TorusGeometry(0.1, 0.03, 8, 24), scarf, 0, 0.6, 0, body);
-  collar.rotation.x = Math.PI / 2;
-  collar.scale.set(1.15, 0.8, 1);
   // pack and bedroll sit behind the torso, clear of the head
   part(rounded(0.34, 0.42, 0.18, 0.07), pack, 0, 0.33, -0.235, body);
   part(new THREE.CapsuleGeometry(0.06, 0.24, 6, 12), gear, 0, 0.57, -0.24, body).rotation.z = Math.PI / 2;
@@ -73,42 +76,45 @@ export function buildRaiderModel(colors = {}) {
   part(new THREE.SphereGeometry(0.12, 24, 18), skin, 0, 0, 0, head);
   // a band of the sphere centred on the face (+z)
   part(new THREE.SphereGeometry(0.123, 24, 6, Math.PI * 0.2, Math.PI * 0.6, Math.PI * 0.36, Math.PI * 0.14), lens, 0, 0, 0, head);
-  part(new THREE.SphereGeometry(0.125, 24, 10, 0, Math.PI * 2, 0, Math.PI * 0.32), gear, 0, 0, 0, head); // cap
 
   // legs: hip -> thigh -> knee -> shin -> boot, with a joint ball in the pants colour
   const legs = [-1, 1].map((side) => {
     const hip = new THREE.Group();
     hip.position.set(side * 0.092, 0.95, 0);
     root.add(hip);
-    hanging(0.078, 0.46, pants, hip);
+    const thigh = hanging(0.078, 0.46, skin, hip);
     const knee = new THREE.Group();
     knee.position.y = -0.46;
     hip.add(knee);
-    part(new THREE.SphereGeometry(0.07, 14, 10), pants, 0, 0, 0, knee);
-    hanging(0.064, 0.42, pants, knee);
+    const kneeBall = part(new THREE.SphereGeometry(0.07, 14, 10), skin, 0, 0, 0, knee);
+    const shin = hanging(0.064, 0.42, skin, knee);
+    base.legs.push({ side, thigh, kneeBall, shin });
     part(rounded(0.12, 0.1, 0.25, 0.045), gear, 0, -0.44, 0.04, knee); // boot, sole at -0.49
     return { hip, knee };
   });
+  base.legs.forEach((l, i) => Object.assign(l, legs[i]));
 
   // arms: a shoulder cap fixed to each side of the torso, and the arm hanging
   // from inside the cap, so the arm sits just outside the body and never cuts
   // through it: shoulder -> upper arm -> elbow -> forearm -> hand
   const arms = [-1, 1].map((side) => {
-    const cap = part(new THREE.SphereGeometry(0.078, 16, 12), jacket, side * 0.245, 0.5, 0, body);
+    const cap = part(new THREE.SphereGeometry(0.078, 16, 12), skin, side * 0.245, 0.5, 0, body);
     cap.scale.set(1.05, 0.9, 1);
     const shoulder = new THREE.Group();
     shoulder.position.set(side * 0.262, 0.495, 0);
     body.add(shoulder);
-    hanging(0.056, 0.3, jacket, shoulder);
+    const upper = hanging(0.056, 0.3, skin, shoulder);
     const elbow = new THREE.Group();
     elbow.position.y = -0.29;
     shoulder.add(elbow);
-    part(new THREE.SphereGeometry(0.052, 12, 10), jacket, 0, 0, 0, elbow);
-    hanging(0.048, 0.27, jacket, elbow);
+    const elbowBall = part(new THREE.SphereGeometry(0.052, 12, 10), skin, 0, 0, 0, elbow);
+    const forearm = hanging(0.048, 0.27, skin, elbow);
+    base.arms.push({ side, cap, upper, elbowBall, forearm });
     const hand = part(new THREE.SphereGeometry(0.046, 12, 10), skin, 0, -0.3, 0, elbow);
     hand.scale.set(0.9, 1.15, 0.8);
     return { shoulder, elbow, hand };
   });
+  base.arms.forEach((a, i) => Object.assign(a, arms[i]));
 
   // the stick: carried across the back, drawn into the right hand to swing
   const stickGeo = new THREE.CylinderGeometry(0.028, 0.034, 1.05, 8);
@@ -174,7 +180,8 @@ export function buildRaiderModel(colors = {}) {
   // on the belt, just to the side of the buckle, facing forward
   torch.position.set(-0.075, 0.035, 0.13);
 
-  root.userData = { body, head, torso, legs, arms, backStick, handStick, gunSocket, backSocket, backSocket2, hipLSocket, hipRSocket, torch, torchLens };
+  root.userData = { body, head, torso, legs, arms, base, backStick, handStick, gunSocket, backSocket, backSocket2, hipLSocket, hipRSocket, torch, torchLens };
+  applyOutfit(root, outfit, colors);
   return root;
 }
 
@@ -270,6 +277,11 @@ export function poseRig(u, s, dt) {
   // the head keeps facing forward whatever the shoulders do
   u.lookY = lerp(u.lookY || 0, s.look || 0, Math.min(1, dt * 3));
   u.head.rotation.y = u.lookY - u.body.rotation.y;
+  // a ponytail trails behind and swings with each step
+  if (u.tail) {
+    u.tail.rotation.x = lerp(u.tail.rotation.x, 0.3 + move * 0.45 + Math.cos(s.phase * 2) * 0.1 * move - u.head.rotation.x * 0.8 + (s.airborne ? 0.4 : 0), Math.min(1, dt * 8));
+    u.tail.rotation.z = lerp(u.tail.rotation.z, Math.sin(s.phase) * 0.18 * move + Math.sin((s.idle || 0) * 1.3) * 0.03, Math.min(1, dt * 8));
+  }
 
   // ---- arms ----
   let rUp = { x: sw * amp * 0.9, z: 0.1 }; // z > 0 swings the right arm outward

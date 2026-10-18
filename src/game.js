@@ -21,6 +21,7 @@ import * as Audio from './audio.js';
 import { getQuality, getFpsCap, getResScale, getShowFps } from './settings.js';
 import { Sanctuary } from './sanctuary.js';
 import { wind } from './foliage.js';
+import { applyOutfit } from './outfit.js';
 import { Infrastructure } from './infrastructure.js';
 import {
   traits, startRaidMemory, planInfrastructure, recordSeen, recordPeace, recordProvoked, recordHit, recordKill, recordLoot,
@@ -467,6 +468,10 @@ export class Game {
     if (it.kind === 'trader') this.ui.openExplorePanel('trader', it.trader);
     if (it.kind === 'bench') this.ui.openExplorePanel('bench', it.section);
     if (it.kind === 'checkout') this.ui.openExplorePanel('checkout');
+    if (it.kind === 'mirror') {
+      this.sanctuary.startMirror();
+      this.ui.openExplorePanel('mirror');
+    }
     if (it.kind === 'lift') this.ui.deploy();
   }
 
@@ -499,6 +504,7 @@ export class Game {
     this.applyMap(this.selectedMap);
     this.getHuskCtx().sightMul = this.map.sight;
     this.raidTime = RAID_SECONDS;
+    applyOutfit(this.player.model, this.profile.outfit);
     this.raidStats = { kills: 0, startValue: loadoutValue(this.profile.loadout), looted: {}, xp: 0, started: performance.now() };
     this.profile.stats.raids++;
     this.profile.inRaid = true; // if the tab closes mid-raid, the loadout is lost (like a real raid)

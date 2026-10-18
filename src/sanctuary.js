@@ -14,6 +14,8 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { poseRig, buildRaiderModel } from './rig.js';
+import { applyOutfit } from './outfit.js';
+import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import { Player, buildGunModel } from './player.js';
 import { Collision } from './collision.js';
 import { TRADERS, BENCH_SECTIONS } from './config.js';
@@ -347,6 +349,40 @@ export class Sanctuary {
     sign([{ text: 'STASH', size: 70, y: 82 }], 2.98, 1.85, -2.6, 0.5, 0.17, -Math.PI / 2, { w: 300, h: 160 });
     interact('stash', 2.6, -2.6, 'Open your stash & loadout');
     box(mat(0x55603a), 2.6, 0.22, 0.6, 1.1, 0.44, 0.6);
+    // a full-length mirror on the east wall: walk up to it to change clothes
+    {
+      const mx = 3.86;
+      const mz = 2.45;
+      const glass = new Reflector(new THREE.PlaneGeometry(0.78, 1.75), { textureWidth: 512, textureHeight: 1024, color: 0xb8b4ac, clipBias: 0.003 });
+      glass.position.set(mx, 1.02, mz);
+      glass.rotation.y = -Math.PI / 2;
+      scene.add(glass);
+      this.mirror = glass;
+      // battered timber frame, and a scrap of tape where it once cracked
+      box(M.darkWood, mx + 0.02, 1.02, mz - 0.43, 0.06, 1.87, 0.08, { collide: false });
+      box(M.darkWood, mx + 0.02, 1.02, mz + 0.43, 0.06, 1.87, 0.08, { collide: false });
+      box(M.darkWood, mx + 0.02, 1.93, mz, 0.06, 0.08, 0.94, { collide: false });
+      box(M.darkWood, mx + 0.02, 0.11, mz, 0.06, 0.08, 0.94, { collide: false });
+      box(mat(0xd8cfb8), mx - 0.005, 1.6, mz + 0.22, 0.004, 0.035, 0.22, { collide: false, rot: [0.6, 0, 0] });
+      this.col.addBox({ x: mx - 0.06, y: 0, z: mz - 0.5 }, { x: 4, y: 2, z: mz + 0.5 });
+      // a hook rail of spare clothes beside it
+      box(M.darkWood, mx, 1.75, mz - 0.95, 0.05, 0.06, 0.6, { collide: false });
+      [[0xd9d2c0, -0.15], [0x4a5242, 0.08]].forEach(([c, dz]) => {
+        const shirt = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.5), mat(c, { side: THREE.DoubleSide }));
+        shirt.position.set(mx - 0.04, 1.47, mz - 0.95 + dz);
+        shirt.rotation.y = -Math.PI / 2;
+        shirt.rotation.z = 0.04;
+        scene.add(shirt);
+      });
+      // a little lamp over it, so you can see yourself
+      const vanity = new THREE.PointLight(0xffd6a8, 4, 3.2, 1.6);
+      vanity.position.set(mx - 0.35, 2.15, mz);
+      scene.add(vanity);
+      box(M.steel, mx - 0.06, 2.05, mz, 0.12, 0.05, 0.3, { collide: false });
+      box(M.glowWarm, mx - 0.1, 2.02, mz, 0.06, 0.012, 0.26, { collide: false });
+      interact('mirror', 3.1, mz, 'Use the mirror');
+      this.mirrorSpot = { x: 3.0, z: mz };
+    }
     // weapon rack on the back wall
     box(M.darkWood, -0.4, 1.95, -3.34, 1.4, 0.08, 0.1, { collide: false });
     box(M.darkWood, -0.4, 1.45, -3.34, 1.4, 0.08, 0.1, { collide: false });
@@ -538,6 +574,7 @@ export class Sanctuary {
 
   // Show this profile's gear: first weapon slung on the back, the rest on the rack.
   refresh(profile) {
+    if (profile) applyOutfit(this.player.model, profile.outfit);
     const weapons = profile ? profile.loadout.weapons.filter(Boolean).map((w) => w.id) : [];
     this.player.setGun(weapons[0] || null, true);
     const rackIds = weapons.slice(1).join(',');
@@ -638,8 +675,32 @@ export class Sanctuary {
     this.ambient(dt);
   }
 
+  // Stand at the mirror (while the wardrobe is open): face it, and look past
+  // the raider's shoulder at their reflection.
+  startMirror() {
+    const p = this.player;
+    p.pos.set(this.mirrorSpot.x, 0, this.mirrorSpot.z - 0.25);
+    p.vel.set(0, 0, 0);
+    p.crouch = false;
+    this.yaw = Math.PI / 2;
+    this.pitch = -0.05;
+    p.bodyYaw = this.yaw; // turn to face it
+    this.mirrorView = true;
+  }
+
+  stopMirror() {
+    this.mirrorView = false;
+  }
+
   updateCamera() {
     const p = this.player;
+    if (this.mirrorView) {
+      // the reflection sits right of centre, clear of the wardrobe panel
+      this.camera.position.set(p.pos.x - 1.45, 1.5, p.pos.z + 0.9);
+      this.camera.lookAt(p.pos.x + 1.7, 1.0, p.pos.z - 0.25);
+      p.model.visible = true;
+      return;
+    }
     const eye = p.eye();
     const look = new THREE.Vector3(Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch));
     const right = new THREE.Vector3(-Math.cos(this.yaw), 0, Math.sin(this.yaw));

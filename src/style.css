@@ -528,6 +528,17 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 /* checkout: panel on the left, live preview of the drop behind it */
 .menus:has(.checkout-panel) { justify-content: flex-start; padding-left: calc(24px + env(safe-area-inset-left)); }
 .checkout-panel { width: min(520px, 92vw); background: rgba(28, 26, 23, 0.9); }
+.menus:has(.mirror-panel) { justify-content: flex-start; padding-left: calc(24px + env(safe-area-inset-left)); }
+.mirror-panel { width: min(440px, 92vw); background: rgba(28, 26, 23, 0.9); }
+.mirror-body { flex-direction: column; gap: 14px; }
+.mirror-body p { margin: 0; font-size: 14px; }
+.wardrobe-row { display: flex; flex-direction: column; gap: 6px; }
+.wardrobe-opts { display: flex; gap: 6px; flex-wrap: wrap; }
+.wardrobe-opt { flex: 1 1 0; min-width: 110px; display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-left: 4px solid transparent; color: var(--cream); padding: 9px 10px; cursor: pointer; font-family: var(--font); font-size: 17px; text-align: left; }
+.wardrobe-opt:hover { background: rgba(255, 255, 255, 0.1); }
+.wardrobe-opt.on { border-left-color: var(--yellow); background: rgba(242, 193, 78, 0.12); }
+.wardrobe-opt i { width: 16px; height: 16px; border-radius: 50%; flex: none; border: 1px solid rgba(255, 255, 255, 0.25); }
+.wardrobe-opt i.none { background: repeating-linear-gradient(45deg, transparent 0 3px, rgba(255, 255, 255, 0.3) 3px 4px); }
 .checkout-body { flex-direction: column; gap: 14px; }
 .map-list { display: flex; flex-direction: column; gap: 6px; }
 .map-card { text-align: left; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-left: 4px solid transparent; color: var(--cream); padding: 10px 14px; cursor: pointer; font-family: var(--font); display: grid; grid-template-columns: 1fr auto; gap: 0 10px; }
