@@ -1,8 +1,8 @@
 // Clothes, hair and hats. Each piece is a shell a little bigger than the body
-// part it covers, hung from the same joint so it moves with it. Sleeves and
-// trouser legs end in rounded caps that meet over a joint ball at the elbow
-// or knee, so a bent limb stays covered without a gap. Body parts a piece
-// covers completely are hidden, so nothing can show through.
+// part it covers. Sleeves and trouser legs are one continuous skinned mesh
+// from shoulder to wrist (hip to ankle) that bends over the elbow or knee like
+// cloth, and a sleeve's top blends into the shirt so the shoulder has no seam.
+// Body parts a piece covers completely are hidden, so nothing can show through.
 
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
@@ -52,13 +52,6 @@ function add(geo, material, parent, x = 0, y = 0, z = 0) {
   return m;
 }
 
-// A sleeve or trouser leg segment hanging from its joint (like the limb under it).
-function tube(radius, len, material, parent, y = 0) {
-  const g = new THREE.CapsuleGeometry(radius, Math.max(0.01, len - radius * 2), 6, 14);
-  g.translate(0, -len / 2 + y, 0);
-  return add(g, material, parent);
-}
-
 // An open, slightly tapered sleeve (short sleeves and shorts), rolled at the hem.
 function openTube(rTop, rBottom, len, material, cuffMat, parent, y = 0) {
   const g = new THREE.CylinderGeometry(rTop, rBottom, len, 16, 1, true);
@@ -68,6 +61,73 @@ function openTube(rTop, rBottom, len, material, cuffMat, parent, y = 0) {
   const cuff = add(new THREE.TorusGeometry(rBottom, 0.011, 6, 18), cuffMat, parent, 0, y - len + 0.006, 0);
   cuff.rotation.x = Math.PI / 2;
   return m;
+}
+
+// A sleeve or trouser leg: a lathed tube (profile [radius, y] from bottom to
+// top, in the upper joint's space) skinned to up to three joints that bend it.
+//   joints: [{ group, at: [x, y, z] }] where the bone sits on `group` and
+//   `at` is that bone's rest position in the tube's space; weights(y) gives
+//   each joint's share at height y. The tube hangs on joints[1].group.
+const smooth = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+function skinnedTube(profile, material, joints, weights, open = false) {
+  const geo = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 18);
+  const p = geo.attributes.position;
+  const idx = [];
+  const wts = [];
+  for (let i = 0; i < p.count; i++) {
+    const w = weights(p.getY(i));
+    idx.push(0, 1, 2, 0);
+    wts.push(w[0], w[1], w[2], 0);
+  }
+  geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+  geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wts, 4));
+  if (open) material.side = THREE.DoubleSide;
+  const mesh = new THREE.SkinnedMesh(geo, material);
+  mesh.castShadow = true;
+  mesh.frustumCulled = false;
+  mesh.userData.clothing = true;
+  const bones = [];
+  const inverses = [];
+  for (const j of joints) {
+    const bone = new THREE.Bone();
+    bone.userData.clothing = true;
+    bone.position.set(...(j.offset || [0, 0, 0]));
+    j.group.add(bone);
+    bones.push(bone);
+    inverses.push(new THREE.Matrix4().makeTranslation(-j.at[0], -j.at[1], -j.at[2]));
+  }
+  joints[1].group.add(mesh);
+  mesh.bind(new THREE.Skeleton(bones, inverses), new THREE.Matrix4());
+  return mesh;
+}
+
+// A whole sleeve (shoulder to wrist) on an arm, blending into the shirt at the top.
+function sleeve(u, a, material, profile, open = false) {
+  const top = [a.side * 0.262, 0.495, 0];
+  return skinnedTube(profile, material, [
+    { group: u.body, offset: top, at: [0, 0, 0] },
+    { group: a.shoulder, at: [0, 0, 0] },
+    { group: a.elbow, at: [0, -0.29, 0] },
+  ], (y) => {
+    const t = smooth(-0.03, 0.07, y) * 0.85;
+    const low = smooth(-0.25, -0.33, y);
+    return [t, (1 - t) * (1 - low), (1 - t) * low];
+  }, open);
+}
+
+// A trouser leg, hip to ankle, bending at the knee.
+function trouserLeg(l, material, profile) {
+  return skinnedTube(profile, material, [
+    { group: l.hip, at: [0, 0, 0] },
+    { group: l.hip, at: [0, 0, 0] },
+    { group: l.knee, at: [0, -0.46, 0] },
+  ], (y) => {
+    const low = smooth(-0.41, -0.51, y);
+    return [0, 1 - low, low];
+  });
 }
 
 // The torso's own outline (matches rig.js), pushed out by `grow`, with a hem
@@ -110,7 +170,8 @@ const BUILD = {
     const m = cloth(c);
     const trim = cloth(shade(c, 0.7));
     const scarf = cloth(colors.scarf ?? 0x2f8f8a, { roughness: 0.95 });
-    const t = add(torsoShell(0.016, -0.085, 0.03, m), m, u.body);
+    // the hem sits close over the hips rather than flaring out
+    const t = add(torsoShell(0.016, -0.075, 0.004, m), m, u.body);
     t.scale.z = 0.74;
     // a zip down the front and two chest pockets with flaps
     add(new THREE.BoxGeometry(0.012, 0.5, 0.01), trim, u.body, 0, 0.17, 0.152).rotation.x = -0.05;
@@ -122,13 +183,9 @@ const BUILD = {
     const collar = add(new THREE.TorusGeometry(0.1, 0.032, 8, 24), scarf, u.body, 0, 0.6, 0);
     collar.rotation.x = Math.PI / 2;
     collar.scale.set(1.18, 0.82, 1);
-    for (const a of u.arms) {
-      const cap = add(new THREE.SphereGeometry(0.09, 16, 12), m, u.body, a.side * 0.245, 0.5, 0);
-      cap.scale.set(1.05, 0.9, 1);
-      tube(0.067, 0.31, m, a.shoulder);
-      add(new THREE.SphereGeometry(0.064, 14, 10), m, a.elbow);
-      tube(0.059, 0.26, m, a.elbow);
-      const cuff = add(new THREE.TorusGeometry(0.052, 0.013, 6, 18), trim, a.elbow, 0, -0.245, 0);
+    for (const a of u.base.arms) {
+      sleeve(u, a, m, [[0, -0.548], [0.04, -0.546], [0.054, -0.535], [0.058, -0.5], [0.059, -0.42], [0.061, -0.34], [0.064, -0.29], [0.066, -0.22], [0.068, -0.12], [0.071, -0.03], [0.072, 0.0], [0.069, 0.035], [0.056, 0.066], [0.03, 0.084], [0, 0.088]]);
+      const cuff = add(new THREE.TorusGeometry(0.054, 0.01, 6, 18), trim, a.elbow, 0, -0.235, 0);
       cuff.rotation.x = Math.PI / 2;
     }
     return { torso: true, caps: true, upper: true, elbow: true, forearm: true };
@@ -146,10 +203,11 @@ const BUILD = {
     // a faded round patch on the chest
     const patch = add(new THREE.CircleGeometry(0.045, 20), cloth(0x2f8f8a), u.body, -0.08, 0.37, 0.148);
     patch.rotation.y = -0.3;
-    for (const a of u.arms) {
-      const cap = add(new THREE.SphereGeometry(0.086, 16, 12), m, u.body, a.side * 0.245, 0.5, 0);
-      cap.scale.set(1.05, 0.9, 1);
-      openTube(0.074, 0.071, 0.15, m.clone(), trim, a.shoulder, 0.02);
+    for (const a of u.base.arms) {
+      // short sleeve: open at the hem, blending into the shirt at the top
+      sleeve(u, a, m.clone(), [[0.072, -0.15], [0.071, -0.1], [0.07, -0.03], [0.071, 0.0], [0.068, 0.035], [0.055, 0.066], [0.03, 0.083], [0, 0.087]], true);
+      const cuff = add(new THREE.TorusGeometry(0.072, 0.01, 6, 18), trim, a.shoulder, 0, -0.145, 0);
+      cuff.rotation.x = Math.PI / 2;
     }
     return { torso: true, caps: true };
   },
@@ -161,10 +219,8 @@ const BUILD = {
     const pocket = cloth(shade(c, 0.85));
     const seat = add(new THREE.SphereGeometry(0.172, 22, 14), m, u.body, 0, -0.03, 0);
     seat.scale.set(1.04, 0.78, 0.72);
-    for (const l of u.legs) {
-      tube(0.09, 0.48, m, l.hip, 0.01);
-      add(new THREE.SphereGeometry(0.083, 14, 10), m, l.knee);
-      tube(0.077, 0.4, m, l.knee);
+    for (const l of u.base.legs) {
+      trouserLeg(l, m, [[0, -0.885], [0.06, -0.88], [0.074, -0.86], [0.076, -0.76], [0.079, -0.62], [0.082, -0.5], [0.084, -0.45], [0.087, -0.36], [0.091, -0.22], [0.093, -0.08], [0.09, 0.0], [0.07, 0.05], [0.035, 0.07], [0, 0.075]]);
       // a bellows pocket on the outside of each thigh, and a knee patch
       add(new RoundedBoxGeometry(0.045, 0.12, 0.11, 2, 0.012), pocket, l.hip, l.side * 0.088, -0.25, 0.005);
       add(new RoundedBoxGeometry(0.08, 0.075, 0.03, 2, 0.01), pocket, l.knee, 0, -0.02, 0.07);
@@ -178,7 +234,7 @@ const BUILD = {
     const trim = cloth(shade(c, 0.8));
     const seat = add(new THREE.SphereGeometry(0.172, 22, 14), m, u.body, 0, -0.03, 0);
     seat.scale.set(1.04, 0.78, 0.72);
-    for (const l of u.legs) {
+    for (const l of u.base.legs) {
       openTube(0.095, 0.098, 0.3, m.clone(), trim, l.hip, 0.04);
       add(new RoundedBoxGeometry(0.035, 0.09, 0.09, 2, 0.01), trim, l.hip, l.side * 0.1, -0.13, 0.0);
     }

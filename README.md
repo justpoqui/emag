@@ -102,9 +102,10 @@ The full-length **mirror** in your quarters (east wall) opens the wardrobe:
 walk up to it and press **E**. Pick a shirt (Field Jacket or Work Tee),
 trousers (Cargo Pants or Utility Shorts), a hat (Work Cap, Boonie Hat or none)
 and hair (Short Crop or Ponytail). You see the change in the mirror at once,
-and your raider wears it topside too. Clothes sit over the body and hang from
-the same joints, with rounded sleeve and trouser ends meeting over the elbows
-and knees, so nothing shows through as you move.
+and your raider wears it topside too. Each sleeve and trouser leg is one
+continuous piece that bends over the elbow or knee like cloth, sleeves blend
+into the shirt at the shoulder, and the jacket hem sits close over the hips,
+so there are no seams or joint balls and nothing shows through as you move.
 
 ## The loop
 
