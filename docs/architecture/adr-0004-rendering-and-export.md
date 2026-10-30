@@ -1,7 +1,7 @@
 # ADR-0004: Rendering and Export
 
 ## Status
-Proposed
+Accepted
 
 ## Date
 2026-10-30
