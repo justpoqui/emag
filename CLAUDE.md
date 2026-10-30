@@ -24,7 +24,7 @@ Each agent owns a specific domain, enforcing separation of concerns and quality.
 
 - **Engine**: Godot 4.7 (port in progress in `godot/`); the live web game is Three.js r180
 - **Language**: GDScript (Godot); JavaScript ES modules (web game)
-- **Version Control**: Git with trunk-based development; `.glb`/`.blend` in Git LFS
+- **Version Control**: Git with trunk-based development. `.glb` files are plain git blobs for now (Git LFS could not be pushed from cloud sessions); move `.glb`/`.blend` to LFS from a local machine before committing Blender sources
 - **Build System**: Godot export presets (none yet); web game: Vite 7 (`npm run build` → `dist/`)
 - **Asset Pipeline**: Blender → `.glb` → `godot/models/`. The current models were exported from the web game with `node tools/export-glb/run.cjs`
 

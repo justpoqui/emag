@@ -222,9 +222,151 @@ much detail survives at game camera distance (LOD philosophy).
 
 ## 6. Environment Design Language
 
-[To be designed] — architectural style and its tie to the world's culture,
-texture philosophy (painted, PBR or stylised, and why), prop density rules per
-area type, and environmental storytelling guidelines.
+**Core rules**
+- Every place has a past, in three visible layers: **who built it → what
+  happened to it → who uses it now.**
+- Realistic, not blocky: rounded edges, real wall thickness, broken edges with
+  jagged detail (Section 3).
+- Main shapes stay simple and easy to read; fine detail goes in textures and
+  small props (P2).
+- Warm light only in the Sanctuary. Topside and Husk spaces stay cold or harsh (P3).
+
+### 6.1 How places are built, and why
+
+| Place | Who built it, then what happened | What it looks like |
+|---|---|---|
+| **Sanctuary** | A mining company dug it. It was abandoned, then survivors moved in and built a town inside. The Husks once nearly broke in. | Old mine parts underneath (rock walls, timber supports, cart rails, ventilation pipes). Survivor additions on top (plank walls, salvaged doors, painted signs, string lights, neon). Nothing matches, everything is repaired. One collapsed, sealed-off tunnel with scorch marks shows the break-in that almost happened (author decision, 2026-10-30). |
+| **Dustline town** | A normal crossroads town. Wrecked in the fall, then held by the Husks for years. | Ordinary buildings (shops, houses, gas station) cracked, roofless and boarded up. Husk changes on top: machined plates over doorways, cables through windows, useful parts stripped out. |
+| **Container yard** | A shipping depot, abandoned, then used as Husk storage. | Stacked, dented containers. Some opened neatly, as if by a machine; some sorted into rows that are too tidy. |
+| **Refinery** | An industrial plant. It burned, and the Husks partly restarted it. | Tanks, pipes and towers with scorch and rust. A few lines freshly patched with clean Husk metal: a working part inside a dead plant. |
+| **Crucible Works** | A human factory the Husks turned into their own. | Old brick and steel at the edges; the deeper you go, the cleaner, more symmetrical and machined it gets. The middle is fully Husk-made. |
+| **Raider camps** | Built by raiders passing through; most overrun or left. | Tarps, crates, sandbags, sleeping rolls, built in a hurry and lopsided. Fires are cold ash (no warm light topside). |
+| **Bulwarks / Cradles** | Built by Husks from scratch. | Smooth curves, symmetry, layered plates (Section 3). Patches and reinforcement show where raiders attacked (P1). |
+
+Quick test: human-made looks put together by hand (crooked, mismatched,
+patched); Husk-made looks manufactured (smooth, symmetrical, precise). In a
+Husk-held human place both show, and the Husk parts are the newer layer.
+
+### 6.2 Textures and materials
+
+**Why realistic materials (PBR):** each surface is described the way the real
+material behaves (how rough, whether metal, its colour), so one set of
+textures looks right in Golden Hour, Night Raid, Dust Storm and Sanctuary
+lamplight. Hand-painted textures would need repainting per condition and
+fight the gritty style. Godot's standard material (StandardMaterial3D) runs
+this well in the Compatibility renderer.
+
+| Texture | What it does |
+|---|---|
+| Colour (albedo) | Base colour with wear painted in; below ~35% saturation (Section 4) |
+| Roughness | Shiny vs dull: worn edges shinier, dust dull |
+| Metal | Metal or not; rust counts as not metal |
+| Normal | Small bumps (dents, grain, weld seams) without extra polygons |
+| Ambient occlusion (AO) | Dark dirt in corners and cracks, baked in Blender |
+
+**Wear layers, in order** (made in Blender, baked into the textures)
+1. Base material: clean timber, steel, brick, concrete, Husk plate.
+2. Age: fading, stains, rust spreading from bolts and joints.
+3. Damage: chipped and bare-metal edges, cracks, dents, scorch.
+4. Repair: patches, welds, new nails, tape, fresh paint over old (human);
+   clean replacement plates (Husk).
+5. Dirt by place: dust on top surfaces and wall bottoms topside; soot and damp
+   in the Sanctuary's corners and ceilings.
+
+**Rules**
+- Dirt follows gravity and use: dust sits on top and in corners, worn away
+  where hands and feet touch.
+- One-off detail (a stain, a bullet hole, a sign) goes on flat see-through
+  cards laid on surfaces, not Godot's decal feature, which may not work in
+  the Compatibility renderer.
+- One shared material set per surface type (timber, rock, steel, concrete,
+  Husk plate), varied by wear level. No unique texture per object.
+- Husk metal wears with scorch and heat marks, not rust; bare edges are Hull
+  Edge Wear `#7c858f`.
+- Texture sizes and polygon limits: Section 8.
+
+### 6.3 How full each area is
+
+- **Sparse:** few props, lots of open floor. **Medium:** props along the walls,
+  the middle clear. **Dense:** props everywhere, only the walking path clear.
+- Always: the walking path and anything you interact with (counters, benches,
+  lift, loot) stay clear. The background can be busy; the path can't (P2).
+
+| Area | How full | Main focus | Story it tells |
+|---|---|---|---|
+| Your quarters | Medium | Stash locker, weapon rack | One person lives here: bedroll, a few personal things, gear being repaired |
+| Hallway | Sparse | The lift at the east end | Cart rails, a sagging string-light line and lit doorways lead the eye east |
+| Trade Hall | Dense | The three traders' counters | A busy market: crates, goods stacked high, signboards; each counter shows its trader |
+| Workshop | Dense | The 7 benches, each easy to tell apart | Tools hung up, offcuts, parts bins; the salvage bench among heaps of broken gear |
+| Checkout | Medium | The drop-preview screen | A sign-out desk: logbook, pinned maps, a list of names (some crossed out) |
+| Lift | Sparse | Lift cage, teal beacon | Old mine machinery, heavy cables, hand-painted warnings, cold light from above |
+| Dustline town | Medium | Cover, openings, loot | Rubble, wrecked cars, boarded windows, things people left behind |
+| Container yard | Medium-dense | Container lanes, open containers | Stacks make lanes; a few rows too neat (Husk sorting) |
+| Refinery | Dense background, sparse routes | Walkways, ladders | Pipes and tanks make the skyline; ground routes stay open |
+| Crucible Works | Dense and orderly | Production lines, exits | Tidier and more machined the deeper you go; no human mess in the middle |
+| Raider camps | Sparse-medium | The loot cache | Left in a hurry: tipped crates, cold fire, torn tarp, a dropped pack |
+| Bulwarks | Sparse inside the rings | The spire | Barricade rings, scorch and patches where raiders attacked |
+| Cradles | Sparse | The pod ring | Pods in neat, dim clusters, nothing else nearby |
+
+### 6.4 Telling the story without text ("Everything remembers")
+
+- **Show the cause, not just the damage:** a scorch mark on the road next to
+  the burnt car; a broken crate behind the bullet hole.
+- **Every human area shows "people lived here":** a mug, a photo, a child's
+  drawing, tally marks, a name painted on a locker.
+- **Every Husk area shows "they learned":** a plate added where raiders shot
+  before, a doorway sealed where raiders got in, wreckage cleared away tidily.
+- **Repairs show who made them:** human repairs uneven and improvised; Husk
+  repairs clean and exact.
+- **Paths of use:** worn floors, faded trails, polished rails and handles.
+- **Never say it outright:** no notes explaining the story; at most a scrawled
+  word on a wall.
+- **One clear story per spot**, small and off the main path, never competing
+  with threats, loot or exits (P2).
+
+| Detail | What it means |
+|---|---|
+| Tally marks, crossed-out names | People counting days and losses |
+| Boarded windows with machined plates over them | People held out here; the Husks took it anyway |
+| Neatly cut-open containers or cars | Husks stripped it for parts |
+| Fresh Husk metal on an old human machine | The Network is using our things |
+| Patches on a Bulwark facing a common raider approach | The Husks reinforced the side raiders keep hitting (P1) |
+| Cold camp with gear left behind | Raiders who didn't make it |
+| Sanctuary: repairs on top of repairs | People have survived here a long time |
+
+### 6.5 Sanctuary first: Blender checklist
+
+**Every room**
+- [ ] Realistic main shapes: rounded edges, real thickness, no plain boxes.
+- [ ] Timber posts and beams slightly out of line; rock arches uneven.
+- [ ] Two clear layers: old mine underneath, survivor build-out on top.
+- [ ] Materials from the shared set (rock, timber, steel, cloth, painted plank)
+      with wear layers 1–5.
+- [ ] Soot and damp in corners and along the ceiling; worn shiny spots where
+      people touch things.
+- [ ] Warm lamps (2400–3200K), brown shadows, never black (Section 2).
+- [ ] Walking path and interact spots clear; one obvious main focus.
+- [ ] At least one small "people live here" detail.
+- [ ] Somewhere off the main path: the collapsed, sealed-off tunnel where the
+      Husks nearly broke in (scorched rock, a barricade of timber and scrap,
+      old repairs over it). Warm lamps nearby so it stays inside the safe space.
+- [ ] Checked in Godot (Compatibility renderer) with a screenshot in
+      `production/qa/evidence/`.
+
+**Room by room**
+- [ ] **Quarters:** locker and rack stand out; bedroll, a personal item, a gear
+      repair in progress.
+- [ ] **Hallway:** rails and sagging string lights lead to the lift; every door
+      a warm lit rectangle; little clutter.
+- [ ] **Trade Hall:** three counters recognisable from the doorway (Tobias:
+      tools and guns; Nia: medical supplies and satchels; Pell: stacked
+      crates); painted signboards; the busiest room.
+- [ ] **Workshop:** 7 benches, each with its own tools; salvage bench among
+      broken gear; dense, but clear in front of each bench.
+- [ ] **Checkout:** sign-out desk, logbook, pinned maps; the drop-preview
+      screen is the focus.
+- [ ] **Lift:** heavy old mine machinery and cables, teal beacon, a thin slice
+      of cold daylight from above (the only cool light in the Sanctuary).
 
 ## 7. UI/HUD Visual Direction
 
