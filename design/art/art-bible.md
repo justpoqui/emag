@@ -122,7 +122,7 @@ and the risk carried between raids)
 
 **UI shapes** (detail in Section 7)
 - Panels: rectangles with cut corners, like stamped metal plates. No pill shapes or rounded cards. Wear only on the edges, never behind text.
-- Husk-awareness UI (threat markers, "?", Network log): diamonds, chevrons, hexagons.
+- Husk-awareness and Husk-built UI (threat markers, "?", Raider Log, Bulwark and Cradle map icons): diamonds and chevrons. Hexagons are for shields only (author, 2026-10-30).
 - Interact prompts and the lift marker: circles. Shields: hexagon cells. Rarity: number of pips on the frame (Section 4).
 
 **Hero vs supporting**
@@ -505,9 +505,172 @@ this well in the Forward+ renderer.
 
 ## 7. UI/HUD Visual Direction
 
-[To be designed] — diegetic versus screen-space HUD, typography (personality,
-weight, size hierarchy, minimum readable size), iconography style, UI animation
-feel, and any art-direction versus readability conflict and how it was decided.
+**Core rules**
+- **The UI is a tool, not set dressing.** Always lighter and higher in contrast than the world (P2).
+- **Human UI looks hand-built, Husk UI looks machined (§3).** Human panels are cut-corner stamped plates. Anything showing what the Husk Network knows uses diamonds and chevrons with clean, even lines. **Hexagons mean shields and nothing else.**
+- **Colour only where it means something (§4).** Every colour cue has a second cue: a shape, number, pattern or sound.
+- **Two skins (§4):** the Sanctuary/menu skin is warm, the raid skin is cold. The skin tells you whether you are safe.
+- **Mouse and keyboard only for now** (author, 2026-10-30). Gamepad is out of scope, but every control keeps a free slot for a focus state so gamepad can be added later without a redesign.
+
+### 7.1 In the world vs on the screen
+
+**Rule: things in the world may repeat HUD information, never replace it.** Health, shield, ammo, lift countdown, raid clock, damage direction, Husk warning state, weight and loot identity/rarity are always on the screen.
+
+| Information | In the world (extra) | On the screen (always) |
+|---|---|---|
+| Husk state | Eye intensity, halo, flare, posture (§4) | Threat marker by shape (7.2); "?" over a searching Husk |
+| Husk warning chirp | Eye flare | Chirp indicator on the compass in the Husk's direction, plus a caption |
+| Lift called / open / closing | Teal column, shrinking ring, door lights | Countdown, door icon, cyan ▲ on the compass |
+| Loot | Gold orb over a container that still holds items | Interact prompt; loot window shows rarity by pips, frame and name |
+| Shield hit | Hex ripple on the Diver | Hex cells empty on the shield bar |
+| Damage taken | — | Solid wedge at the screen edge pointing at the source |
+| Health, stamina, ammo, weight, clock | — | HUD |
+| Pinned recipes | — | HUD tracker; pin icon on needed loot |
+
+- Sanctuary signs (shopfront signboards, painted room names, the lift sign) are world textures, not HUD.
+- No wrist screens or in-world displays carry core stats.
+
+### 7.2 Raid HUD: what shows, and how loud
+
+Placement belongs to the ux-designer (future `design/ux/hud.md`); this section sets only how each element looks.
+
+| Loudness | Elements | Treatment |
+|---|---|---|
+| Loudest (only when it matters) | Low health, low ammo, lift countdown, clock from 5:00, interact prompt, damage wedge | Largest type, semantic colour, slow pulse |
+| Constant, mid | Health, shield, ammo, compass, crosshair | Bone on Soot, still at rest |
+| Constant, quiet | Raid clock (before 5:00), weight, pinned tracker; stamina only while not full | Secondary colour `#a89f8c`, smaller, thin bars |
+| Brief | Damage numbers, hit markers, pickup notices | Appear, then fade |
+
+- **Health:** Bone bar plus a number (≥ 28 px). Below ~25%: bar and number turn Alert Red `#d9402c` and pulse, and a low-health icon appears. Never a full-screen red tint.
+- **Shield:** a row of hex cells in Shield Ice `#9fd8f0`; empty cells show as outlines only.
+- **Stamina:** thin bar in secondary colour, shown only while not full; brightens to Bone while draining.
+- **Ammo:** magazine number ≥ 28 px, reserve smaller. When low, both numbers and the icon turn Alert Red.
+- **Weight:** `current / 35 kg` on a bar with ticks at 75% and 100%. Past 75%: hatched Bone fill plus the *encumbered* icon. Over 100%: Alert Red plus the *over limit* icon.
+- **Raid clock:** MM:SS, always visible. Before 5:00 small, secondary colour; at 5:00 it grows one step and turns Bone; at 1:00 it grows again to ≥ 28 px, turns Alert Red and pulses slowly (author, 2026-10-30).
+- **Compass:** thin strip with Bone ticks. Lifts: cyan ▲ in Lift Teal on a small circle. Husk threats: Eye Red diamonds. Chirp indicator: an Eye Red chevron pointing toward the sound. Pins: the pin tag.
+- **Husk threat markers:** shape shows state, colour never alone. Hollow diamond = neutral; filled diamond = warning; filled and pulsing = hostile.
+- **Damage direction:** a solid Alert Red wedge at the screen edge pointing at the source, at least ~1 s, never over the centre.
+- **Hit markers:** normal hit = Bone X; eye crit = bigger X with a centre dot; shuttered or armoured hit = small thin X.
+- **Damage numbers:** normal hit Bone; eye crit bigger with a short **white** flash, settling to Bone (author, 2026-10-30); reduced hit (shutter or armour) smaller in secondary colour, so the Network's counter shows (P1). All with a 1–2 px Soot outline.
+- **Status icons:** latched Skitter (with count), poison (with timer), encumbered, over limit.
+- **Interact prompt:** a circle (§3) holding a keycap "E" and a one-word action ("Search", "Call lift", "Extract"). While held, a ring fills clockwise: Bone normally, Lift Teal for lift actions. With the toggle option on, one press starts it and the same ring shows progress.
+- **Pinned recipes:** a short list of name plus have/need per material; finished lines tick and dim.
+- **Map (M): worn survey paper** (author, 2026-10-30) in Bleached Dust tones, creases and stains in the margins. Wear stays off icons and the player arrow, inside a clear zone around each. Icons in dark ink with a Soot outline: player arrow Bone; lifts teal ▲ on a circle; Bulwark a diamond with a vertical bar (the spire); Cradle a cluster of three small diamonds.
+
+### 7.3 Typography
+
+- **Font: Sour Gummy** (Google Font, rounded, playful): author's choice, 2026-10-30, replacing the condensed industrial direction. Its soft, friendly shapes contrast with the gritty world and the cut-corner plates, so the UI feels more approachable and less like military kit; panels, icons and wear carry the grit.
+- **Numbers that change** (ammo, timers, clock, weight, prices) need equal-width digits so they don't jitter. **Required check:** whether Sour Gummy's digits are equal-width. If not, those numbers use a fixed-width fallback font chosen by the ui-programmer, matched in size and weight.
+- Hand-lettered type only on in-world signs and the large Sanctuary titles (trader names, room names); never in body text, numbers or the raid HUD.
+- Caps only for short headers and labels; body text and tooltips in sentence case.
+- Weights Regular (400) and up, never Light or Thin; confirm which weights the font files include.
+
+| Role | Size at 1080p | Weight |
+|---|---|---|
+| Key numbers: health, ammo, lift timer, last-minute clock | **≥ 28 px** (32–40 typical) | Bold 700 |
+| Screen titles (TRADE HALL, RESULTS) | 36–40 px | Bold 700 |
+| Section headers, tabs | 22–24 px | SemiBold 600 |
+| Body text, labels, item names, prompts | **≥ 18 px** | Regular 400 / Medium 500 for labels |
+| Tooltips and stat lines: weight digits, prices, stack counts | **≥ 16 px** | Medium 500 |
+| Floor, non-essential text only (flavour, version) | 14 px | Medium 500 |
+
+- Contrast: 4.5:1 for body text, 3:1 for large text and icons (§4), measured against the worst background (a panel over Bleached Dust in Golden Hour glare). Text over the world gets a Soot outline or backing plate.
+- Options: panel opacity / high-contrast HUD; text scale 100% to at least 150% (200% target) with nothing clipped (panels are nine-slice).
+- **Accepted trade-off (author, 2026-10-30):** low-state numbers turn Alert Red. Alert Red on Soot is about 4:1: fine at ≥ 28 px, weaker for smaller numbers (reserve ammo, the clock before 1:00), which are backed by the icon, the pulse and the clock's size steps.
+
+### 7.4 Icons
+
+| Kind | Used for | Style |
+|---|---|---|
+| Symbols | HUD status, controls, compass, map, tabs, workbench categories | Flat, one colour (Bone or a semantic colour), solid shape, no gradients; 32 px grid, ~2 px line; must read at 16 px |
+| Item icons | Backpack, loot, stash, trader and workbench grids | **Rendered from the real 3D models** (author, 2026-10-30): fixed 3/4 camera, fixed light setup, transparent background |
+
+- Outlines follow the real object (P2): the Mule symbol looks like the Mule.
+
+| Shape | Meaning |
+|---|---|
+| Circle | Interact, lift |
+| Hexagon | Shield only |
+| Diamond / chevron | Husk awareness, Husk-built, Husk direction |
+| Solid edge wedge | Damage direction |
+| Notched tag | Pin |
+
+- Grid slots: clean, even rectangles; the whole slot is clickable. Rarity three ways: colour on the slot edge, 0–4 pips (each ≥ 6 px, 2 px gaps) and the name text; never a full slot fill. Weight bottom-right, stack count top-right, pin icon top-left; pinned items get the icon, never a tint.
+- Safe pocket: a different frame shape (corner-bracket frame) plus a lock badge.
+- Item condition: a small durability notch or bar on the slot edge; the item art stays clean.
+
+### 7.5 How UI moves
+
+Mechanical: short and solid, no bounce, elastic or overshoot.
+
+| Motion | Feel | Timing |
+|---|---|---|
+| Panels open / close | Slide 4–8 px + fade, like a plate set on a bench | 120–180 ms in, 100 ms out, ease-out |
+| Human UI | Small settle at the end | — |
+| Husk UI (threat markers, "?", Raider Log entries) | Snaps or steps in, like a machine | 1–3 steps, no easing |
+| Hold-E ring | Even fill; one flash on completion | Matches hold time exactly |
+| Lift countdown | Pulses with the world ring; steady when open; flickers when closing | Flicker ≤ 3 per second |
+| Damage numbers | Rise and fade; crits pop to 110% then settle | ~0.6 s |
+| Warnings | Slow pulse | ≤ 2 Hz (~1 Hz typical) |
+| Bars | Losses drop at once with a darker "ghost" that drains after; gains fill smoothly | Ghost ~0.4 s |
+
+- Nothing on the HUD moves at rest: movement always means a change.
+- The HUD never shakes or bobs with the camera. Nothing flashes faster than 3 times a second.
+- Storm grit, vignette, the damage edge and other screen effects draw **under** the HUD.
+- Reduce-motion option: pulses become steady colour plus an icon. Flash-reduction option: the lift flicker and crit flash become steady.
+- Animation never slows input: the loot window opens ready to use; F (take all) and Backspace work during any animation; decoration adds zero time (the one-at-a-time search reveal is gameplay, not decoration).
+
+### 7.6 Two skins (from §4)
+
+| | Sanctuary / menu skin | Raid skin |
+|---|---|---|
+| Panels | Soot ~85%, Mine Timber tint | Soot ~85%, Husk Slate tint |
+| Accent | Lamp Amber (selection, buttons, prices, "craftable") | None; semantic colours only |
+| Outer frame | Cut-corner plates, slightly crooked, rivets, painted-board header strip | Cut-corner plates, straight, stencilled, bare-metal edge wear |
+| Big titles | Hand-lettered allowed | Sour Gummy only |
+| Wear | Paint chips, timber stain (outer frame only) | Dust, grit, scratched metal (outer frame only) |
+| Used on | Hub, Explore HUD, Tab stash/loadout in the Sanctuary, traders, workbench, checkout, wardrobe, Esc menu, title | Raid HUD, Tab backpack and loot windows topside, map, raid Esc menu |
+
+- Traders: the header copies the trader's shopfront sign (Tobias, Nia, Pell); the body is the standard skin.
+- Workbench: one tab per bench (Weapons, Ammo, Shields, Medical, Explosives, Repair, Salvage), each with its own symbol. Recipes you can craft now get an amber edge; the pin button uses the pin tag.
+- Raider Log (Husk Network): a Husk inset inside the Sanctuary skin, like a data plate pulled off a Husk: Husk Slate panel, clean symmetric diamond/chevron frame, Eye Red accents, snap/step animation. The only Eye Red in the Sanctuary, kept inside that frame (P1).
+- Results: **death** uses the cold skin, near-monochrome slate (§2): lost items greyed and scorched with a red "LOST" label, the safe-pocket item stays lit, the "Network learned" line gets a dim Eye Red diamond. **Extraction** uses the amber skin; the gear keeps its topside dust.
+
+### 7.7 Wear without losing readability
+
+- Wear goes only on outer panel borders, cut corners, header strips and button edges.
+- Never on text areas, numbers, icons, item art, slot interiors or the crosshair; no grain or flicker on these either.
+- Inventory slots are clean, even rectangles; stamped styling is on the outer panel only. Cut corners are drawn inside the hit area and never shrink it.
+- Panel interiors nearly flat (texture within ±5% brightness).
+- Wear never moves; the only animated wear-like effect is the lift-closing flicker, because it carries meaning.
+- Story wear (P1) shows on panel frames and the item durability notch, never on item art.
+
+### 7.8 Notes for Godot (ui-programmer / technical-artist)
+
+- Skins as Theme resources: Sanctuary skin, Raid skin, and a Husk sub-theme for the Raider Log, threat markers and "?".
+- Cut-corner plates are nine-slice, with wear only in the border slices, so interiors stay clean at any size and text scale.
+- Fonts: Sour Gummy plus the fixed-width fallback if needed (7.3), sharp from 1080p to 4K and at 150–200% text scale.
+- Item icons rendered from the `.glb` models with one shared camera and light setup.
+- Every control defines hover, pressed and disabled states now and reserves a slot for a focus state (future gamepad).
+- The art must allow for: rebindable keys, toggles for hold actions, separate ADS sensitivity and Y-invert, and direction-aware captions for game-critical sounds. Details belong in `design/accessibility-requirements.md` and `design/ux/hud.md`.
+
+### 7.9 Art direction vs readability: decisions
+
+| Conflict | Decision |
+|---|---|
+| Wear ("Everything remembers") vs clean text and slots | Wear on outer frames only; slots, icons, numbers and crosshair stay clean (7.7) |
+| Rounded, playful Sour Gummy vs gritty world | Author's choice; grit carried by panels, icons and wear (7.3) |
+| Font digits may not be equal-width | Fixed-width fallback for changing numbers if needed |
+| Hexagons for both shields and Husks | Hexagons = shields only; Husks use diamonds and chevrons (§3 updated) |
+| Alert Red numbers ~4:1 on Soot | Accepted by the author; fine at ≥ 28 px, backed by icon, pulse and size for smaller numbers |
+| Weight caution: Rust Ochre ~2.9:1, and amber not allowed topside | Hatching plus icon past 75%; red only over the limit |
+| Legendary gold vs Lamp Amber | Amber on frames, buttons and selection; Legendary only on slot edges with 4 pips |
+| Lift Teal vs Rare blue vs Shield Ice | Teal = ▲ on a circle; Ice = hex cells; Rare = slot edge and pips |
+| Eye Red in the safe Sanctuary | Only inside the Raider Log's Husk frame |
+| Crit colour vs Eye Red's threat meaning | Crits flash white |
+| Damage mood (§2 red edge) vs readability | The wedge is the signal; any red edge draws under the HUD, never full-screen |
+| Survey-paper map vs icon contrast | Wear kept clear of icons; dark ink icons with outlines |
+| Too many damage numbers in a Warden fight | Hits on one target within ~0.3 s combine **[ux-designer to confirm]** |
 
 ## 8. Asset Standards
 
