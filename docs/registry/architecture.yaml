@@ -40,7 +40,7 @@
 #   unsupported layout, with its number.
 
 version: 1
-last_updated: ""
+last_updated: "2026-10-30"
 
 # ─── STATE OWNERSHIP ─────────────────────────────────────────────────────────
 # Who is the authoritative owner of each piece of shared game state.
@@ -81,7 +81,19 @@ state_ownership: []
 #
 # pattern options: signal | direct_call | event_bus | shared_resource | rpc | none
 
-interfaces: []
+interfaces:
+  - contract: cross_system_events
+    status: active
+    pattern: event_bus
+    producer: any-system
+    consumers:
+      - any-system
+    adr: docs/architecture/adr-0001-godot-port-strategy.md
+    signal_signature: "Typed signals declared on the Events autoload (src/core/events.gd); stateless; a node's own signals stay on that node"
+    referenced_by:
+      - docs/architecture/adr-0001-godot-port-strategy.md
+    added: 2026-10-30
+    revised: ""
 
 # Example:
 #
@@ -110,7 +122,13 @@ interfaces: []
 # Register a budget when an ADR explicitly claims a frame time allocation.
 # The registry lets /architecture-review verify the total doesn't exceed the target.
 
-performance_budgets: []
+performance_budgets:
+  - target_fps: 60
+    total_frame_budget_ms: 16.6
+    platform: All
+    adr: docs/architecture/adr-0001-godot-port-strategy.md
+    added: 2026-10-30
+    revised: ""
 
 # Example:
 #
@@ -141,7 +159,28 @@ performance_budgets: []
 # Register an API decision when the choice is non-obvious and other ADRs might
 # make a different choice for the same purpose without knowing this was decided.
 
-api_decisions: []
+api_decisions:
+  - purpose: cross_system_signals
+    status: active
+    api: "Events autoload signals connected with signal.connect(callable)"
+    not: "String-based connect(); direct references between systems"
+    adr: docs/architecture/adr-0001-godot-port-strategy.md
+    reason: "Godot signals belong to an object; one stateless hub keeps systems decoupled and testable"
+    referenced_by:
+      - docs/architecture/adr-0001-godot-port-strategy.md
+    added: 2026-10-30
+    revised: ""
+
+  - purpose: dependency_injection
+    status: active
+    api: "@export properties or an explicit setup() call"
+    not: "_init() arguments"
+    adr: docs/architecture/adr-0001-godot-port-strategy.md
+    reason: "Scenes instanced from the editor cannot receive _init arguments"
+    referenced_by:
+      - docs/architecture/adr-0001-godot-port-strategy.md
+    added: 2026-10-30
+    revised: ""
 
 # Example:
 #
@@ -167,7 +206,41 @@ api_decisions: []
 # Register a pattern when an ADR explicitly bans it AND other ADRs might
 # unknowingly use it (i.e., it's a tempting but wrong approach for this project).
 
-forbidden_patterns: []
+forbidden_patterns:
+  - pattern: hardcoded_gameplay_values
+    status: active
+    description: "Gameplay values (speeds, damage, timers, prices) must come from assets/data/, never from literals in scripts."
+    why: "Balance must stay editable outside code and match the design docs."
+    adr: docs/architecture/adr-0001-godot-port-strategy.md
+    added: 2026-10-30
+
+  - pattern: gameplay_references_ui
+    status: active
+    description: "Gameplay code must never reference UI nodes; the UI listens to signals."
+    why: "Keeps gameplay testable headless and the UI replaceable."
+    adr: docs/architecture/adr-0001-godot-port-strategy.md
+    added: 2026-10-30
+
+  - pattern: unregistered_autoload
+    status: active
+    description: "No autoload other than Events may be added without an ADR."
+    why: "Autoloads are hidden global dependencies that make systems hard to test in isolation."
+    adr: docs/architecture/adr-0001-godot-port-strategy.md
+    added: 2026-10-30
+
+  - pattern: string_based_connect
+    status: active
+    description: "Never use connect(\"signal\", obj, \"method\"); use signal.connect(callable)."
+    why: "Deprecated since Godot 4.0; not type-safe (docs/engine-reference/godot/deprecated-apis.md)."
+    adr: docs/architecture/adr-0001-godot-port-strategy.md
+    added: 2026-10-30
+
+  - pattern: device_zero_input_check
+    status: active
+    description: "Never detect mouse or keyboard with event.device == 0; use the event type or InputEvent.DEVICE_ID_MOUSE / DEVICE_ID_KEYBOARD."
+    why: "Since Godot 4.7 some joypads use device 0 (docs/engine-reference/godot/breaking-changes.md)."
+    adr: docs/architecture/adr-0001-godot-port-strategy.md
+    added: 2026-10-30
 
 # Example:
 #
