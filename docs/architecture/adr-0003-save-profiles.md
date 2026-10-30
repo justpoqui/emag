@@ -1,7 +1,7 @@
 # ADR-0003: Save Profiles (No Accounts)
 
 ## Status
-Proposed
+Accepted
 
 ## Date
 2026-10-30
