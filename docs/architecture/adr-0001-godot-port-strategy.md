@@ -1,7 +1,7 @@
 # ADR-0001: Godot Port Strategy and Project Structure
 
 ## Status
-Proposed
+Accepted
 
 ## Date
 2026-10-30
