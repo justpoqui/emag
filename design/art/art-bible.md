@@ -1,6 +1,6 @@
 # Art Bible: Scrapfall
 
-> **Status**: Draft
+> **Status**: Approved (all 9 sections, 2026-10-30)
 > **Owned By**: art-director
 > **Last Updated**: 2026-10-30
 > **Art Director Sign-Off (AD-ART-BIBLE)**: SKIPPED 2026-10-30 — solo mode
@@ -992,6 +992,20 @@ LOD0 is the full-detail model; LOD1/LOD2 are shown further away.
 
 ## 9. Reference Direction
 
-[To be designed] — 3–5 references (games, films, art styles or artists). For
-each: the specific element to take from it, and what to avoid so the result
-does not read as a copy.
+**Rule:** take one specific thing from each reference, never its overall look. If an asset could be mistaken for its reference, the "Avoid" column has been broken.
+
+| # | Reference | Kind | Take this one thing | Serves | Avoid |
+|---|---|---|---|---|---|
+| 1 | Joseph Wright of Derby, *An Experiment on a Bird in the Air Pump* (1768) | Painting | The light sits inside the scene and fades fast: faces near the lamp warm and bright, the room behind dropping into warm brown | Sanctuary: Section 2 hub, Section 4 (2400–3200K, brown shadows), 5.2 traders lit at their counters | Pitch-black backgrounds and one-candle drama: our shadows are brown, never black, and the light comes from many small lamps and string lights. No period costume, no painterly brushwork |
+| 2 | *Dune* (2021), photography by Greig Fraser | Film | Let the sky and far horizon blow out to near-white, so distance fades to pale dust instead of blue haze | Golden Hour: Section 2, Section 4 ("bleached horizon", saturation ≤ ~40%), P3 | Sand dunes, empty desert, giant monuments, robes. Our ground is ruins, rubble and long grass, and the sun stays gold-white, not orange |
+| 3 | Arthur Rothstein, *Fleeing a Dust Storm* (Oklahoma, 1936) | Photography | Dark figures and shapes read only as dark against flat, bright dust, with no shadows at all | Dust Storm: Section 2, Section 4 ("separation by value and emissives only"), P2, Section 3's 64 px silhouette test | Sepia filters, film grain, vintage framing, 1930s farm imagery. We keep a true ochre hue, and the red eyes still cut through |
+| 4 | Flown rocket and spacecraft hardware: recovered boosters, re-entry-scorched heat shields, heat-tinted titanium exhausts | Engineering photography | Damage that follows physics on a precise surface: soot streaks running downwind from a hot spot and heat-tint rings around it, while the rest stays clean and machined | Husks: Section 5.4 (scorch and heat marks, never rust; repairs neater than human ones), P1 | Logos, flags, white livery, rocket outlines, tile grids. Heat tint stays muted straw and bronze, never strong blue (clashes with Lift Teal and Rare blue) or red (clashes with Eye Red) |
+| 5 | Japanese boro textiles (cloth patched and re-patched over generations, 19th–20th c.) | Textile craft | Patches on top of older patches, each a different cloth and age, held by visible, uneven running stitches, so you can count the repairs | Human wear: 5.1 wear layers (repairs), 6.2 wear layer 4, 6.4 "repairs on top of repairs" | No indigo, no Japanese motifs, no neat decorative sashiko patterns: our stitching is quick and practical. Cloth colours stay in the Section 4 palette, below ~35% saturation |
+| 6 | Second World War anti-aircraft searchlight photographs (London and other British cities, 1939–45; e.g. the Imperial War Museum archive) | Photography | Beams that show only because the air holds haze, so each becomes a hard-edged solid shape; where two beams cross is where the eye goes | Night Raid: Section 2 (headlamp cone with dust motes, a Watcher beam crossing it), Section 4 (near-monochrome; the neutral-white ~5600K headlamp is the only bright light besides the eyes) | Black-and-white and pitch-black skies: our night is navy moonlight with navy shadows. No aircraft, barrage balloons or wartime imagery, and no beams pointing up at the sky: ours run low across the ground. Beams stay neutral-white (the Watcher's beam follows its Section 4 colour states), never warm. Only the wartime air-defence photographs, never the 1930s Nazi rally "cathedral of light" images |
+
+- **Wright:** the lamp is the room; everything outside its pool gives way to warm darkness. Build the Sanctuary from many small pools like that.
+- **Dune:** the far distance goes pale and bleached, not blue and pretty. That is how topside says "you are exposed".
+- **Rothstein:** in a storm, shape and brightness are all you have. If a Husk can't be told apart as a dark outline on flat dust, the model is wrong.
+- **Rocket hardware:** a Husk is a precision machine that got burned. The damage has a direction and a cause, and the clean metal around it proves it was made perfectly.
+- **Boro:** every fix is a different, later fix in a different fabric. You can count the layers on one sleeve or strap.
+- **Searchlights:** at night, light is a solid shape in the air. The headlamp is a hard cone full of dust, and when a Watcher beam cuts across it, that crossing is where the player looks first. (The photos show the beams, not the colour: the navy comes from Sections 2 and 4.)
