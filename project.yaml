@@ -32,3 +32,33 @@ project:
 modes:
   rigor: standard
   automation: guided
+
+engine:
+  name: "Godot"
+  version: "4.7"
+  language: "GDScript"
+  rendering: "Compatibility"
+  physics: "Jolt"
+
+specialists:
+  code: "godot-gdscript-specialist"
+  shader: "godot-shader-specialist"
+  ui: "godot-specialist"
+  additional: ["godot-gdextension-specialist"]
+
+naming:
+  classes: PascalCase
+  variables: snake_case
+  constants: SCREAMING_SNAKE
+  signals: past_tense
+  files: snake_case
+  scenes: snake_case
+
+commands:
+  # TODO: godot is not on PATH in the cloud container where this was set up.
+  # Set the editor's full path on your machine via /settings, or put godot on PATH.
+  # build needs an export preset name; none exists yet (Project > Export in the editor).
+  build: "[TO BE CONFIGURED]"
+  test: "godot --headless -s -d --remote-debug tcp://127.0.0.1:0 res://addons/gdUnit4/bin/GdUnitCmdTool.gd -a res://tests --ignoreHeadlessMode"
+  run: "godot --path . --windowed --resolution 1280x720"
+  smoke: "godot --headless --quit-after 5"

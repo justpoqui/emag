@@ -8,10 +8,12 @@ also in `web/`) exposes
 `window.game` for Playwright checks. Pushing to `main` publishes the game to
 GitHub Pages.
 
-The Claude Code Game Studios framework below runs this project. Its engine is
-not configured yet (`/start`, `/setup-engine`): Scrapfall is a web game rather
-than Godot, Unity or Unreal, so treat the engine-specific agents and
-references as not applying until that is set.
+The Claude Code Game Studios framework below runs this project. The game is
+being **ported to Godot 4.7 (GDScript)**: the Godot project is at the repo root
+(`project.godot`, code in `src/`), and the Three.js game in `web/` stays live and
+is the reference until the port catches up. Design intent for the port is in
+`design/gdd/`. Models will come from Blender (`.blend` imports need Blender
+installed next to the Godot editor).
 
 ---
 
@@ -22,11 +24,11 @@ Each agent owns a specific domain, enforcing separation of concerns and quality.
 
 ## Technology Stack
 
-- **Engine**: [CHOOSE: Godot 4 / Unity / Unreal Engine 5]
-- **Language**: [CHOOSE: GDScript / C# / C++ / Blueprint]
+- **Engine**: Godot 4.7
+- **Language**: GDScript
 - **Version Control**: Git with trunk-based development
-- **Build System**: [SPECIFY after choosing engine]
-- **Asset Pipeline**: [SPECIFY after choosing engine]
+- **Build System**: SCons (engine), Godot Export Templates
+- **Asset Pipeline**: Godot Import System + custom resource pipeline
 
 > **Note**: Engine-specialist agents exist for Godot, Unity, and Unreal with
 > dedicated sub-specialists. Use the set matching your engine.
