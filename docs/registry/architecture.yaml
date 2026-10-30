@@ -53,7 +53,17 @@ last_updated: "2026-10-30"
 # interface: how other systems access this state (read-only property, method call,
 #   signal, shared resource, etc.) — this is the contract other ADRs depend on.
 
-state_ownership: []
+state_ownership:
+  - state: game_definitions
+    status: active
+    owner_system: core-data
+    adr: docs/architecture/adr-0002-game-data-format.md
+    interface: "GameData typed read-only definitions (item(), weapon(), husk(), loot_table(), player(), ...), passed to systems by setup()"
+    write_access: none-after-load
+    referenced_by:
+      - docs/architecture/adr-0002-game-data-format.md
+    added: 2026-10-30
+    revised: ""
 
 # Example:
 #
@@ -179,6 +189,18 @@ api_decisions:
     reason: "Scenes instanced from the editor cannot receive _init arguments"
     referenced_by:
       - docs/architecture/adr-0001-godot-port-strategy.md
+      - docs/architecture/adr-0002-game-data-format.md
+    added: 2026-10-30
+    revised: ""
+
+  - purpose: game_data_access
+    status: active
+    api: "GameData (RefCounted) loaded by the root scene and passed to systems by setup()"
+    not: "Opening files in assets/data/ from gameplay code; GameData as an @export, autoload or static global"
+    adr: docs/architecture/adr-0002-game-data-format.md
+    reason: "One validated, typed source of game data that tests can replace with fixtures; @export cannot hold a RefCounted (checked on 4.7.2)"
+    referenced_by:
+      - docs/architecture/adr-0002-game-data-format.md
     added: 2026-10-30
     revised: ""
 
@@ -240,6 +262,20 @@ forbidden_patterns:
     description: "Never detect mouse or keyboard with event.device == 0; use the event type or InputEvent.DEVICE_ID_MOUSE / DEVICE_ID_KEYBOARD."
     why: "Since Godot 4.7 some joypads use device 0 (docs/engine-reference/godot/breaking-changes.md)."
     adr: docs/architecture/adr-0001-godot-port-strategy.md
+    added: 2026-10-30
+
+  - pattern: definition_mutation
+    status: active
+    description: "Never change a GameData definition at runtime; copy values into an instance object (stack, durability, charge)."
+    why: "Definitions are shared by every user of an id; a write changes them for all of them."
+    adr: docs/architecture/adr-0002-game-data-format.md
+    added: 2026-10-30
+
+  - pattern: data_read_before_setup
+    status: active
+    description: "Systems must not read game data in _ready() or earlier; only in or after setup(data)."
+    why: "Children's _ready() runs before the root scene's, which is where setup() is called (checked on 4.7.2)."
+    adr: docs/architecture/adr-0002-game-data-format.md
     added: 2026-10-30
 
 # Example:
