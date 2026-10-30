@@ -1,0 +1,49 @@
+# Scrapfall — Godot 4.7 port
+
+The Godot version of Scrapfall, being ported from the web game at the repo root.
+The web game stays the live version (GitHub Pages) until this one catches up.
+
+## Open it
+
+1. Install **Godot 4.7** (standard build, not .NET).
+2. In the Project Manager, **Import** → pick `godot/project.godot`.
+3. The first open imports the models (the Dustline takes a minute).
+4. Press **F5**. You start in the Sanctuary.
+
+| Key | Action |
+| --- | --- |
+| WASD / Shift / Space / C | Move / sprint / jump / crouch |
+| Mouse | Look (click to capture, Esc to release) |
+| F2 | Switch between the Sanctuary and the Dustline |
+
+## What's here (milestone 1: the look)
+
+| Path | What it is |
+| --- | --- |
+| `models/*.glb` | Every model from the web game, exported as-is: `dustline.glb`, `sanctuary.glb`, `raider.glb`, `husks/`, `weapons/`. Open them in Blender to rework the art. |
+| `models/*_instances.json` + `*_instances/` | Instanced meshes (bushes, rail sleepers, bulbs): one mesh plus a list of transforms, drawn with MultiMeshes. |
+| `scenes/sanctuary.tscn`, `scenes/dustline.tscn` | The two levels with the web game's lighting, fog and sky (Golden Hour). |
+| `scenes/raider.tscn`, `scripts/raider.gd` | Walkable raider with the over-the-shoulder camera. |
+| `scripts/level.gd` | Adds collision to level meshes, builds the MultiMeshes, places the raider. |
+
+The renderer is **Compatibility**, so the project can still export to the web.
+
+## Re-exporting the models
+
+The models are generated from the web game's code. After changing the code,
+run from the repo root:
+
+```bash
+node tools/export-glb/run.cjs
+```
+
+That overwrites `godot/models/`. Once the team starts editing models in
+Blender, stop re-exporting those files, or the export will overwrite the edits.
+
+## Not ported yet
+
+Gameplay (raids, Husk AI and the Husk Network, weapons, inventory, UI,
+traders), the grass and ferns, wind sway, containers and lifts, Night Raid and
+Dust Storm lighting, and the raider's animation (`src/rig.js`). Light
+brightness and fog density are first matches and still need tuning by eye
+against the web game.

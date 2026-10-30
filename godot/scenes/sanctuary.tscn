@@ -1,0 +1,34 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/level.gd" id="1_level"]
+[ext_resource type="PackedScene" path="res://models/sanctuary.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://scenes/raider.tscn" id="3_raider"]
+
+[sub_resource type="Environment" id="Environment_sanctuary"]
+background_mode = 1
+background_color = Color(0.082, 0.075, 0.059, 1)
+ambient_light_source = 2
+ambient_light_color = Color(1, 0.886, 0.753, 1)
+ambient_light_energy = 0.45
+tonemap_mode = 3
+tonemap_exposure = 1.05
+fog_enabled = true
+fog_mode = 1
+fog_light_color = Color(0.082, 0.075, 0.059, 1)
+fog_depth_begin = 14.0
+fog_depth_end = 30.0
+
+[node name="Sanctuary" type="Node3D"]
+script = ExtResource("1_level")
+instances_json = "res://models/sanctuary_instances.json"
+spawn = Vector3(0, 0, 0.3)
+spawn_yaw = 3.14159
+other_scene = "res://scenes/dustline.tscn"
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_sanctuary")
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+
+[node name="Raider" parent="." instance=ExtResource("3_raider")]
+fov = 48.0

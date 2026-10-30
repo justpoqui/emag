@@ -1,0 +1,46 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/level.gd" id="1_level"]
+[ext_resource type="PackedScene" path="res://models/dustline.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://scenes/raider.tscn" id="3_raider"]
+[ext_resource type="Shader" path="res://shaders/dustline_sky.gdshader" id="4_sky"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
+shader = ExtResource("4_sky")
+
+[sub_resource type="Sky" id="Sky_dustline"]
+sky_material = SubResource("ShaderMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_golden"]
+background_mode = 2
+sky = SubResource("Sky_dustline")
+ambient_light_source = 3
+ambient_light_color = Color(1, 0.886, 0.753, 1)
+ambient_light_energy = 1.0
+reflected_light_source = 2
+tonemap_mode = 3
+tonemap_exposure = 1.05
+fog_enabled = true
+fog_mode = 0
+fog_light_color = Color(0.851, 0.706, 0.561, 1)
+fog_density = 0.0063
+fog_sky_affect = 0.0
+
+[node name="Dustline" type="Node3D"]
+script = ExtResource("1_level")
+instances_json = "res://models/dustline_instances.json"
+spawn = Vector3(-170, 60, 150)
+other_scene = "res://scenes/sanctuary.tscn"
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_golden")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+light_color = Color(1, 0.824, 0.627, 1)
+light_energy = 2.6
+shadow_enabled = true
+directional_shadow_max_distance = 140.0
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+
+[node name="Raider" parent="." instance=ExtResource("3_raider")]

@@ -10,10 +10,10 @@
 
 ## Engine & Language
 
-- **Engine**: Three.js r180 (not a framework-supported engine; `engine.name` stays unset in `project.yaml`)
-- **Language**: JavaScript (ES modules), bundled with Vite 7
-- **Rendering**: Three.js WebGLRenderer (WebGL 2)
-- **Physics**: Custom: heightfield terrain + AABB grid (`src/collision.js`)
+- **Engine**: Godot 4.7 (port in `godot/`); live web game: Three.js r180
+- **Language**: GDScript; web game: JavaScript (ES modules) with Vite 7
+- **Rendering**: Compatibility (keeps the web export); web game: Three.js WebGLRenderer
+- **Physics**: Jolt (Godot default); web game: custom heightfield + AABB grid (`src/collision.js`)
 
 ## Input & Platform
 

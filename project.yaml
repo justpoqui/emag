@@ -26,8 +26,22 @@ framework:
 # edits this file. See `.claude/docs/config-resolution.md` for the full
 # precedence order.
 
-# Build and run commands (Three.js + Vite). engine.name is left unset: the
-# framework accepts only Godot, Unity or Unreal. No test command yet.
+# Scrapfall is moving to Godot 4.7. The Godot project lives in godot/ (not
+# the usual src/ code root, which still holds the live web game until the
+# port catches up). The web game builds with npm.
+engine:
+  name: "Godot"
+  version: "4.7"
+  language: "GDScript"
+  rendering: "Compatibility"
+  physics: "Jolt"
+
+specialists:
+  code: "godot-gdscript-specialist"
+  shader: "godot-shader-specialist"
+  ui: "godot-specialist"
+  additional: []
+
 commands:
   build: "npm run build"
   run: "npm run dev"

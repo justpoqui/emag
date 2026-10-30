@@ -1,7 +1,8 @@
 # This repository
 
-**Scrapfall**: a standalone extraction shooter in **Three.js r180 + Vite**
-(plain JavaScript, no engine editor). Game code is in `src/`, the game's
+**Scrapfall**: a standalone extraction shooter, live as a **Three.js r180 + Vite**
+web game (plain JavaScript) and being ported to **Godot 4.7** (GDScript) in
+`godot/` (see `godot/README.md`). Web game code is in `src/`, the game's
 overview in `README.md`. `npm run build` makes the release build in `dist/`;
 a test build (`npx vite build --mode test --outDir dist-test`) exposes
 `window.game` for Playwright checks. Pushing to `main` publishes the game to
@@ -21,15 +22,14 @@ Each agent owns a specific domain, enforcing separation of concerns and quality.
 
 ## Technology Stack
 
-- **Engine**: Three.js r180 (`three@0.180.0`), no engine editor
-- **Language**: JavaScript (ES modules)
-- **Version Control**: Git with trunk-based development
-- **Build System**: Vite 7 (`npm run build` → `dist/`)
-- **Asset Pipeline**: None. Models, map, UI and sound are generated in code (WebAudio for sound)
+- **Engine**: Godot 4.7 (port in progress in `godot/`); the live web game is Three.js r180
+- **Language**: GDScript (Godot); JavaScript ES modules (web game)
+- **Version Control**: Git with trunk-based development; `.glb`/`.blend` in Git LFS
+- **Build System**: Godot export presets (none yet); web game: Vite 7 (`npm run build` → `dist/`)
+- **Asset Pipeline**: Blender → `.glb` → `godot/models/`. The current models were exported from the web game with `node tools/export-glb/run.cjs`
 
-> **Note**: Engine-specialist agents exist for Godot, Unity and Unreal only.
-> None applies to Three.js: use the generic programmer agents. `engine.name` in
-> `project.yaml` stays unset because the framework accepts only those three.
+> **Note**: The Godot project is in `godot/`, not `src/`: read the framework's
+> "code root `src/`" for Godot as `godot/` in this repo. `src/` is the web game.
 
 ## Project Structure
 
@@ -43,8 +43,7 @@ Each agent owns a specific domain, enforcing separation of concerns and quality.
      session. It defaults to Godot (the template's example engine); skills that
      need the pinned version read docs/engine-reference/<engine>/VERSION.md on
      demand regardless of this import. -->
-No engine reference is imported: there is no `docs/engine-reference/` entry for
-Three.js. Check Three.js r180 APIs against `node_modules/three` or the r180 docs.
+@docs/engine-reference/godot/VERSION.md
 
 
 ## Technical Preferences
