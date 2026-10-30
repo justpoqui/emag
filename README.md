@@ -1,6 +1,6 @@
 # Scrapfall
 
-A standalone third-person **extraction shooter** in the spirit of *Arc Raiders*.
+A standalone third-person **extraction shooter**.
 Drop topside into the ruined Dustline, scavenge, fight Husks and get
 to a lift before the raid clock runs out. Die and you lose everything you
 carried except your safe pocket.

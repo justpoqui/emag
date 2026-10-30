@@ -49,7 +49,7 @@ All implemented as of `e39543a`:
 
 **Art & audio direction:** Procedural low-poly ruins in dusty golden light, with sounds synthesized in WebAudio, all from code with no asset files.
 
-**Reference game:** The extraction-shooter genre (the README names Arc Raiders as its spirit). Scrapfall's own core is the learning Husk Network, so this is a genre reference, not a target to match.
+**Reference game:** The extraction-shooter genre in general. Scrapfall's own core is the learning Husk Network.
 
 ## Formulas recovered from code
 | Rule | Formula | Source |
