@@ -80,7 +80,7 @@ and the risk carried between raids)
 | Husk combat | Overlay on any map: the eye is the light source (emissive first, at most 1–2 cheap point lights); desaturated periphery | Raised | Eye flare, the brightest, most saturated point on screen; thin red damage edge, never over the centre | Peak |
 | Lift called | Map light plus local teal ring and column, the only cool saturated light topside; pulses with the countdown, ring shrinks | Medium, tightening | Teal beacon against red eyes closing in from the perimeter | High, rising |
 | Death / results | Near-monochrome slate ~7000K, slow desaturating fade, no warm light | Low | Loadout greyed and scorched; only the safe-pocket item stays lit; a dim Husk eye on the "learned" line | Very low |
-| Extraction return | Warm 2700K lamplight spilling from the lift doors; 1–2 s overexposed-to-normal ease-in | Soft, high-key | Warm light over dust-caked gear (the raider keeps topside wear) | Low-medium, release |
+| Extraction return | Warm 2700K lamplight spilling from the lift doors; 1–2 s overexposed-to-normal ease-in | Soft, high-key | Warm light over dust-caked gear (the Diver keeps topside wear) | Low-medium, release |
 
 ## 3. Shape Language
 
@@ -93,7 +93,7 @@ and the risk carried between raids)
 - Important things (heroes) have large, clear outlines and high contrast. Everything else is smaller, finer and lower in contrast (P2).
 
 **Characters**
-- Raider: realistic proportions, top-heavy outline (backpack, shield pack, weapon). Each hat and hair option changes the head outline. Never mistakable for a trader or a Husk.
+- Diver: realistic proportions, top-heavy outline (backpack, shield pack, weapon). Each hat and hair option changes the head outline. Never mistakable for a trader or a Husk.
 - Traders (soft, draped, rounded clothing = human, safe; finalised in Section 5):
 
 | NPC | Outline at a distance | Trait |
@@ -110,7 +110,7 @@ and the risk carried between raids)
 | Buzzer | Sleek, pointed drone with thruster pods on its sides | Airborne, small, pointed nose | Nose |
 | Watcher | Round flyer; its eye is its lamp | Airborne, round; its light beam adds to its outline | Central lens (the lamp) |
 | Pouncer | Heavy, crouching armoured beast, hind legs folded under it | Armoured shell, crouched ready to leap | Core on top |
-| Warden | Towering walker with wide shoulders and twin miniguns | Several times raider height | Core on back |
+| Warden | Towering walker with wide shoulders and twin miniguns | Several times Diver height | Core on back |
 
 - Scars (P1): welds, patches and bolted-on plates, kept inside the outline. Eye shutters (the counter a Husk learned) are a visible plate partly covering the eye. At most one lopsided add-on per Husk, never big enough to change its outline.
 
@@ -219,9 +219,141 @@ A dedicated colourblind mode is deferred to `design/accessibility-requirements.m
 
 ## 5. Character Design Direction
 
-[To be designed] — the player character's visual archetype, how players tell
-enemies, NPCs and allies apart at a glance, expression and pose style, and how
-much detail survives at game camera distance (LOD philosophy).
+**Core rules**
+- Realistic, never blocky (Section 3). Big shapes are modelled; small detail goes in textures.
+- Humans look **hand-made and worn**: soft cloth, leather, tape, patches. Husks look **machined**: smooth plates, symmetry, precise seams.
+- Nothing is clean, nothing is new ("Everything remembers").
+- Only Husk eyes glow red. The Diver shows no light except the neutral-white headlamp at night (Section 2).
+- No Husk plating on the Diver or traders: cloth = person, machined metal = Husk.
+
+### 5.1 The Diver
+
+**Who they are:** a scavenger who lives on what they bring back. Everything they wear or carry was found, swapped or fixed. Nothing matches, nothing looks like an army uniform.
+
+**Body:** realistic adult proportions, about 1.8 m (Section 8). Face neutral and tired; it's mostly seen from behind, so it gets the least attention.
+
+**The back matters most.** The camera sits behind the shoulder, so the player mostly sees the pack, the back of the hat or hair, and the back of the shirt. Spend the detail there.
+
+| Gear every Diver has | Look |
+|---|---|
+| Backpack | Big, patched canvas; taped straps; things tied on. Gives the top-heavy outline (Section 3) |
+| Shield pack | Bevelled metal case on the pack, scratched and stickered. Doesn't glow (the hit ripple is Section 4's) |
+| Belt and pouches | Mismatched pouches, one different from the rest |
+| Boots | Worn, scuffed and caked; with every trouser option |
+| Gloves | Work gloves, fingertips worn through |
+| Headlamp | Strap over the hat or hair; neutral white, night only |
+
+| Wardrobe piece | Look | Outline / colour |
+|---|---|---|
+| Field Jacket | Canvas work jacket: chest pockets, hem close over the hips, scarf round the neck that doubles as a dust mask | Fuller upper body. Colour changes to faded rust ~`#8e7360` (was bright orange `0xc4672f`, ~76% saturated, too close to Eye Red and Lamp Amber) — author decision 2026-10-30 |
+| Work Tee | Thin faded short-sleeve tee; Sanctuary patch faded to near grey; sweat and dust stains | Slimmer upper body; bare dusty forearms with small scrapes |
+| Cargo Pants | Olive-grey, tucked into boots, bulging thigh pockets, knees worn pale or patched | Full legs |
+| Utility Shorts | Cut-off, rolled cuffs, frayed edges | Bare shins. Colour ~`#6b5e4a` (was `0x6b5a42`, just over 35%) |
+| Work Cap | Stiff brim, sweat-stained band, brim edge worn pale | Small point at the front of the head |
+| Boonie Hat | Soft wide brim that droops; dust in the folds | Widest head outline |
+| No hat | Bare head; dust in the hair | Smallest head |
+| Short Crop | Short, choppy, a bit uneven, like a home cut | Tight round head |
+| Ponytail | Tied with a scrap of cord; through the cap's back gap or under the boonie | A tail behind the head, which the camera sees clearly |
+
+- All combinations must look right: no hat or hair poking through, scarf sits over either shirt's collar.
+
+| Wear layer | Where | Always? |
+|---|---|---|
+| Dust | Heaviest on boots, shins, knees and hem; light on shoulders, hat brim, pack top | Yes |
+| Sun fade | Shoulders, back, hat top | Yes |
+| Use wear | Shiny or bare on strap edges, weapon grip, pocket lips | Yes |
+| Repairs | Stitched tears, taped straps, mismatched patches | Yes |
+| Damage | Small scorch on sleeves, torn fabric, scraped pack corners | Yes, kept small |
+
+- **Dust is set by the map you drop into** (author decision, 2026-10-30): Dust Storm heaviest, Golden Hour standard, Night Raid lighter but damp. One dust-amount setting on the Diver's clothing and gear materials, chosen at deploy; no build-up during a raid.
+- The Diver brings this wear into the Sanctuary (Section 2, extraction return): there, the Diver is the dustiest, palest person in the room.
+- Wear is baked into textures. No decals on moving characters, because they slide over the mesh (technical-artist to confirm).
+
+| Material (Section 8: 40k tris, 3 materials) | Holds |
+|---|---|
+| Clothing | All shirts and trousers, one shared 2048 set |
+| Gear | Pack, shield pack, belt, boots, gloves, headlamp (2048) |
+| Head | Skin, hair, hats (1024) |
+
+- Names follow `char_diver_[part]`, e.g. `char_diver_jacket`, `char_diver_boonie`.
+
+### 5.2 The traders
+
+The traders are Divers too, retired or between dives (author, 2026-10-30): each keeps one sign of it, such as a faded dive patch, an old pack hung behind the counter, or a healed scar. Seen only in the Sanctuary, behind their counters under warm lamps. Their wear is Sanctuary wear (soot, damp, oil, mended cloth), not topside dust. They don't wear packs or carry weapons. Each has a different **brightness** (dark, light, middle), so they read apart in black and white too (P2).
+
+| | Tobias, gunsmith | Nia, medic | Pell, buyer |
+|---|---|---|---|
+| Outline | Wide, square shoulders | Tall, narrow | Round, stooped |
+| Clothing | Heavy leather apron over a work shirt, sleeves rolled, thick forearms | Long close-fitting coat to the knees, sleeves pushed up, hair wrapped back, cross-body satchel strap | Layers: coat over padded vest over knits; knitted scarf and beanie; fingerless gloves |
+| Brightness | **Dark**: brown leather, charcoal | **Light**: bone and pale sage-grey | **Middle**: faded mustard-olive, patchwork |
+| Signature prop | Magnifier goggles pushed up on his forehead | Hand-stitched canvas medic satchel with a bone-white stitched patch (**no red cross**: legally protected, and red means "Husk") | A hanging spring scale for weighing loot, and a battered ledger |
+| Wear | Oil, soot, small burn holes, metal filings | Stained cuffs, many mends; hands kept clean | Grime, lint, frayed knits, patched elbows |
+| Idle | Working at his bench, cleaning a part | Sorting and rolling bandages | Weighing items, writing in his ledger |
+
+- Seen face-on and up close: faces and hands get more detail than the Diver's.
+- Budget (Section 8): 30k tris, 3 materials (clothing, head, prop). Clothing under 35% saturation; the lamps provide the warmth.
+
+### 5.3 Telling them apart at a glance
+
+| Who | Where | Outline | Colour and material | Light | Movement |
+|---|---|---|---|---|---|
+| Diver | Everywhere | Upright human, top-heavy pack | Dusty, pale, faded cloth | Headlamp at night only | Weighty, human |
+| Traders | Sanctuary counters | Wide / tall / round, no pack | Cloth, warm-lit, dark / light / middle | None of their own | Small work loops in place |
+| Skitter | Topside | Low, flat, splayed legs | Husk Slate plates, pale bare edges | One red eye, front | Quick bursts, then freeze |
+| Buzzer | In the air | Small, pointed, side thrusters | Slate | Red eye on the nose | Hovers, banks, darts |
+| Watcher | In the air | Round, plus its beam | Slate | Red eye that is also its lamp | Slow drift, steady sweep |
+| Pouncer | Topside | Heavy crouched shell | Thick slate armour | Red core on top | Still, then a coiled leap |
+| Warden | The plaza | Towers over the Diver, wide shoulders, twin guns | Heaviest plating | Red core on its back | Slow, heavy steps |
+
+- **Human = soft, uneven, no glow. Husk = hard, symmetrical, one red light.**
+
+### 5.4 Husk design
+
+| Part | Made in (Crucible Works) | Look |
+|---|---|---|
+| Hull plates | Casting Hall | Smooth layered slate plates, precise seams, pale bare-metal edges `#7c858f` |
+| Eye / sensors | Optics Lab | One glass lens in a machined ring |
+| Legs and joints | Actuator Works | Clean pistons and joints, tight fit, no loose cables |
+| Core | Core Assembly | The glowing critical spot (Pouncer, Warden) |
+
+- Salvaged human parts only as small detail **inside** gaps and joints (an old cable, a cast-over stamp): "the Network uses our things" (Section 6). Never on the outline, never rust: Husk metal wears with scorch and heat marks.
+
+| Scar kind (P1) | Looks like | Made as |
+|---|---|---|
+| Battle wear | Scorch, dents, heat tint | Baked into the shared hull texture |
+| Repairs | Clean replacement plates, neat welds, slightly newer surface | Scar add-on object |
+| Learned changes | Eye shutters (a plate partly over the eye); extra plating where Divers hit most | Scar add-on object |
+
+- At most 3 scar add-ons per Husk (`_scar_01`–`03`), sharing the hull material, inside the outline, at most one lopsided (Sections 3 and 8). Each raid can switch them on or off: a more scarred Husk reads as "it has met Divers like you".
+- Husk repairs always look neater than human ones.
+- Eye: one per Husk, always Eye Red `#ff4a2a`, always the brightest point (P1). State by brightness, size and glow, never colour (Section 4). Own object and material (`mat_husk_eye`), no LOD, visible to the Husk's sight range (Section 8). A shutter covers at most half the eye. No other red light on a Husk.
+
+### 5.5 Pose and movement
+
+| Who | Style |
+|---|---|
+| Diver | Realistic and weighty: weight shifts with each step, the pack bounces a little, leans into turns. Under a heavy load, lower and bent forward (suggestion for the animator) |
+| Traders | Relaxed and human: small work loops, the odd glance up at the Diver. Never stiff |
+| All Husks | Mechanical and precise: perfectly still between moves, fast exact turns, no human gestures. **The eye moves first**: it turns to you, then the body follows |
+| Skitter | Quick insect-like steps, then freeze |
+| Buzzer | Small hover corrections, sharp banks |
+| Watcher | Smooth slow drift, the beam sweeping in even arcs |
+| Pouncer | Long stillness, a visible coil, then the leap and a heavy landing |
+| Warden | Slow heavy steps; upper body and guns turn separately from the legs |
+
+### 5.6 How much detail survives at game distance
+
+The raid camera is ~3.6 m behind the Diver; at 1080p the Diver is ~370 px tall, 1 cm ≈ 2 px. The Sanctuary camera's narrower view makes characters ~1.6× larger.
+
+| Distance | What reads | Made with |
+|---|---|---|
+| Far (Husk sight range) | Outline and the red eye only | Model shape, eye glow |
+| Middle (Diver on screen, traders from the doorway) | Clothing pieces, colour blocks, pack, pockets, where dust sits | Model shape and colour texture |
+| Near (traders at the counter, the mirror) | Stitches, tape, buckles, fabric weave | Normal and colour textures only |
+
+- Anything the player must notice on the Diver: at least ~3 cm (~6 px).
+- Husk eye glow sized to read at the Husk's sight range (starting values, check in Godot): Skitter (16 m) ≥ ~12 cm; Buzzer and Pouncer (26 m) ≥ ~21 cm; Warden (38 m) ≥ ~31 cm.
+- At distance (Section 8): Diver and traders lose straps first, never the head, hat or pack outline; Husks never lose outline, eye or outline-changing add-on.
 
 ## 6. Environment Design Language
 
@@ -243,8 +375,8 @@ much detail survives at game camera distance (LOD philosophy).
 | **Container yard** | A shipping depot, abandoned, then used as Husk storage. | Stacked, dented containers. Some opened neatly, as if by a machine; some sorted into rows that are too tidy. |
 | **Refinery** | An industrial plant. It burned, and the Husks partly restarted it. | Tanks, pipes and towers with scorch and rust. A few lines freshly patched with clean Husk metal: a working part inside a dead plant. |
 | **Crucible Works** | A human factory the Husks turned into their own. | Old brick and steel at the edges; the deeper you go, the cleaner, more symmetrical and machined it gets. The middle is fully Husk-made. |
-| **Raider camps** | Built by raiders passing through; most overrun or left. | Tarps, crates, sandbags, sleeping rolls, built in a hurry and lopsided. Fires are cold ash (no warm light topside). |
-| **Bulwarks / Cradles** | Built by Husks from scratch. | Smooth curves, symmetry, layered plates (Section 3). Patches and reinforcement show where raiders attacked (P1). |
+| **Diver camps** | Built by Divers passing through; most overrun or left. | Tarps, crates, sandbags, sleeping rolls, built in a hurry and lopsided. Fires are cold ash (no warm light topside). |
+| **Bulwarks / Cradles** | Built by Husks from scratch. | Smooth curves, symmetry, layered plates (Section 3). Patches and reinforcement show where Divers attacked (P1). |
 
 Quick test: human-made looks put together by hand (crooked, mismatched,
 patched); Husk-made looks manufactured (smooth, symmetrical, precise). In a
@@ -307,8 +439,8 @@ this well in the Forward+ renderer.
 | Container yard | Medium-dense | Container lanes, open containers | Stacks make lanes; a few rows too neat (Husk sorting) |
 | Refinery | Dense background, sparse routes | Walkways, ladders | Pipes and tanks make the skyline; ground routes stay open |
 | Crucible Works | Dense and orderly | Production lines, exits | Tidier and more machined the deeper you go; no human mess in the middle |
-| Raider camps | Sparse-medium | The loot cache | Left in a hurry: tipped crates, cold fire, torn tarp, a dropped pack |
-| Bulwarks | Sparse inside the rings | The spire | Barricade rings, scorch and patches where raiders attacked |
+| Diver camps | Sparse-medium | The loot cache | Left in a hurry: tipped crates, cold fire, torn tarp, a dropped pack |
+| Bulwarks | Sparse inside the rings | The spire | Barricade rings, scorch and patches where Divers attacked |
 | Cradles | Sparse | The pod ring | Pods in neat, dim clusters, nothing else nearby |
 
 ### 6.4 Telling the story without text ("Everything remembers")
@@ -317,8 +449,8 @@ this well in the Forward+ renderer.
   the burnt car; a broken crate behind the bullet hole.
 - **Every human area shows "people lived here":** a mug, a photo, a child's
   drawing, tally marks, a name painted on a locker.
-- **Every Husk area shows "they learned":** a plate added where raiders shot
-  before, a doorway sealed where raiders got in, wreckage cleared away tidily.
+- **Every Husk area shows "they learned":** a plate added where Divers shot
+  before, a doorway sealed where Divers got in, wreckage cleared away tidily.
 - **Repairs show who made them:** human repairs uneven and improvised; Husk
   repairs clean and exact.
 - **Paths of use:** worn floors, faded trails, polished rails and handles.
@@ -333,8 +465,8 @@ this well in the Forward+ renderer.
 | Boarded windows with machined plates over them | People held out here; the Husks took it anyway |
 | Neatly cut-open containers or cars | Husks stripped it for parts |
 | Fresh Husk metal on an old human machine | The Network is using our things |
-| Patches on a Bulwark facing a common raider approach | The Husks reinforced the side raiders keep hitting (P1) |
-| Cold camp with gear left behind | Raiders who didn't make it |
+| Patches on a Bulwark facing a common Diver approach | The Husks reinforced the side Divers keep hitting (P1) |
+| Cold camp with gear left behind | Divers who didn't make it |
 | Sanctuary: repairs on top of repairs | People have survived here a long time |
 
 ### 6.5 Sanctuary first: Blender checklist
@@ -447,7 +579,7 @@ renderer on every tier. No web build.
 
 - Lowercase snake_case, two-digit variants: `[category]_[name]_[variant]`,
   e.g. `prop_barrel_02`.
-- Prefixes: `char_` (raider, traders), `husk_`, `wpn_`, `prop_`, `env_`
+- Prefixes: `char_` (Diver, traders), `husk_`, `wpn_`, `prop_`, `env_`
   (modules, rock, terrain), `dbr_` (debris), `hb_` (Husk-built), `dcl_`
   (decals), `veg_`.
 
@@ -455,8 +587,8 @@ renderer on every tier. No web build.
 |---|---|---|
 | Object | prefix + name + part | `husk_skitter_body` |
 | Collision | ends in `-colonly` / `-convcolonly` | `prop_crate_01-colonly` |
-| Armature | `rig_[name]` | `rig_raider` |
-| Animation action | `[name]_[action]_[nn]` | `raider_run_01` |
+| Armature | `rig_[name]` | `rig_diver` |
+| Animation action | `[name]_[action]_[nn]` | `diver_run_01` |
 | Material | `mat_[surface]_[variant]` | `mat_rust_02` |
 | Texture | `[material or asset]_[map].png` | `mat_rust_02_orm.png` |
 | Bake helper | ends in `_high` | |
@@ -477,7 +609,7 @@ LOD0 is the full-detail model; LOD1/LOD2 are shown further away.
 
 | Category | LOD0 max | LOD1 / LOD2 | Materials max |
 |---|---|---|---|
-| Raider | 40k | 15k / 5k | 3 |
+| Diver | 40k | 15k / 5k | 3 |
 | Trader | 30k | 12k / 4k | 3 |
 | Small Husk (Skitter, Buzzer) | 8k | 3k / 1k | 2 (hull + eye) |
 | Medium Husk (Watcher, Pouncer) | 15k | 6k / 2k | 2 |
@@ -510,12 +642,12 @@ LOD0 is the full-detail model; LOD1/LOD2 are shown further away.
 
 ### 8.5 Textures
 
-- Density: 1024 px/m for the raider, traders and weapons; 512 px/m for the
+- Density: 1024 px/m for the Diver, traders and weapons; 512 px/m for the
   world. Hard cap 2048 × 2048, powers of two only.
 
 | Asset | Texture sets |
 |---|---|
-| Raider | 2048 body + 2048 gear (+ 1024 head), 2–3 materials |
+| Diver | 2048 body + 2048 gear (+ 1024 head), 2–3 materials |
 | Traders | 2048, ~1024 px/m |
 | Weapons | 2048 big guns, 1024 small ones |
 | Warden, Pouncer | 2048 at 512–1024 px/m, hull + eye |
@@ -576,7 +708,7 @@ LOD0 is the full-detail model; LOD1/LOD2 are shown further away.
 - Hand-made LODs only where auto LOD breaks a Husk outline: separate
   `_lod1`/`_lod2` meshes switched by visibility ranges (Godot does not read
   LODs from glTF) [unverified 4.7].
-- What reduces first: raider and traders lose straps first, never the head,
+- What reduces first: Diver and traders lose straps first, never the head,
   hat or backpack outline. Husks never reduce the outline, the eye or an
   outline-changing add-on; the eye mesh has no LOD and stays visible to that
   Husk's sight range (up to 38 m).
@@ -597,7 +729,7 @@ LOD0 is the full-detail model; LOD1/LOD2 are shown further away.
 
 ### 8.8 Modelling basics
 
-- 1 Blender unit = 1 m; the raider is ~1.8 m tall.
+- 1 Blender unit = 1 m; the Diver is ~1.8 m tall.
 - Bevel every visible hard edge: chunky bevels modelled, fine ones baked into
   the normal map. Smooth shading plus weighted normals.
 - Front faces Blender −Y (becomes Godot +Z).
