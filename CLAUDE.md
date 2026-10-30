@@ -1,17 +1,17 @@
 # This repository
 
-**Scrapfall**: a standalone extraction shooter, live as a **Three.js r180 + Vite**
-web game (plain JavaScript) and being ported to **Godot 4.7** (GDScript) in
-`godot/` (see `godot/README.md`). Web game code is in `src/`, the game's
+**Scrapfall**: a standalone extraction shooter, becoming a downloaded desktop
+game in **Godot 4.7** (GDScript, Forward+) in `godot/` (see `godot/README.md`).
+The old **Three.js r180 + Vite** web game stays playable until the Godot port
+has raids working, then it is removed (no web build after that). Web game code is in `src/`, the game's
 overview in `README.md`. `npm run build` makes the release build in `dist/`;
 a test build (`npx vite build --mode test --outDir dist-test`) exposes
 `window.game` for Playwright checks. Pushing to `main` publishes the game to
 GitHub Pages.
 
-The Claude Code Game Studios framework below runs this project. Its engine is
-not configured yet (`/start`, `/setup-engine`): Scrapfall is a web game rather
-than Godot, Unity or Unreal, so treat the engine-specific agents and
-references as not applying until that is set.
+The Claude Code Game Studios framework below runs this project, with Godot
+4.7 as its engine (`project.yaml`): the Godot agents and references apply to
+`godot/`, not to the old web game in `src/`.
 
 ---
 
@@ -22,14 +22,14 @@ Each agent owns a specific domain, enforcing separation of concerns and quality.
 
 ## Technology Stack
 
-- **Engine**: Godot 4.7 (port in progress in `godot/`); the live web game is Three.js r180
+- **Engine**: Godot 4.7, Forward+, desktop only (port in progress in `godot/`); the old web game is Three.js r180
 - **Language**: GDScript (Godot); JavaScript ES modules (web game)
 - **Version Control**: Git with trunk-based development. `.glb` files are plain git blobs for now (Git LFS could not be pushed from cloud sessions); move `.glb`/`.blend` to LFS from a local machine before committing Blender sources
 - **Build System**: Godot export presets (none yet); web game: Vite 7 (`npm run build` → `dist/`)
 - **Asset Pipeline**: Blender → `.glb` → `godot/models/`. The current models were exported from the web game with `node tools/export-glb/run.cjs`
 
 > **Note**: The Godot project is in `godot/`, not `src/`: read the framework's
-> "code root `src/`" for Godot as `godot/` in this repo. `src/` is the web game.
+> "code root `src/`" for Godot as `godot/` in this repo. `src/` is the old web game.
 
 ## Project Structure
 

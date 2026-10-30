@@ -10,9 +10,9 @@
 
 ## Engine & Language
 
-- **Engine**: Godot 4.7 (port in `godot/`); live web game: Three.js r180
+- **Engine**: Godot 4.7 (port in `godot/`); old web game (to be removed): Three.js r180
 - **Language**: GDScript; web game: JavaScript (ES modules) with Vite 7
-- **Rendering**: Compatibility (keeps the web export); web game: Three.js WebGLRenderer
+- **Rendering**: Forward+ (desktop only)
 - **Physics**: Jolt (Godot default); web game: custom heightfield + AABB grid (`src/collision.js`)
 
 ## Input & Platform
@@ -20,7 +20,7 @@
 <!-- Written by /setup-engine. Read by /ux-design, /ux-review, /test-setup, /team-ui, and /dev-story -->
 <!-- to scope interaction specs, test helpers, and implementation to the correct input methods. -->
 
-- **Target Platforms**: Web (desktop browsers)
+- **Target Platforms**: Desktop, downloaded .exe (Windows first); no web build
 - **Input Methods**: Keyboard/Mouse (pointer lock)
 - **Primary Input**: Keyboard/Mouse
 - **Gamepad Support**: None

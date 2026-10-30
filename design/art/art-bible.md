@@ -52,16 +52,19 @@ and the risk carried between raids)
 **Anchors**
 - Style: gritty semi-realistic. Realistic proportions, PBR materials, worn and
   dirty.
-- Technical ceiling: Godot 4.7 Compatibility renderer (web export), authored in
-  Blender. Wear lives in textures and baked detail, not in expensive real-time
-  effects.
+- Technical ceiling: Godot 4.7 Forward+ renderer, desktop only (a downloaded
+  .exe; no web build, author decision 2026-10-30), authored in Blender. Wear
+  lives mostly in textures and baked detail; real-time effects are allowed
+  within the Section 8 budgets.
 
 ## 2. Mood & Atmosphere
 
 **Global rules**
-- Compatibility-safe toolkit only: directional light, baked and emissive
-  practicals, depth fog, fog colour, sky gradient, tonemap/exposure, particle
-  cards, vignette. No volumetrics, SDFGI or heavy post.
+- Forward+ toolkit: directional light, live and emissive practicals, decals,
+  depth and volumetric fog, ambient occlusion, reflection probes, sky
+  gradient, tonemap/exposure, particle cards, vignette. Laptop minimum spec
+  (Section 8) must still hold 30 fps on low settings, so heavy effects
+  (volumetric fog, GI, screen-space reflections) need a low-settings fallback.
 - Warm, local, human-made light = safe; cold, wide or harsh light = exposed (P3).
 - Husk eyes and the lift beacon stay readable through fog (Storm, Night).
 - Each state has its own key colour, contrast level and light shape. Two states
@@ -254,7 +257,7 @@ material behaves (how rough, whether metal, its colour), so one set of
 textures looks right in Golden Hour, Night Raid, Dust Storm and Sanctuary
 lamplight. Hand-painted textures would need repainting per condition and
 fight the gritty style. Godot's standard material (StandardMaterial3D) runs
-this well in the Compatibility renderer.
+this well in the Forward+ renderer.
 
 | Texture | What it does |
 |---|---|
@@ -276,9 +279,9 @@ this well in the Compatibility renderer.
 **Rules**
 - Dirt follows gravity and use: dust sits on top and in corners, worn away
   where hands and feet touch.
-- One-off detail (a stain, a bullet hole, a sign) goes on flat see-through
-  cards laid on surfaces, not Godot's decal feature, which may not work in
-  the Compatibility renderer.
+- One-off detail (a stain, a bullet hole, a sign) goes on Godot decals
+  (Forward+ supports them), or on flat see-through cards where a decal would
+  spread onto the wrong surface.
 - One shared material set per surface type (timber, rock, steel, concrete,
   Husk plate), varied by wear level. No unique texture per object.
 - Husk metal wears with scorch and heat marks, not rust; bare edges are Hull
@@ -350,7 +353,7 @@ this well in the Compatibility renderer.
 - [ ] Somewhere off the main path: the collapsed, sealed-off tunnel where the
       Husks nearly broke in (scorched rock, a barricade of timber and scrap,
       old repairs over it). Warm lamps nearby so it stays inside the safe space.
-- [ ] Checked in Godot (Compatibility renderer) with a screenshot in
+- [ ] Checked in Godot (Forward+ renderer) with a screenshot in
       `production/qa/evidence/`.
 
 **Room by room**

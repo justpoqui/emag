@@ -1,7 +1,8 @@
 # Scrapfall — Godot 4.7 port
 
-The Godot version of Scrapfall, being ported from the web game at the repo root.
-The web game stays the live version (GitHub Pages) until this one catches up.
+The Godot version of Scrapfall, a downloaded desktop game (no web build). It is
+being ported from the old web game at the repo root, which stays until this
+version has raids working and is then removed.
 
 ## Open it
 
@@ -26,7 +27,7 @@ The web game stays the live version (GitHub Pages) until this one catches up.
 | `scenes/raider.tscn`, `scripts/raider.gd` | Walkable raider with the over-the-shoulder camera. |
 | `scripts/level.gd` | Adds collision to level meshes, builds the MultiMeshes, places the raider. |
 
-The renderer is **Compatibility**, so the project can still export to the web.
+The renderer is **Forward+** (desktop only).
 
 ## Re-exporting the models
 
