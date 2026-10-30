@@ -1,7 +1,7 @@
 # ADR-0002: Game Data Format
 
 ## Status
-Proposed
+Accepted
 
 ## Date
 2026-10-30
