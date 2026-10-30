@@ -3,7 +3,7 @@
 > **Status**: Draft
 > **Owned By**: art-director
 > **Last Updated**: 2026-10-30
-> **Art Director Sign-Off (AD-ART-BIBLE)**: [Not yet reviewed]
+> **Art Director Sign-Off (AD-ART-BIBLE)**: SKIPPED 2026-10-30 — solo mode
 
 `/art-bible` writes these nine sections in this order and replaces each
 section's `[To be designed]` line as that section is approved. A section still
@@ -379,10 +379,321 @@ feel, and any art-direction versus readability conflict and how it was decided.
 
 ## 8. Asset Standards
 
-[To be designed] — file formats, naming convention, texture resolution tiers,
-LOD levels, export settings, and the engine's hard limits (poly budgets per
-asset category, texture memory, material slots). Where an art preference and a
-technical limit disagree, record both and the trade-off chosen.
+These are hard limits: a new or reworked asset that breaks one goes back
+before it is merged. All numbers proposed and approved 2026-10-30. Items
+marked **[unverified 4.7]** come from older Godot knowledge and need checking
+in the 4.7 editor.
+
+**Guiding rules**
+- Realistic, bevelled models, never blocky (Section 3). Fine wear and detail
+  go into textures, not extra triangles.
+- Husk outlines survive every level of detail (P2): losing small detail is
+  fine, losing the outline is not.
+- Everything is built in real-world metres.
+
+### 8.1 Target hardware and frame budget
+
+Scrapfall ships as a downloaded Windows desktop game on the **Forward+**
+renderer on every tier. No web build.
+
+| Tier | Hardware | Resolution | Target | Frame time |
+|---|---|---|---|---|
+| **Low (minimum)** | GTX 1050 Ti / RX 570 class, 4 GB graphics memory | 1080p; 3D drawn at 67–75% and upscaled with FSR [unverified 4.7] | 30+ fps | ≤ 33 ms |
+| **High (recommended)** | GTX 1060 class (6 GB) | 1080p native | 60 fps | ≤ 16.7 ms |
+
+- **The minimum spec must be confirmed on real hardware** with a test scene at
+  these budgets before art is locked to them.
+- Laptop integrated graphics (Iris Xe, Vega 8) is not supported.
+- Windows draws through D3D12 by default (since Godot 4.6, per the engine reference).
+
+| Feature | Low | High | Source |
+|---|---|---|---|
+| Sun shadow splits | 2 | 4 | |
+| Lamp shadow atlas | 2048 | 4096 | [unverified 4.7] |
+| SSAO (corner shadows) | Half resolution | Full | [unverified 4.7] |
+| SSIL, SSR (bounce light, screen reflections) | Off | On | SSR overhauled in 4.6 (reference) |
+| Volumetric fog (Dust Storm, mine haze) | Off; plain depth fog | On | [unverified 4.7] |
+| SDFGI (outdoor bounce light, Dustline) | Off | On | [unverified 4.7] |
+| VoxelGI (indoor bounce light, Sanctuary) | Off; flat ambient | On | [unverified 4.7] |
+| Anti-aliasing | FXAA | SMAA (4.5, reference) or MSAA 2x | |
+| LOD bias | Coarser: about half the High triangles | Default | |
+
+- Always on, both tiers: decals; reflection probes (one per Sanctuary room, so
+  metal reflects the room, not the sky) [unverified 4.7]; occlusion culling
+  (OccluderInstance3D, baked per district) [unverified 4.7]; Shader Baker
+  (4.5, reference) so a material seen for the first time doesn't stutter.
+- AreaLight3D is new in 4.7 (reference) but its cost is undocumented: High
+  only, hero shopfronts only, after a test.
+
+### 8.2 File formats
+
+| What | Format | Rule |
+|---|---|---|
+| Source model | `.blend` | **Outside this repo** (shared drive or separate art repo). One asset or kit per file; high-poly bake source in a `_high` collection. |
+| Game model | `.glb` | The only model format handed to Godot. |
+| Texture source | `.psd` / `.kra` / `.spp` | **Outside this repo**, next to the `.blend`. |
+| Game texture | `.png`, 8-bit, power of two | Colour maps sRGB; data maps (normal, ORM) linear. Separate files, never embedded in the `.glb`. |
+| Normal maps | OpenGL (green up) | Never DirectX; in Substance pick the "OpenGL" preset. |
+
+- Maps per material: `albedo`; `normal`; `orm` (R = ambient occlusion,
+  G = roughness, B = metallic, the glTF layout) [verify in the 4.7 import
+  dialog]; `emissive` only for Husk eyes, the lift beacon, lamps and neon.
+  Transparency only for grass, foliage, chain-link and cloth tatters.
+- Godot import: every 3D texture "VRAM Compressed", high quality, mipmaps on;
+  normal maps imported as normal maps, ORM as linear. Never "Lossless" (an
+  uncompressed 2048 texture uses ~21 MB of graphics memory instead of ~5.6 MB).
+
+### 8.3 Naming
+
+- Lowercase snake_case, two-digit variants: `[category]_[name]_[variant]`,
+  e.g. `prop_barrel_02`.
+- Prefixes: `char_` (raider, traders), `husk_`, `wpn_`, `prop_`, `env_`
+  (modules, rock, terrain), `dbr_` (debris), `hb_` (Husk-built), `dcl_`
+  (decals), `veg_`.
+
+| Inside the `.blend` | Pattern | Example |
+|---|---|---|
+| Object | prefix + name + part | `husk_skitter_body` |
+| Collision | ends in `-colonly` / `-convcolonly` | `prop_crate_01-colonly` |
+| Armature | `rig_[name]` | `rig_raider` |
+| Animation action | `[name]_[action]_[nn]` | `raider_run_01` |
+| Material | `mat_[surface]_[variant]` | `mat_rust_02` |
+| Texture | `[material or asset]_[map].png` | `mat_rust_02_orm.png` |
+| Bake helper | ends in `_high` | |
+| Hand-made LOD | ends in `_lod1`, `_lod2` | |
+
+- The Husk eye is always its own object and material (`mat_husk_eye`) so the
+  game drives its brightness.
+- Adaptation add-ons (patches, plates, eye shutters) are separate objects
+  `_scar_[nn]` so each raid can show or hide them: at most 3 per Husk, sharing
+  the hull material.
+- Existing exports are renamed only when each one is reworked: a rename
+  breaks scenes, so a programmer updates them at the same time.
+
+### 8.4 Triangle and material budgets
+
+Triangles counted after triangulation. Vertices ≤ 1.5 × triangles per mesh.
+LOD0 is the full-detail model; LOD1/LOD2 are shown further away.
+
+| Category | LOD0 max | LOD1 / LOD2 | Materials max |
+|---|---|---|---|
+| Raider | 40k | 15k / 5k | 3 |
+| Trader | 30k | 12k / 4k | 3 |
+| Small Husk (Skitter, Buzzer) | 8k | 3k / 1k | 2 (hull + eye) |
+| Medium Husk (Watcher, Pouncer) | 15k | 6k / 2k | 2 |
+| Large Husk (Warden) | 50k | 20k / 6k | 3 |
+| Weapon in hand | 12k | 4k | 2 |
+| Small prop | 3k | auto LOD, then hidden | 1 |
+| Medium / large prop (car, container) | 15k | auto LOD | 2 |
+| Husk-built (Bulwark, Cradle) | 35k | auto LOD | 2 |
+| Environment module | 10k | auto LOD | 3 |
+| Assembled building | 60k | | |
+| Debris | 500 | none; hidden past 30 m | shared atlas |
+| Terrain chunk (~64 m) | 50k | auto LOD | 1 (blended layers) |
+
+| On screen | High | Low |
+|---|---|---|
+| All Husks | 250k triangles | about half |
+| Whole Sanctuary view | 800k | about half |
+| Whole Dustline view | 1.5M from the camera, 3M with shadows | about half |
+
+- Draw calls: each material slot on each mesh is one draw, repeated in every
+  shadow pass (a shadowed omni light up to 6 times). Forward+ does not merge
+  separate meshes for you [unverified 4.7].
+- Budgets per frame including shadows (Debugger → Monitors): High Dustline
+  ≤ 2,000, Sanctuary ≤ 1,200; Low about 1,000 via shorter view ranges and
+  fewer shadow splits.
+- Unique materials: ≤ 80 per level.
+- Merge static meshes sharing a material within 25–50 m areas; MultiMesh for
+  repeats (bushes, sleepers, bulbs). Never merge across a whole district
+  (worse culling, LOD and occlusion).
+
+### 8.5 Textures
+
+- Density: 1024 px/m for the raider, traders and weapons; 512 px/m for the
+  world. Hard cap 2048 × 2048, powers of two only.
+
+| Asset | Texture sets |
+|---|---|
+| Raider | 2048 body + 2048 gear (+ 1024 head), 2–3 materials |
+| Traders | 2048, ~1024 px/m |
+| Weapons | 2048 big guns, 1024 small ones |
+| Warden, Pouncer | 2048 at 512–1024 px/m, hull + eye |
+| Skitter, Buzzer, Watcher | 1024 |
+| Husk eye | 256 or a solid colour |
+| Large props | 2048, or tiling + trim sheet |
+| Small props | 1024, ~512 px/m |
+| Environment modules | shared 2048 tiling sets + 2048 trim sheet |
+| Rock | 2048 tiling + 1024 colour map |
+| Debris | 512 shared atlas |
+| Decals | 1024 atlas |
+| Vegetation | 1024 atlas |
+
+- At 512 px/m a 2048 tile covers only 4 × 4 m, so buildings must use shared
+  tiling materials and trim sheets, with wear layered on by decals,
+  vertex-colour masks and detail maps. No unique building textures.
+
+| Graphics memory per loaded level (4 GB minimum card) | Budget |
+|---|---|
+| Textures | ≤ 1.5 GB (~90 full 2048 sets, characters, Husks and weapons included) |
+| Meshes | ≤ 300 MB |
+| Total | ≤ 3 GB |
+
+- A full 2048 set (colour + normal + ORM) is ~14–17 MB; a 1024 set ~4 MB.
+- Godot 4 has no texture streaming, so Low cannot shrink what a level loads
+  [unverified 4.7].
+
+### 8.6 Lights (Sanctuary lamps stay live)
+
+- Forward+ sorts lights into screen tiles: no per-mesh limit. The cap is per
+  view, shared by lights, decals and reflection probes
+  (`max_clustered_elements`, default 512) [unverified 4.7]. The cost is how
+  many lights overlap the same pixels and how many cast shadows.
+
+| Rule | High | Low |
+|---|---|---|
+| Live lights visible in the Sanctuary | ≤ 64 | ≤ 32 |
+| Lights reaching any one spot | ≤ 6 | ≤ 4 |
+| Shadow-casting lamps on screen | ≤ 4 | 1 |
+| Soft shadows (light size > 0) | Hero lamp only | Off |
+
+- String lights: one real light per 4–6 bulbs; bulbs are emissive and glow
+  adds the halo.
+- Light range as short as the look allows: bulbs and vanity lights 2–4 m,
+  shop lamps 6–9 m.
+- Distance fade on every lamp: light gone by ~25 m, shadow by ~12 m (the
+  Sanctuary fog ends at 30 m).
+- Prefer spot lights to omni; only lamps that matter for gameplay or framing
+  cast shadows.
+- Bounce light: VoxelGI on High, using the live lamps [unverified 4.7 cost].
+- Topside: sun + sky, shadows to 140 m; the Night Raid headlamp is one
+  shadowed spot light; muzzle flashes and explosions are short, unshadowed
+  lights.
+
+### 8.7 LOD and view ranges
+
+- Default: Godot's automatic LOD at import [unverified 4.7].
+- Hand-made LODs only where auto LOD breaks a Husk outline: separate
+  `_lod1`/`_lod2` meshes switched by visibility ranges (Godot does not read
+  LODs from glTF) [unverified 4.7].
+- What reduces first: raider and traders lose straps first, never the head,
+  hat or backpack outline. Husks never reduce the outline, the eye or an
+  outline-changing add-on; the eye mesh has no LOD and stays visible to that
+  Husk's sight range (up to 38 m).
+- Levels: weapons LOD0–1; large props and modules LOD0–2; small props
+  LOD0–1, then hidden.
+
+| Object | Hidden beyond |
+|---|---|
+| Debris | 30 m |
+| Decals and small scatter | 40 m |
+| Grass | 50 m (High), 30 m (Low) |
+| Small props | 80 m |
+| Medium props | 150 m |
+| Buildings, terrain, Husk-built | never (fog hides them) |
+| Mountains | one far backdrop mesh at the 400 m camera limit |
+
+- Grass, debris and small scatter cast no shadows.
+
+### 8.8 Modelling basics
+
+- 1 Blender unit = 1 m; the raider is ~1.8 m tall.
+- Bevel every visible hard edge: chunky bevels modelled, fine ones baked into
+  the normal map. Smooth shading plus weighted normals.
+- Front faces Blender −Y (becomes Godot +Z).
+- Origins: characters and Husks between the feet; props bottom centre;
+  modules bottom corner on the grid; weapons the grip.
+- Modules snap to a 1 m grid; wall widths multiples of 2 m (level designer to
+  confirm).
+- Simple collision is its own `-colonly` / `-convcolonly` object, never the
+  full render mesh.
+
+### 8.9 Export (Blender → .glb) and what survives
+
+- glTF Binary; selected objects or the asset's collection only, never `_high`.
+- +Y Up on; apply scale and rotation (scale 1, 1, 1); apply modifiers.
+- UVs, normals, tangents on; vertex colours off unless used.
+- Materials exported, images **not embedded** (textures live in `godot/textures/`).
+- Animation on for rigged assets: one clip per action, "Always Sample" on;
+  skinning 4 bones per vertex.
+- Compression off: Godot does not read Draco; meshopt [unverified 4.7].
+
+| Survives | Lost: bake it, or set it on the Godot material |
+|---|---|
+| Principled BSDF with plain image textures: colour, metallic, roughness | Procedural textures (Noise, Voronoi, Wave), ColorRamp, math and mix nodes |
+| Normal map through the Normal Map node | The Bump node: bake to a normal map |
+| Emission and its strength | Displacement, subsurface, transmission, sheen |
+| Transparency (blend, alpha clip), double-sided | Mixing two shaders |
+| AO through the glTF Material Output node | Unapplied modifiers, geometry nodes |
+| Vertex colours (shown as colour automatically: [unverified 4.7]) | Hair and particles: convert to meshes |
+| 2 UV maps, armatures, shape keys, animations, unlit materials | Bent normals, specular occlusion (4.5): set in Godot |
+| Lights and cameras (retune brightness) | |
+
+- Rule of thumb: if it is not an image plugged straight into the BSDF, bake it.
+- Materials map to shared Godot `.tres` files via "Use External" in Advanced
+  Import Settings, matched by Blender material-slot names.
+
+### 8.10 The Dustline, split by district
+
+- One `.glb` per district: town, container yard, crashed hull, Crucible Works,
+  farmland, refinery. Plus terrain chunks of ~64 m and one mountain backdrop.
+- Per file: ≤ 15 MB, ≤ 300k triangles at LOD0, ≤ 25 materials, all shared. A
+  district over these splits into numbered parts (`env_dustline_town_01`).
+- Inside a district, static meshes merge by material within 25–50 m areas.
+  Each district gets its own occluders.
+- Props, modules and Husk-built pieces stay separate scenes placed as
+  instances, never copied into district geometry; repeats use MultiMesh.
+- Districts can later load in the background
+  (`ResourceLoader.load_threaded_request`) if the map grows.
+
+### 8.11 Where files live, and Git size
+
+| What | Where |
+|---|---|
+| Exported models | `godot/models/[category]/` |
+| Game textures | `godot/textures/[category]/` |
+| Godot materials | `godot/materials/` |
+| `.blend` and texture sources | Outside this repo (shared drive or separate art repo) |
+| Built game (`.exe` / `.pck`) | Never committed; shipped through Releases or a store |
+
+- A model reworked in Blender must be removed from the `tools/export-glb`
+  output, or the next `node tools/export-glb/run.cjs` overwrites it.
+- Git (cloud sessions can't use LFS): GitHub warns above 50 MB per file and
+  rejects above 100 MB, and keeps every committed version in full.
+  - No file over 25 MB; each `.glb` ≤ 15 MB; each texture ≤ 8 MB.
+  - Commit art at milestones, not on every save.
+  - About 3 GB of art in this repo over the game's life (author decision);
+    after that, final textures move to the separate art storage. Check with
+    `git count-objects -vH`.
+- The current `dustline.glb` (50.6 MB) is over GitHub's warning; the district
+  split replaces it.
+
+### 8.12 Trade-offs
+
+| Topic | Art ideal | Technical limit | Chosen, and why |
+|---|---|---|---|
+| Textures in the `.glb` | Embed for one-off assets | Every re-export re-commits them; shared materials need external files | **Always separate files**: committed once, model fixes don't re-commit them |
+| Hand-made Husk LODs | Where auto LOD breaks the outline | Godot doesn't import LODs from glTF [unverified 4.7] | **Separate `_lod1`/`_lod2` meshes on visibility ranges** |
+| Scar add-ons | Any number, shown per raid | Each object is an extra draw per pass | **≤ 3 per Husk, sharing the hull material** |
+| Character texture density | 1024 px/m | 2048 cap | **Kept, by splitting characters over 2–3 texture sets** |
+| World texture density | 512 px/m everywhere | 2048 cap; 1.5 GB per level | **Tiling materials, trim sheets and decals; no unique building textures** |
+| Sanctuary lamps | Every lamp live | Overlap and shadow cost | **Live, with short ranges, distance fade, ≤ 4 shadow casters (High) / 1 (Low), one light per 4–6 bulbs** |
+| Husk eye detail | Readable to its sight range | LOD would shrink it | **Eye mesh excluded from LOD** |
+
+### 8.13 Done checklist (per asset)
+
+- [ ] Named per 8.3; scale 1; origin per 8.8; front faces −Y.
+- [ ] Within its triangle, material and LOD budget (8.4, 8.7); vertices ≤ 1.5 × triangles.
+- [ ] Textures at their tier (8.5): power of two, ≤ 2048, ORM packed, OpenGL
+      normals, separate files.
+- [ ] Husk only: eye is its own emissive object; outline intact at every LOD;
+      scars inside the outline (≤ 3).
+- [ ] Colours within the Section 4 palette and saturation rule; wear present (Section 1).
+- [ ] Simple `-colonly` collision where needed.
+- [ ] Removed from `tools/export-glb` output if hand-edited.
+- [ ] File sizes within 8.11.
+- [ ] Checked in Godot under Golden Hour, Night Raid and Dust Storm, with a
+      screenshot kept in `production/qa/evidence/`.
 
 ## 9. Reference Direction
 
