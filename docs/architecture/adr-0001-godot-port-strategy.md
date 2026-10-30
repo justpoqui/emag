@@ -17,6 +17,8 @@ Scrapfall exists as a 12k-line Three.js game in `web/`, and its behaviour is now
 
 ## Engine Compatibility
 
+> **Amended by ADR-0004** (`docs/architecture/adr-0004-rendering-and-export.md`): PC uses Forward+ and only the web build uses Compatibility. Where this ADR says "Compatibility renderer", read it as the web build's renderer; the 60 fps / 16.6 ms budget applies to both.
+
 | Field | Value |
 |-------|-------|
 | **Engine** | Godot 4.7 (editor and CI on 4.7.2) |
@@ -171,6 +173,7 @@ Godot signals belong to an object, so cross-system signals live on **one autoloa
 - If a slice takes more than three times its estimate, revisit the slice size, not the approach.
 
 ## Related
+- ADR-0004 rendering and export (`docs/architecture/adr-0004-rendering-and-export.md`) — amends this ADR's renderer statements and answers its web export risk
 - `design/gdd/` (all seven documents)
 - `docs/engine-reference/godot/` (VERSION, breaking changes, deprecated APIs, current best practices, rendering module)
 - `addons/gdUnit4/` (gdUnit4 6.2.2, MIT, vendored without its own tests)
