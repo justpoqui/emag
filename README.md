@@ -43,11 +43,12 @@ counter in the corner.
 ## Running it locally
 
 ```bash
+cd web
 npm install
 npm run dev        # http://localhost:5173
 ```
 
-`npm run build` writes a static build to `dist/`. Serve that folder with any
+`npm run build` (in `web/`) writes a static build to `web/dist/`. Serve that folder with any
 static file server (`npm run preview`), or wrap it with Electron/Tauri later
 for a desktop app.
 
@@ -178,7 +179,7 @@ Destroyed Buzzers and Watchers break apart and their pieces fall to the ground.
 ## The Husk Network
 
 The Husks learn. Every raid they remember what you did to them and where
-(`src/network.js`, saved with your account), and it changes them:
+(`web/src/network.js`, saved with your account), and it changes them:
 
 - **Disposition:** start fights and they give you more room, lose patience
   faster and stay angry longer; strike first often enough and they shoot on
@@ -229,8 +230,9 @@ the SMG hangs on your right. Your stick rides down the right side of the pack.
 
 ```
 emag/
-  index.html, vite.config.js
-  src/
+  web/            the Three.js game (this layout)
+    index.html, vite.config.js
+    src/
     config.js      every item, weapon, shield, Husk type, loot table, trader and recipe (balance here)
     main.js        boot
     game.js        renderer, lighting, raid lifecycle, damage, explosions, interaction, lifts, camera

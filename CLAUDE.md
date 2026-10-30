@@ -1,9 +1,10 @@
 # This repository
 
 **Scrapfall**: a standalone extraction shooter in **Three.js r180 + Vite**
-(plain JavaScript, no engine editor). Game code is in `src/`, the game's
-overview in `README.md`. `npm run build` makes the release build in `dist/`;
-a test build (`npx vite build --mode test --outDir dist-test`) exposes
+(plain JavaScript, no engine editor). Game code is in `web/src/`, the game's
+overview in `README.md`. `npm run build` (run in `web/`) makes the release
+build in `web/dist/`; a test build (`npx vite build --mode test --outDir dist-test`,
+also in `web/`) exposes
 `window.game` for Playwright checks. Pushing to `main` publishes the game to
 GitHub Pages.
 

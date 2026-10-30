@@ -5,7 +5,7 @@ name: Publish Scrapfall
 on:
   push:
     branches: [main]
-    paths: ['src/**', 'public/**', 'index.html', 'package.json', 'package-lock.json', 'vite.config.js', '.github/workflows/pages.yml']
+    paths: ['web/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -24,12 +24,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: web/package-lock.json
       - name: Build
+        working-directory: web
         run: |
           npm ci
           npm run build
       - name: Push to gh-pages
-        working-directory: dist
+        working-directory: web/dist
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
