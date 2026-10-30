@@ -49,7 +49,7 @@ the tension the whole game hangs on.
    - Extracted: loadout kept, XP = raid XP + 100, extract count +1.
    - Died / timed out: loadout replaced by an empty one except the safe slot,
      XP = floor(raid XP × 0.5), death count +1.
-7. **Closing mid-raid counts as death.** `profile.inRaid` is saved as true at
+7. **Closing mid-raid counts as death.** `in_raid` (`profile.inRaid` in the web build) is saved as true at
    deploy; a profile loaded with it still set is treated as a lost raid.
 8. **XP and level.** Kills give per-Husk XP (`ENEMIES[*].xp`). Level-ups
    carry XP over.
@@ -100,7 +100,7 @@ All three are the same Dustline map with different lighting and multipliers.
 - `husk-network.md`: memory is updated at raid start and end; structures spawn.
 - `combat.md`, `player-movement.md`: how the raider survives the raid.
 - `sanctuary-hub.md`: drop selection and deploy.
-- Save system (future ADR): `inRaid`, profile persistence.
+- Save system (ADR-0003, `docs/architecture/adr-0003-save-profiles.md`): `in_raid`, profile persistence.
 
 ## 8. Acceptance Criteria
 
@@ -108,7 +108,7 @@ All three are the same Dustline map with different lighting and multipliers.
 - [ ] Calling a lift opens it 20 s later and it stays open 25 s.
 - [ ] A lift call spawns 3 Husks 45 m from the lift.
 - [ ] Extracting keeps every loadout item; dying keeps only the safe slot.
-- [ ] Reloading the game with `inRaid` set loses the loadout.
+- [ ] Reloading the game with `in_raid` set loses the loadout.
 - [ ] Night Raid spawns at least as many Husks as Golden Hour at every spawn point.
 - [ ] Level-up threshold is `300 + 150 × level`, with XP carried over.
 
