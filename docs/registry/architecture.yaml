@@ -62,6 +62,18 @@ state_ownership:
     write_access: none-after-load
     referenced_by:
       - docs/architecture/adr-0002-game-data-format.md
+      - docs/architecture/adr-0003-save-profiles.md
+    added: 2026-10-30
+    revised: ""
+
+  - state: player_profile
+    status: active
+    owner_system: core-save
+    adr: docs/architecture/adr-0003-save-profiles.md
+    interface: "Profile (RefCounted) given to systems by setup(); read through getters, changed only through its methods"
+    write_access: profile-methods-only
+    referenced_by:
+      - docs/architecture/adr-0003-save-profiles.md
     added: 2026-10-30
     revised: ""
 
@@ -102,6 +114,20 @@ interfaces:
     signal_signature: "Typed signals declared on the Events autoload (src/core/events.gd); stateless; a node's own signals stay on that node"
     referenced_by:
       - docs/architecture/adr-0001-godot-port-strategy.md
+      - docs/architecture/adr-0003-save-profiles.md
+    added: 2026-10-30
+    revised: ""
+
+  - contract: save_requested
+    status: active
+    pattern: event_bus
+    producer: any-system
+    consumers:
+      - root-scene
+    adr: docs/architecture/adr-0003-save-profiles.md
+    signal_signature: "Events.save_requested() -- emitted after a persistent change; only the root scene calls ProfileStore.save()"
+    referenced_by:
+      - docs/architecture/adr-0003-save-profiles.md
     added: 2026-10-30
     revised: ""
 
@@ -190,6 +216,7 @@ api_decisions:
     referenced_by:
       - docs/architecture/adr-0001-godot-port-strategy.md
       - docs/architecture/adr-0002-game-data-format.md
+      - docs/architecture/adr-0003-save-profiles.md
     added: 2026-10-30
     revised: ""
 
@@ -201,6 +228,17 @@ api_decisions:
     reason: "One validated, typed source of game data that tests can replace with fixtures; @export cannot hold a RefCounted (checked on 4.7.2)"
     referenced_by:
       - docs/architecture/adr-0002-game-data-format.md
+    added: 2026-10-30
+    revised: ""
+
+  - purpose: profile_persistence
+    status: active
+    api: "Versioned JSON in user://profiles/slot_<n>.json written by ProfileStore (tmp, .bak, rename)"
+    not: "ResourceSaver/ResourceLoader or store_var/get_var for saves; accounts or passwords"
+    adr: docs/architecture/adr-0003-save-profiles.md
+    reason: "Readable, migratable, and an edited save cannot run code"
+    referenced_by:
+      - docs/architecture/adr-0003-save-profiles.md
     added: 2026-10-30
     revised: ""
 
@@ -276,6 +314,27 @@ forbidden_patterns:
     description: "Systems must not read game data in _ready() or earlier; only in or after setup(data)."
     why: "Children's _ready() runs before the root scene's, which is where setup() is called (checked on 4.7.2)."
     adr: docs/architecture/adr-0002-game-data-format.md
+    added: 2026-10-30
+
+  - pattern: resource_or_var_saves
+    status: active
+    description: "Never save or load a profile with ResourceSaver/ResourceLoader or store_var/get_var on objects; use ProfileStore JSON."
+    why: "A resource file can instantiate scripts named in it, so an edited save could run code; JSON is also easier to migrate."
+    adr: docs/architecture/adr-0003-save-profiles.md
+    added: 2026-10-30
+
+  - pattern: change_scene_to
+    status: active
+    description: "Never call change_scene_to_file or change_scene_to_packed; the root scene swaps its children (remove and free, instance, add_child, setup)."
+    why: "The root scene owns GameData and the Profile for the whole session; replacing it would drop them."
+    adr: docs/architecture/adr-0003-save-profiles.md
+    added: 2026-10-30
+
+  - pattern: unchecked_int_conversion
+    status: active
+    description: "Never call int() on a loaded value without checking its type first."
+    why: "int() on an Array is a script error that aborts the function (checked on Godot 4.7.2), so a malformed save would break loading."
+    adr: docs/architecture/adr-0003-save-profiles.md
     added: 2026-10-30
 
 # Example:
