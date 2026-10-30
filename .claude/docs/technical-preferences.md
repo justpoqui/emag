@@ -10,31 +10,31 @@
 
 ## Engine & Language
 
-- **Engine**: [TO BE CONFIGURED — run /setup-engine]
-- **Language**: [TO BE CONFIGURED]
-- **Rendering**: [TO BE CONFIGURED]
-- **Physics**: [TO BE CONFIGURED]
+- **Engine**: Three.js r180 (not a framework-supported engine; `engine.name` stays unset in `project.yaml`)
+- **Language**: JavaScript (ES modules), bundled with Vite 7
+- **Rendering**: Three.js WebGLRenderer (WebGL 2)
+- **Physics**: Custom: heightfield terrain + AABB grid (`src/collision.js`)
 
 ## Input & Platform
 
 <!-- Written by /setup-engine. Read by /ux-design, /ux-review, /test-setup, /team-ui, and /dev-story -->
 <!-- to scope interaction specs, test helpers, and implementation to the correct input methods. -->
 
-- **Target Platforms**: [TO BE CONFIGURED — e.g., PC, Console, Mobile, Web]
-- **Input Methods**: [TO BE CONFIGURED — e.g., Keyboard/Mouse, Gamepad, Touch, Mixed]
-- **Primary Input**: [TO BE CONFIGURED — the dominant input for this game]
-- **Gamepad Support**: [TO BE CONFIGURED — Full / Partial / None]
-- **Touch Support**: [TO BE CONFIGURED — Full / Partial / None]
-- **Platform Notes**: [TO BE CONFIGURED — any platform-specific UX constraints]
+- **Target Platforms**: Web (desktop browsers)
+- **Input Methods**: Keyboard/Mouse (pointer lock)
+- **Primary Input**: Keyboard/Mouse
+- **Gamepad Support**: None
+- **Touch Support**: None
+- **Platform Notes**: Published to GitHub Pages and the Claude page; menus run at 30 fps, frame-rate cap and resolution scale in Settings
 
 ## Naming Conventions
 
-- **Classes**: [TO BE CONFIGURED]
-- **Variables**: [TO BE CONFIGURED]
-- **Signals/Events**: [TO BE CONFIGURED]
-- **Files**: [TO BE CONFIGURED]
-- **Scenes/Prefabs**: [TO BE CONFIGURED]
-- **Constants**: [TO BE CONFIGURED]
+- **Classes**: PascalCase
+- **Variables**: camelCase
+- **Signals/Events**: callback properties named `onEvent` (e.g. `onSeen`, `onPeace`)
+- **Files**: lowercase single-word `.js` modules in `src/`
+- **Scenes/Prefabs**: N/A (scenes are built in code)
+- **Constants**: SCREAMING_SNAKE (`RAID_SECONDS`, `LOOT_TABLES`)
 
 ## Performance Budgets
 
@@ -62,7 +62,7 @@
 ## Architecture Decisions Log
 
 <!-- Quick reference linking to full ADRs in docs/architecture/ -->
-- [No ADRs yet — use /architecture-decision to create one]
+- ADR-0001: Husk Network memory as a per-profile counter store with derived traits (`docs/architecture/adr-0001-husk-network-memory.md`)
 
 ## Engine Specialists
 

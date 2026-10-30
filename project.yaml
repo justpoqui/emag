@@ -25,3 +25,9 @@ framework:
 # here. `/settings --local <key>=<value>` writes there; `/settings <key>=<value>`
 # edits this file. See `.claude/docs/config-resolution.md` for the full
 # precedence order.
+
+# Build and run commands (Three.js + Vite). engine.name is left unset: the
+# framework accepts only Godot, Unity or Unreal. No test command yet.
+commands:
+  build: "npm run build"
+  run: "npm run dev"

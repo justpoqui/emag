@@ -36,12 +36,13 @@ All implemented as of `e39543a`:
 - Saved profile: accounts plus a local/cloud save, clamped on load (`accounts.js`, `inventory.js`).
 
 ## Out of scope — not building this
-- **INTENT UNKNOWN — inferred from implementation, not confirmed.** The README's "next steps" lists co-op/PvP (needs a server), more maps, weapon mods/tiers, trader quests, a skill tree, imported animations/models and a downed state. Whether any of these are out of scope has not been decided.
-- Observed in the code, not confirmed as policy: no asset files (everything procedural or synthesized), desktop mouse-and-keyboard only, no server outside the Claude page.
+- **No game server** until co-op/PvP needs one: the game stays single-player and client-side, with saves on the device or the Claude page.
+- Everything in the README's "next steps" is **planned, not out of scope** (author, 2026-10-30): co-op/PvP, more maps, weapon mods/tiers, trader quests, a skill tree, imported models/animations and a downed state.
+- Current constraints, not permanent policy: no asset files (everything procedural or synthesized; imported models will change this), desktop mouse and keyboard only.
 
 ## Build order
-- **INTENT UNKNOWN — next priorities not yet given.** The author wants this section to hold the next priorities, not past history; fill it in once they are chosen.
-- Known candidate from this review: **player level is display-only.** XP (`300 + 150 × level` per level) gates nothing yet; the author confirmed it is a placeholder meant to unlock something later.
+1. **Level unlocks.** Player level gates trader stock, recipes, map conditions and wardrobe pieces: `design/quick-specs/level-unlocks-2026-10-30.md`.
+2. The other planned features listed above. **INTENT UNKNOWN: their order has not been chosen yet.**
 
 ---
 **Who it's for / what they feel:** Desktop players who want a short, tense extraction run, where pushing your luck and how you treat the Husks both carry over. *(INTENT UNKNOWN — inferred.)*

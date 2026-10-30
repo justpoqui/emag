@@ -21,14 +21,15 @@ Each agent owns a specific domain, enforcing separation of concerns and quality.
 
 ## Technology Stack
 
-- **Engine**: [CHOOSE: Godot 4 / Unity / Unreal Engine 5]
-- **Language**: [CHOOSE: GDScript / C# / C++ / Blueprint]
+- **Engine**: Three.js r180 (`three@0.180.0`), no engine editor
+- **Language**: JavaScript (ES modules)
 - **Version Control**: Git with trunk-based development
-- **Build System**: [SPECIFY after choosing engine]
-- **Asset Pipeline**: [SPECIFY after choosing engine]
+- **Build System**: Vite 7 (`npm run build` → `dist/`)
+- **Asset Pipeline**: None. Models, map, UI and sound are generated in code (WebAudio for sound)
 
-> **Note**: Engine-specialist agents exist for Godot, Unity, and Unreal with
-> dedicated sub-specialists. Use the set matching your engine.
+> **Note**: Engine-specialist agents exist for Godot, Unity and Unreal only.
+> None applies to Three.js: use the generic programmer agents. `engine.name` in
+> `project.yaml` stays unset because the framework accepts only those three.
 
 ## Project Structure
 
@@ -42,7 +43,8 @@ Each agent owns a specific domain, enforcing separation of concerns and quality.
      session. It defaults to Godot (the template's example engine); skills that
      need the pinned version read docs/engine-reference/<engine>/VERSION.md on
      demand regardless of this import. -->
-@docs/engine-reference/godot/VERSION.md
+No engine reference is imported: there is no `docs/engine-reference/` entry for
+Three.js. Check Three.js r180 APIs against `node_modules/three` or the r180 docs.
 
 
 ## Technical Preferences
