@@ -11,13 +11,13 @@ files.
 
 ## Play it
 
-Every push to the `3d-shooter` branch builds the game and publishes it to the
+Every push to `main` builds the game and publishes it to the
 `gh-pages` branch. Turn on GitHub Pages once:
 
 1. On GitHub, open the repo's **Settings → Pages**.
 2. Under **Build and deployment**, set **Source** to *Deploy from a branch*,
    pick **gh-pages** and **/ (root)**, and save.
-3. After a minute the game is live at **https://justpoqui.github.io/projects/**.
+3. After a minute the game is live at **https://justpoqui.github.io/emag/**.
 
 This link is lighter than the Claude page, which runs the game inside
 claude.ai.
@@ -43,7 +43,6 @@ counter in the corner.
 ## Running it locally
 
 ```bash
-cd shooter
 npm install
 npm run dev        # http://localhost:5173
 ```
@@ -229,7 +228,7 @@ the SMG hangs on your right. Your stick rides down the right side of the pack.
 ## Code layout
 
 ```
-shooter/
+emag/
   index.html, vite.config.js
   src/
     config.js      every item, weapon, shield, Husk type, loot table, trader and recipe (balance here)
