@@ -1,0 +1,47 @@
+name: Automated Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Run GdUnit4 Tests
+    runs-on: ubuntu-latest
+    # The action publishes its results as a check run. A new repository's
+    # token is read-only, and without checks: write the job fails even when
+    # every test passes. If you protect main, require the `Run GdUnit4 Tests` job
+    # check, not `test-results`: that check run concludes success even when a
+    # test fails.
+    permissions:
+      contents: read
+      checks: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      # godot-version must be a full release (the project pins 4.7; the
+      # developer's editor is 4.7.2). version: installed runs the gdUnit4
+      # committed in addons/ (6.2.2) -- without it the action deletes that
+      # copy and installs the latest release, which may not match the tests.
+      - name: Run GdUnit4 Tests
+        uses: godot-gdunit-labs/gdUnit4-action@v1
+        with:
+          godot-version: '4.7.2'
+          version: 'installed'
+          paths: |
+            tests/unit
+            tests/integration
+          report-name: test-results
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: reports/
