@@ -242,6 +242,28 @@ api_decisions:
     added: 2026-10-30
     revised: ""
 
+  - purpose: renderer_split
+    status: active
+    api: "project.godot rendering_method = forward_plus; rendering_method.web left at its default gl_compatibility"
+    not: "Compatibility on every platform; overriding rendering_method.web"
+    adr: docs/architecture/adr-0004-rendering-and-export.md
+    reason: "Full renderer for PC art; the web build renders with WebGL 2 from the same project (checked on 4.7.2)"
+    referenced_by:
+      - docs/architecture/adr-0004-rendering-and-export.md
+    added: 2026-10-30
+    revised: ""
+
+  - purpose: export_presets
+    status: active
+    api: "Committed export_presets.cfg, created in the editor, exclude_filter tests/* and addons/gdUnit4/*, output outside scanned folders (web/dist/godot/)"
+    not: "Hand-written or gitignored presets; exporting into a folder Godot scans; a bare *.json include filter"
+    adr: docs/architecture/adr-0004-rendering-and-export.md
+    reason: "Reproducible CI exports; an export inside the project is packed into the next one (seen on 4.7.2)"
+    referenced_by:
+      - docs/architecture/adr-0004-rendering-and-export.md
+    added: 2026-10-30
+    revised: ""
+
 # Example:
 #
 # api_decisions:
@@ -335,6 +357,27 @@ forbidden_patterns:
     description: "Never call int() on a loaded value without checking its type first."
     why: "int() on an Array is a script error that aborts the function (checked on Godot 4.7.2), so a malformed save would break loading."
     adr: docs/architecture/adr-0003-save-profiles.md
+    added: 2026-10-30
+
+  - pattern: forward_plus_only_gameplay
+    status: active
+    description: "Gameplay must never depend on an effect only Forward+ renders; every visual has a Compatibility look."
+    why: "The web build renders with Compatibility; a Husk hidden by a missing effect would change the game there."
+    adr: docs/architecture/adr-0004-rendering-and-export.md
+    added: 2026-10-30
+
+  - pattern: multi_threaded_web_export
+    status: active
+    description: "Web exports must be single-threaded (variant/thread_support=false)."
+    why: "GitHub Pages cannot send the cross-origin isolation headers a threaded build needs; the single-threaded build runs without them (checked on 4.7.2)."
+    adr: docs/architecture/adr-0004-rendering-and-export.md
+    added: 2026-10-30
+
+  - pattern: split_pages_deploy
+    status: active
+    description: "Never publish the Three.js site and the Godot web build from separate jobs or workflows; one job builds both, then pushes gh-pages."
+    why: "The Pages workflow re-creates the whole gh-pages branch each run, so a second deploy wipes the first."
+    adr: docs/architecture/adr-0004-rendering-and-export.md
     added: 2026-10-30
 
 # Example:
