@@ -5,6 +5,8 @@ extends Node3D
 
 ## The node holding the imported level model.
 @export var model_path: NodePath = ^"Model"
+## Further imported models that also get collision (e.g. rooms rebuilt in Blender).
+@export var extra_models: Array[NodePath] = []
 ## res:// path of the *_instances.json written by tools/export-glb.
 @export_file("*.json") var instances_json := ""
 ## Where the raider starts, and which way they face (radians, 0 = +Z).
@@ -20,6 +22,10 @@ func _ready() -> void:
 	var model := get_node_or_null(model_path)
 	if model:
 		_add_collision(model)
+	for path in extra_models:
+		var extra := get_node_or_null(path)
+		if extra:
+			_add_collision(extra)
 	if instances_json != "":
 		_add_instances(instances_json)
 	var sun := get_node_or_null(^"Sun") as DirectionalLight3D

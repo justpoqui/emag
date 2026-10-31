@@ -41,6 +41,26 @@ node tools/export-glb/run.cjs
 That overwrites `godot/models/`. Once the team starts editing models in
 Blender, stop re-exporting those files, or the export will overwrite the edits.
 
+## Rebuilt in Blender
+
+| Room | Built by | Output |
+| --- | --- | --- |
+| The Diver's quarters | `tools/blender/build_quarters.py` (shared textures from `tools/blender/make_textures.py`) | `models/sanctuary/env_sanctuary_quarters.gltf` + `.bin`, textures in `textures/sanctuary/` |
+
+The web-game export leaves the quarters out of `sanctuary.glb`, so the two
+never overlap. The quarters' lamps, reflection probe and glow are set up in
+`scenes/sanctuary.tscn` (`QuartersLights`, `QuartersProbe`), not in Blender.
+
+Run the Blender scripts with Blender's Python module (`pip install bpy`):
+
+```bash
+python tools/blender/make_textures.py 1024
+python tools/blender/build_quarters.py <work dir> --render --export
+```
+
+The `.blend` file and preview renders go to `<work dir>`, outside the repo
+(art bible 8.11).
+
 ## Not ported yet
 
 Gameplay (raids, Husk AI and the Husk Network, weapons, inventory, UI,

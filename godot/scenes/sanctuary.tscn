@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/level.gd" id="1_level"]
 [ext_resource type="PackedScene" path="res://models/sanctuary.glb" id="2_model"]
 [ext_resource type="PackedScene" path="res://scenes/raider.tscn" id="3_raider"]
+[ext_resource type="PackedScene" path="res://models/sanctuary/env_sanctuary_quarters.gltf" id="4_quarters"]
 
 [sub_resource type="Environment" id="Environment_sanctuary"]
 background_mode = 1
@@ -17,6 +18,11 @@ fog_mode = 1
 fog_light_color = Color(0.082, 0.075, 0.059, 1)
 fog_depth_begin = 14.0
 fog_depth_end = 30.0
+ssao_enabled = true
+glow_enabled = true
+glow_intensity = 0.6
+glow_bloom = 0.05
+glow_hdr_threshold = 1.2
 
 [node name="Sanctuary" type="Node3D"]
 script = ExtResource("1_level")
@@ -24,6 +30,7 @@ instances_json = "res://models/sanctuary_instances.json"
 spawn = Vector3(0, 0, 0.3)
 spawn_yaw = 3.14159
 other_scene = "res://scenes/dustline.tscn"
+extra_models = Array[NodePath]([NodePath("Quarters")])
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_sanctuary")
@@ -32,3 +39,78 @@ environment = SubResource("Environment_sanctuary")
 
 [node name="Raider" parent="." instance=ExtResource("3_raider")]
 fov = 48.0
+
+[node name="Quarters" parent="." instance=ExtResource("4_quarters")]
+
+[node name="QuartersLights" type="Node3D" parent="."]
+
+[node name="LampMain" type="OmniLight3D" parent="QuartersLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.72, 0.4)
+light_color = Color(1, 0.66, 0.38, 1)
+light_energy = 2.2
+shadow_enabled = true
+omni_range = 8.0
+distance_fade_enabled = true
+distance_fade_begin = 20.0
+distance_fade_shadow = 12.0
+distance_fade_length = 5.0
+
+[node name="LampBed" type="OmniLight3D" parent="QuartersLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.4, 0.86, 0.2)
+light_color = Color(1, 0.66, 0.38, 1)
+light_energy = 0.7
+omni_range = 3.0
+
+[node name="LampVanity" type="OmniLight3D" parent="QuartersLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.7, 2.0, 2.45)
+light_color = Color(1, 0.72, 0.48, 1)
+light_energy = 0.6
+omni_range = 3.0
+
+[node name="LampBanner" type="OmniLight3D" parent="QuartersLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.55, 2.9, -3.0)
+light_color = Color(1, 0.7, 0.45, 1)
+light_energy = 0.8
+omni_range = 2.5
+
+[node name="String0" type="OmniLight3D" parent="QuartersLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.22, 2.78, -1.4)
+light_color = Color(1, 0.66, 0.38, 1)
+light_energy = 0.5
+omni_range = 3.5
+
+[node name="String1" type="OmniLight3D" parent="QuartersLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.65, -1.4)
+light_color = Color(1, 0.66, 0.38, 1)
+light_energy = 0.5
+omni_range = 3.5
+
+[node name="String2" type="OmniLight3D" parent="QuartersLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.22, 2.78, -1.4)
+light_color = Color(1, 0.66, 0.38, 1)
+light_energy = 0.5
+omni_range = 3.5
+
+[node name="String3" type="OmniLight3D" parent="QuartersLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.32, 2.78, 1.4)
+light_color = Color(1, 0.66, 0.38, 1)
+light_energy = 0.5
+omni_range = 3.5
+
+[node name="String4" type="OmniLight3D" parent="QuartersLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 2.65, 1.4)
+light_color = Color(1, 0.66, 0.38, 1)
+light_energy = 0.5
+omni_range = 3.5
+
+[node name="String5" type="OmniLight3D" parent="QuartersLights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.82, 2.78, 1.4)
+light_color = Color(1, 0.66, 0.38, 1)
+light_energy = 0.5
+omni_range = 3.5
+
+[node name="QuartersProbe" type="ReflectionProbe" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
+size = Vector3(8, 3.4, 7)
+box_projection = true
+interior = true

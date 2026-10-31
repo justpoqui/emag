@@ -98,6 +98,16 @@ async function run() {
     const s = new Sanctuary(QUALITY.high);
     s.frontWall.visible = true; // only hidden for the title-screen camera
     s.scene.remove(s.player.model); // Godot has its own walkable raider
+    // The Diver's quarters are rebuilt in Blender (tools/blender/build_quarters.py):
+    // leave everything inside the room's footprint out of this export.
+    const box = new THREE.Box3();
+    const centre = new THREE.Vector3();
+    for (const c of [...s.scene.children]) {
+      if (c.isLight) c.getWorldPosition(centre);
+      else if (box.setFromObject(c).isEmpty()) continue;
+      else box.getCenter(centre);
+      if (Math.abs(centre.x) < 4.3 && centre.z > -3.56 && centre.z < 3.75 && centre.y < 3.7) s.scene.remove(c);
+    }
     const root = new THREE.Group();
     root.name = 'Sanctuary';
     for (const c of [...s.scene.children]) root.add(c);

@@ -14,7 +14,7 @@ Run with the Blender Python module (bpy):
     python tools/blender/build_quarters.py <work dir> [--render] [--export]
 Writes <work dir>/env_sanctuary_quarters.blend (kept outside the repo, per
 the art bible), previews to <work dir>/preview_*.png with --render, and
-godot/models/sanctuary/env_sanctuary_quarters.glb with --export.
+godot/models/sanctuary/env_sanctuary_quarters.gltf (+ .bin) with --export.
 """
 
 import math
@@ -904,6 +904,25 @@ def setup_render(out_png, cam_pos, look_at, fov=48.0, res=(1280, 720), samples=6
     bpy.ops.render.render(write_still=True)
 
 
+def merge_by_material(coll, keep=()):
+    """Joins every static mesh that shares a material into one mesh (art
+    bible 8.4: fewer draw calls). Objects named in `keep` stay separate so
+    the game can show or hide them (the front wall)."""
+    groups = {}
+    for o in coll.objects:
+        if o.type == "MESH" and o.name not in keep and o.data.materials:
+            groups.setdefault(o.data.materials[0].name, []).append(o)
+    for name, objs in groups.items():
+        bpy.ops.object.select_all(action="DESELECT")
+        for o in objs:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = objs[0]
+        if len(objs) > 1:
+            bpy.ops.object.join()
+        merged = bpy.context.view_layer.objects.active
+        merged.name = merged.data.name = name.replace("mat_", "quarters_")
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     os.makedirs(WORK, exist_ok=True)
@@ -923,16 +942,21 @@ def main():
         setup_render(os.path.join(WORK, "preview_corner.png"), (-2.6, 1.7, 2.6), (3.0, 1.1, -1.5))
     if DO_EXPORT:
         os.makedirs(MODELS, exist_ok=True)
+        merge_by_material(coll, keep={"front_wall"})
         bpy.ops.object.select_all(action="DESELECT")
         for o in coll.objects:
-            o.select_set(True)
+            if o.type == "MESH":
+                o.select_set(True)
+        # .gltf + .bin with the textures left as the shared files in
+        # godot/textures/sanctuary/ (art bible 8.12: never embedded). Lights
+        # are authored in the Godot scene, where their brightness is tuned.
         bpy.ops.export_scene.gltf(
-            filepath=os.path.join(MODELS, "env_sanctuary_quarters.glb"),
-            export_format="GLB", use_selection=True, export_apply=True,
-            export_yup=True, export_tangents=True, export_lights=True,
-            export_image_format="NONE", export_materials="EXPORT",
+            filepath=os.path.join(MODELS, "env_sanctuary_quarters.gltf"),
+            export_format="GLTF_SEPARATE", export_texture_dir="../../textures/sanctuary",
+            use_selection=True, export_apply=True, export_yup=True, export_tangents=True,
+            export_lights=False, export_cameras=False, export_materials="EXPORT",
+            export_image_format="AUTO",
         )
-
 
 if __name__ == "__main__":
     main()
