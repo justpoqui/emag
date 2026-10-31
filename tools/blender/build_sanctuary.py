@@ -1132,9 +1132,9 @@ def build_clinic(M, P, coll):
     kit.box("clinic_stool", M["timber"], coll, (17.9, 0.6, -0.25), (0.34, 0.05, 0.34), bev=0.02)
     for s1 in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
         kit.box(f"clinic_stool_leg{s1}", M["rust"], coll, (17.9 + s1[0] * 0.13, 0.29, -0.25 + s1[1] * 0.13), (0.03, 0.58, 0.03), bev=0.004)
-    kit.cylinder("clinic_towel_line", M["canvas"], coll, (x1 - 0.05, 2.05, 0.45), (18.9, 2.0, 0.45), 0.004, segments=4, bev=0)
-    for k in range(3):
-        kit.box(f"clinic_towel{k}", bone if k != 1 else M["mattress"], coll, (19.15 + k * 0.28, 1.82, 0.45), (0.22, 0.4, 0.02), soft=True, puff=0.3)
+    for k in range(4):  # clean towels folded on top of the medicine shelves, one over the basin's edge
+        kit.box(f"clinic_towel{k}", bone if k % 2 else M["mattress"], coll, (17.45 + (k // 2) * 0.7, 2.06 + (k % 2) * 0.06, z1 - 0.32), (0.34, 0.06, 0.28), rot=(0, 0, rng.uniform(-0.08, 0.08)), soft=True, puff=0.4)
+    kit.box("clinic_towel_basin", bone, coll, (x1 - 0.35, 0.86, -0.13), (0.3, 0.14, 0.03), rot=(0.4, 0, 0), soft=True, puff=0.4)
     kit.cylinder("clinic_bucket", M["steel"], coll, (18.85, 0, 0.2), (18.85, 0.28, 0.2), 0.13, segments=14)
     kit.cylinder("clinic_mop", M["timber"], coll, (18.9, 0.05, 0.25), (19.05, 1.3, 0.4), 0.014, segments=6)
     # papers on the walls: the body chart over the first cot, her check-up list and a notice by the second
@@ -1703,7 +1703,7 @@ def main():
     M_TIMBER, M_DARK = M["timber"], M["dark"]
     M["scorch"] = kit.picture_material("mat_decal_scorch_01", os.path.join(TEX, "decal_scorch_albedo.png"), alpha=True, rough=0.9)
     M["grow"] = kit.pbr("mat_grow_light_01", None, tint=(0.95, 0.6, 0.7), emission=(0.85, 0.34, 0.48), emission_strength=8.0)
-    M["bottle"] = kit.pbr("mat_bottle_amber_01", None, tint=(0.16, 0.075, 0.025), rough=0.12)  # dark brown glass
+    M["bottle"] = kit.pbr("mat_bottle_amber_01", None, tint=(0.05, 0.016, 0.004), rough=0.12)  # dark brown glass (linear values)
     M["ice"] = kit.pbr("mat_shield_cell_01", None, tint=(0.62, 0.85, 0.94), rough=0.3, metal=0.6)  # Shield Ice, never glowing
     M["bone"] = kit.pbr("mat_cloth_bone_01", "canvas", tint=(0.93, 0.9, 0.82))
     M["circuit"] = kit.pbr("mat_circuit_board_01", "canvas", tint=(0.2, 0.3, 0.2), rough=0.5)
