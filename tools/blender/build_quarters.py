@@ -155,14 +155,80 @@ def make_pictures():
         a[..., :3] *= (1.0 - amount * np.clip(n - 0.35, 0, 1))[..., None]
         return Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8), img.mode)
 
-    # Painted signboard over the room: plank colour, hand-painted lettering
-    sb = Image.open(os.path.join(TEX, "plank_albedo.png")).convert("RGB").crop((0, 0, 1024, 256)).resize((1024, 256))
-    d = ImageDraw.Draw(sb)
-    d.text((512, 100), "PATRON'S SANCTUARY", font=font(78), fill=(222, 208, 182), anchor="mm")
-    d.text((512, 196), "REST  ·  REARM  ·  RETURN", font=font(44), fill=(198, 160, 108), anchor="mm")
-    p = os.path.join(TEX, "sign_sanctuary_albedo.png")
-    grime(sb, 0.5, 1).save(p)
-    out["sign"] = p
+    # The signboard has its own painted-board texture set: dark paint over
+    # horizontal boards, cream lettering, chipped where hands and weather wore it.
+    W, Hs = 1024, 256
+    yy, xx = np.mgrid[0:Hs, 0:W] / np.array([Hs, W])[:, None, None]
+    r = np.random.default_rng(31)
+    def noise(sx, sy, oct_=4, seed=0):
+        rr = np.random.default_rng(seed)
+        acc = np.zeros((Hs, W))
+        for o_ in range(oct_):
+            f = 2 ** o_
+            small = rr.random((int(sy * f) + 2, int(sx * f) + 2))
+            acc += np.asarray(Image.fromarray((small * 255).astype(np.uint8)).resize((W, Hs), Image.BICUBIC)).astype(float) / 255 / f
+        return acc / acc.max()
+    grain = noise(6, 40, 4, 1)  # boards run horizontally
+    boards = (np.floor(yy * 3) % 3)
+    seam = np.abs((yy * 3) % 1.0 - 0.5) * 2
+    seam = np.clip((seam - 0.93) / 0.06, 0, 1)
+    wood = np.stack([0.30 + 0.12 * grain, 0.23 + 0.09 * grain, 0.16 + 0.06 * grain], -1) * (0.9 + 0.08 * boards[..., None])
+    paint = np.array([0.19, 0.22, 0.20]) * (0.92 + 0.12 * noise(3, 2, 3, 2))[..., None]
+    chips = noise(14, 6, 5, 3)
+    edge = np.minimum(np.minimum(xx, 1 - xx) * 8, np.minimum(yy, 1 - yy) * 4)
+    keep = np.clip((chips - 0.35 + 0.25 * np.clip(edge, 0, 1)) * 6, 0, 1)  # paint wears off at the edges first
+    letters = Image.new("L", (W, Hs), 0)
+    d = ImageDraw.Draw(letters)
+    d.text((W // 2, 104), "PATRON'S SANCTUARY", font=font(80), fill=255, anchor="mm")
+    accent = Image.new("L", (W, Hs), 0)
+    da = ImageDraw.Draw(accent)
+    da.text((W // 2, 198), "REST  ·  REARM  ·  RETURN", font=font(42), fill=255, anchor="mm")
+    da.line((150, 156, W - 150, 156), fill=255, width=4)
+    let = np.asarray(letters).astype(float) / 255 * np.clip((chips - 0.2) * 5, 0, 1)
+    acc = np.asarray(accent).astype(float) / 255 * np.clip((chips - 0.25) * 5, 0, 1)
+    col = wood * (1 - keep[..., None]) + paint * keep[..., None]
+    col = col * (1 - let[..., None]) + np.array([0.87, 0.81, 0.71]) * let[..., None]
+    col = col * (1 - acc[..., None]) + np.array([0.78, 0.62, 0.42]) * acc[..., None]
+    col *= (1 - 0.6 * seam)[..., None]
+    soot = noise(2, 1, 3, 4)
+    col *= (1 - 0.35 * np.clip(soot - 0.4, 0, 1) - 0.25 * np.clip(0.3 - yy, 0, 1))[..., None]  # lamp soot along the top
+    height = 0.5 * grain + 0.25 * keep + 0.15 * (let + acc) - 0.8 * seam
+    du = np.roll(height, -1, 1) - np.roll(height, 1, 1)
+    dv = np.roll(height, -1, 0) - np.roll(height, 1, 0)
+    n = np.stack([-du * 6, dv * 6, np.ones_like(height)], -1)
+    n /= np.linalg.norm(n, axis=-1, keepdims=True)
+    rough = 0.86 - 0.14 * keep - 0.05 * (let + acc)
+    Image.fromarray((np.clip(col, 0, 1) * 255).astype(np.uint8)).save(os.path.join(TEX, "sign_sanctuary_albedo.png"))
+    Image.fromarray(((n * 0.5 + 0.5) * 255).astype(np.uint8)).save(os.path.join(TEX, "sign_sanctuary_normal.png"))
+    orm = np.stack([np.clip(1 - 0.5 * seam, 0, 1), np.clip(rough, 0, 1), np.zeros_like(rough)], -1)
+    Image.fromarray((orm * 255).astype(np.uint8)).save(os.path.join(TEX, "sign_sanctuary_orm.png"))
+
+    # The rug: its own woven pattern, faded and worn pale in the middle where people stand
+    R = 1024
+    yy, xx = np.mgrid[0:R, 0:R] / R - 0.5
+    rad = np.sqrt(xx ** 2 + yy ** 2) * 2  # 0 centre, 1 rim
+    bands = np.select([rad < 0.18, rad < 0.24, rad < 0.62, rad < 0.7, rad < 0.86, rad < 0.92], [0, 1, 2, 1, 3, 1], 2)
+    pal = np.array([[0.52, 0.4, 0.34], [0.33, 0.27, 0.23], [0.47, 0.35, 0.3], [0.56, 0.5, 0.4]])  # faded, under ~35% saturation
+    col = pal[bands]
+    ang = np.arctan2(yy, xx)
+    diamonds = (np.abs(((ang / np.pi * 12) % 2) - 1) + np.abs(((rad - 0.78) / 0.08)) < 0.6) & (rad > 0.7) & (rad < 0.86)
+    col[diamonds] = [0.3, 0.22, 0.17]
+    weave = (np.sin(np.arange(R) * 2 * np.pi / 6)[None, :] * np.sin(np.arange(R) * 2 * np.pi / 6)[:, None]) * 0.5 + 0.5
+    big = np.asarray(Image.fromarray((r.random((16, 16)) * 255).astype(np.uint8)).resize((R, R), Image.BICUBIC)).astype(float) / 255
+    worn = np.clip((1 - rad * 1.5) * (0.6 + 0.6 * big), 0, 1)
+    col = col * (0.88 + 0.12 * weave)[..., None]
+    col = col * (1 - 0.35 * worn[..., None]) + np.array([0.55, 0.5, 0.42]) * 0.35 * worn[..., None]  # trodden pale
+    stains = np.clip((np.asarray(Image.fromarray((r.random((10, 10)) * 255).astype(np.uint8)).resize((R, R), Image.BICUBIC)).astype(float) / 255 - 0.65) * 3, 0, 1)
+    col *= (1 - 0.3 * stains)[..., None]
+    h = 0.7 * weave - 0.3 * worn
+    du = np.roll(h, -1, 1) - np.roll(h, 1, 1)
+    dv = np.roll(h, -1, 0) - np.roll(h, 1, 0)
+    n = np.stack([-du * 2.5, dv * 2.5, np.ones_like(h)], -1)
+    n /= np.linalg.norm(n, axis=-1, keepdims=True)
+    Image.fromarray((np.clip(col, 0, 1) * 255).astype(np.uint8)).save(os.path.join(TEX, "rug_albedo.png"))
+    Image.fromarray(((n * 0.5 + 0.5) * 255).astype(np.uint8)).save(os.path.join(TEX, "rug_normal.png"))
+    orm = np.stack([0.85 + 0.15 * weave, 0.95 - 0.1 * worn, np.zeros_like(h)], -1)
+    Image.fromarray((np.clip(orm, 0, 1) * 255).astype(np.uint8)).save(os.path.join(TEX, "rug_orm.png"))
 
     # Stencil plate on the locker
     st = Image.new("RGB", (256, 96), (58, 64, 52))
@@ -321,24 +387,41 @@ def plane(name, mat, coll, pos, w, h, rot):
     return o
 
 
-def displaced_panel(name, mat, coll, pos, w, h, rot, step=0.05, depth=0.32, seed=1):
-    """A hewn rock surface: a grid pushed back (away from its normal) by noise."""
+def displaced_panel(name, mat, coll, pos, w, h, rot, step=0.05, depth=0.3, seed=1, facet=0.32, lumps=True, tilt=0.55, edge=0.08):
+    """A hewn rock surface. Each chisel blow leaves a flat, tilted facet; the
+    facets meet in sharp steps. The grid is pushed back (away from its normal),
+    never into the room."""
+    nx, ny = max(2, int(w / step)), max(2, int(h / step))
     bm = bmesh.new()
-    bmesh.ops.create_grid(bm, x_segments=max(2, int(w / step)), y_segments=max(2, int(h / step)), size=0.5)
-    for v in bm.verts:
-        v.co.x *= w
-        v.co.y *= h
+    bmesh.ops.create_grid(bm, x_segments=nx, y_segments=ny, size=0.5)
+    r = np.random.default_rng(seed)
+    verts = list(bm.verts)
+    uv = np.array([(v.co.x * w, v.co.y * h) for v in verts])
+    # jittered seeds, one facet each: height = c + a*du + b*dv
+    gx, gy = np.meshgrid(np.arange(-w / 2, w / 2 + facet, facet), np.arange(-h / 2, h / 2 + facet, facet))
+    seeds = np.stack([gx.ravel(), gy.ravel()], 1) + r.uniform(-0.45, 0.45, (gx.size, 2)) * facet
+    c = r.uniform(0.25, 1.0, len(seeds)) * depth * 0.6
+    slope = r.uniform(-tilt, tilt, (len(seeds), 2))
+    hgt = np.empty(len(uv))
+    for i in range(0, len(uv), 4096):
+        chunk = uv[i:i + 4096]
+        d = np.sqrt(((chunk[:, None, :] - seeds[None, :, :]) ** 2).sum(-1))
+        # each facet's plane, blended over `edge` metres where facets meet, so
+        # the steps between chisel facets are short sloped ridges, not stairs
+        planes = c[None, :] + (slope[None, :, :] * (chunk[:, None, :] - seeds[None, :, :])).sum(-1)
+        near = np.argsort(d, 1)[:, :3]
+        dn = np.take_along_axis(d, near, 1)
+        wgt = np.exp(-(dn - dn[:, :1]) / edge)
+        wgt /= wgt.sum(1, keepdims=True)
+        hgt[i:i + 4096] = (np.take_along_axis(planes, near, 1) * wgt).sum(1)
+    if lumps:  # broad bulges of the rock face
+        hgt += depth * 0.4 * (np.sin(uv[:, 0] * 1.7 + seed) * np.sin(uv[:, 1] * 2.3 + 2 * seed) * 0.5 + 0.5)
+    hgt += r.normal(0, 0.004, len(uv))  # grit
+    hgt = np.clip(hgt, 0, None)
+    for v, (u_, v_), d in zip(verts, uv, hgt):
+        v.co = Vector((u_, v_, -d))
     o = mesh_obj(name, bm, mat, coll, g2b(*pos), rot)
-    for i, (scale, strength) in enumerate(((0.7, depth), (0.25, depth * 0.4), (0.08, depth * 0.12))):
-        t = bpy.data.textures.new(f"{name}_n{i}", "CLOUDS")
-        t.noise_scale = scale
-        t.noise_depth = 3
-        t.noise_basis = "VORONOI_F2" if i < 2 else "BLENDER_ORIGINAL"
-        m = o.modifiers.new(f"Displace{i}", "DISPLACE")
-        m.texture = t
-        m.texture_coords = "GLOBAL"
-        m.strength = strength
-        m.mid_level = 1.0  # only push back, never into the room
+    o.data.set_sharp_from_angle(angle=math.radians(28))
     o["uv"] = "box"
     return o
 
@@ -410,13 +493,13 @@ def build(pics):
         "canvas": pbr("mat_canvas_01", "canvas"),
         "blanket": pbr("mat_canvas_blanket_01", "canvas", tint=srgb("#b07a5c")),
         "mattress": pbr("mat_canvas_ticking_01", "canvas", tint=srgb("#d8cdb4")),
-        "rug": pbr("mat_canvas_rug_01", "canvas", tint=srgb("#a0684e")),
+        "rug": pbr("mat_rug_woven_01", "rug"),
         "bare": pbr("mat_metal_bare_01", None, tint=srgb("#7c858f"), rough=0.35, metal=1.0),
         "dark": pbr("mat_metal_dark_01", None, tint=srgb("#2a2c2e"), rough=0.5, metal=0.8),
         "glass": pbr("mat_glass_mirror_01", None, tint=srgb("#c8c4bc"), rough=0.04, metal=1.0),
         "bulb": pbr("mat_bulb_warm_01", None, tint=(1, 0.9, 0.75), emission=(1.0, 0.62, 0.32), emission_strength=25.0),
         "leaf": pbr("mat_leaf_01", None, tint=srgb("#5a6a3c"), rough=0.6),
-        "sign": picture_material("mat_sign_sanctuary_01", pics["sign"], rough=0.75),
+        "sign": pbr("mat_sign_sanctuary_01", "sign_sanctuary"),
         "stash": picture_material("mat_sign_stash_01", pics["stash"], rough=0.6),
         "screen": picture_material("mat_screen_topside_01", pics["screen"], emission_strength=1.6, rough=0.2),
         "poster_dustline": picture_material("mat_poster_dustline_01", pics["poster_dustline"], alpha=True),
@@ -431,9 +514,8 @@ def build(pics):
     displaced_panel("rock_wall_west", M["rock"], coll, (-4.0, H / 2, 0), 7.3, H + 0.2, (R90, 0, R90), seed=1)
     displaced_panel("rock_wall_east", M["rock"], coll, (4.0, H / 2, 0), 7.3, H + 0.2, (R90, 0, -R90), seed=2)
     displaced_panel("rock_ceiling", M["rock_ceiling"], coll, (0, H, 0), 8.3, 7.3, (math.pi, 0, 0), step=0.07, depth=0.22, seed=3)
-    floor = displaced_panel("earth_floor", M["earth"], coll, (0, 0.0, 0), 8.2, 7.2, (0, 0, 0), step=0.1, depth=0.03, seed=4)
-    for m in floor.modifiers:
-        m.mid_level = 1.0  # only dips: nothing pokes up through the rug
+    floor = displaced_panel("earth_floor", M["earth"], coll, (0, 0.0, 0), 8.2, 7.2, (0, 0, 0), step=0.1, depth=0.03, seed=4, facet=0.6, lumps=False, tilt=0.02, edge=0.15)
+    floor.data.set_sharp_from_angle(angle=math.radians(80))  # trodden earth stays smooth
 
     # --- timber mine sets: post, cap, post; slightly out of true ---
     for i, z in enumerate((-1.4, 1.4)):
@@ -478,7 +560,11 @@ def build(pics):
     box("pillow", M["mattress"], coll, (bx, 0.56, bz - 0.78), (0.58, 0.12, 0.32), rot=(0.08, 0, 0.05), bev=0.05, soft=True)
     # boots by the bed
     for k, dx in enumerate((0, 0.16)):
-        box(f"boot_{k}", M["canvas"], coll, (bx + 0.62 + dx, 0.08, bz + 0.7), (0.12, 0.16, 0.3), rot=(0, 0, 0.3 * (k - 0.5)), soft=True, puff=0.25)
+        yaw = 0.3 * (k - 0.5)
+        ox, oz = bx + 0.62 + dx, bz + 0.7
+        box(f"boot_{k}_foot", M["canvas"], coll, (ox, 0.05, oz), (0.11, 0.1, 0.29), rot=(0, 0, yaw), soft=True, puff=0.3)
+        box(f"boot_{k}_sole", M["dark"], coll, (ox, 0.012, oz), (0.115, 0.024, 0.3), rot=(0, 0, yaw), bev=0.008)
+        box(f"boot_{k}_shaft", M["canvas"], coll, (ox - 0.1 * math.sin(yaw), 0.17, oz - 0.09 * math.cos(yaw)), (0.11, 0.2, 0.12), rot=(0.12, 0, yaw), soft=True, puff=0.3)
 
     # --- nightstand: an ammo crate, a lamp and a mug ---
     nx, nz = -3.4, 0.2
@@ -503,6 +589,14 @@ def build(pics):
             box(f"locker_vent_{s}_{k}", M["dark"], coll, (lx - 0.302, 1.7 + k * 0.035, lz + s * 0.2), (0.006, 0.012, 0.22), bev=0)
         box(f"locker_handle_{s}", M["bare"], coll, (lx - 0.32, 1.05, lz + s * 0.06), (0.03, 0.16, 0.025), bev=0.006)
     plane("locker_stash_plate", M["stash"], coll, (lx - 0.305, 1.42, lz), 0.4, 0.15, (R90, 0, -R90))
+    box("locker_kickplate", M["bare"], coll, (lx - 0.302, 0.07, lz), (0.012, 0.1, 0.76), bev=0.003)
+    for sz in (-0.34, 0.34):
+        for sx in (-0.24, 0.24):
+            box(f"locker_foot_{sx}_{sz}", M["dark"], coll, (lx + sx, 0.012, lz + sz), (0.06, 0.025, 0.06), bev=0.005)
+    box("locker_padlock", M["bare"], coll, (lx - 0.345, 0.98, lz), (0.025, 0.06, 0.05), bev=0.008)
+    cylinder("locker_padlock_shackle", M["bare"], coll, (lx - 0.345, 1.01, lz - 0.015), (lx - 0.345, 1.04, lz + 0.015), 0.004)
+    plane("locker_note", M["mattress"], coll, (lx - 0.304, 1.62, lz - 0.21), 0.12, 0.15, (R90, 0.08, -R90))
+    box("locker_box_top", M["canvas"], coll, (lx + 0.02, 2.11, lz + 0.12), (0.4, 0.22, 0.32), rot=(0, 0, 0.15), bev=0.01)
     box("locker_tag_amber", M["bulb"], coll, (lx - 0.31, 1.3, lz + 0.3), (0.01, 0.03, 0.03), bev=0)
 
     # --- footlocker: timber trunk with steel corners ---
@@ -514,7 +608,7 @@ def build(pics):
     box("footlocker_hasp", M["bare"], coll, (fx, 0.36, fz + 0.305), (0.08, 0.1, 0.02), bev=0.005)
     # gear repair in progress on the lid: a pack, a tape roll, a spool
     pr = (0, 0, 0.4)
-    box("pack_repair", M["canvas"], coll, (fx - 0.15, 0.62, fz), (0.36, 0.36, 0.22), rot=pr, soft=True, puff=0.2)
+    box("pack_repair", M["canvas"], coll, (fx - 0.15, 0.64, fz), (0.36, 0.4, 0.24), rot=pr, soft=True, puff=0.38)
     box("pack_repair_flap", M["canvas"], coll, (fx - 0.15, 0.79, fz + 0.02), (0.37, 0.05, 0.24), rot=pr, soft=True, puff=0.2)
     for k, dx in enumerate((-0.09, 0.09)):
         box(f"pack_repair_strap_{k}", M["dark"], coll, (fx - 0.15 + dx * math.cos(0.4), 0.66, fz + 0.115 + dx * math.sin(0.4)), (0.035, 0.3, 0.01), rot=pr, bev=0.003)
@@ -559,32 +653,53 @@ def build(pics):
     o["uv"] = "box"
 
     # --- signboard, posters, tally marks, photo ---
-    plane("sign_sanctuary", M["sign"], coll, (0.2, 2.85, -3.45), 2.2, 0.55, (R90, 0, 0))
+    # the signboard: its own thick board, hung off the planks on two steel brackets
+    sx_, sy_, sz_ = 0.2, 2.86, -3.34
+    box("sign_board", M["timber"], coll, (sx_, sy_, sz_), (2.3, 0.6, 0.05), rot=(0.06, 0, 0.012), bev=0.012, grain="long")
+    plane("sign_face", M["sign"], coll, (sx_, sy_ + 0.0015, sz_ + 0.027), 2.26, 0.565, (R90 + 0.06, 0, 0.012))
+    for k, bx_ in enumerate((-0.75, 1.15)):
+        box(f"sign_bracket_{k}", M["steel"], coll, (bx_, sy_ + 0.33, -3.4), (0.04, 0.04, 0.18), bev=0.006)
+        cylinder(f"sign_hanger_{k}", M["dark"], coll, (bx_, sy_ + 0.33, -3.33), (bx_, sy_ + 0.27, -3.33), 0.006)
     plane("poster_dustline", M["poster_dustline"], coll, (-3.86, 1.75, 2.2), 0.7, 1.0, (R90, 0, R90 - 0.02))
     plane("poster_plating", M["poster_plating"], coll, (3.86, 1.75, 0.3), 0.7, 1.0, (R90, 0.03, -R90))
     plane("decal_tally", M["tally"], coll, (-3.0, 1.0, -3.455), 0.8, 0.4, (R90, 0, 0))
     plane("photo_family", M["photo"], coll, (-3.6, 1.15, -3.455), 0.18, 0.135, (R90, 0.05, 0))
 
-    # --- rug ---
+    # --- rug: its own woven pattern, a little thickness, soft wrinkles ---
     bm = bmesh.new()
-    bmesh.ops.create_circle(bm, cap_ends=True, segments=48, radius=1.35)
-    o = mesh_obj("rug", bm, M["rug"], coll, g2b(0.1, 0.015, 0.3), (0, 0, 0.3), smooth=False)
-    o["uv"] = "box"
+    uvl = bm.loops.layers.uv.new()
+    bmesh.ops.create_circle(bm, cap_ends=True, segments=64, radius=1.35)
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    for _ in range(3):
+        bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=1, use_grid_fill=True)
+    for v in bm.verts:
+        x_, y_ = v.co.x, v.co.y
+        v.co.z = 0.012 * max(0.0, math.sin(x_ * 3.1 + 0.4) * math.sin(y_ * 2.3)) + 0.006 * math.sin(x_ * 7 + y_ * 5)
+    for f in bm.faces:
+        for loop in f.loops:
+            loop[uvl].uv = (loop.vert.co.x / 2.7 + 0.5, loop.vert.co.y / 2.7 + 0.5)
+    o = mesh_obj("rug", bm, M["rug"], coll, g2b(0.1, 0.012, 0.3), (0, 0, 0.3))
+    sol = o.modifiers.new("Solidify", "SOLIDIFY")
+    sol.thickness = 0.008
+    o["uv"] = "keep"
 
     # --- plant in a rusted can ---
     px, pz = -3.35, 2.75
     bm = bmesh.new()
     bmesh.ops.create_cone(bm, cap_ends=True, segments=18, radius1=0.17, radius2=0.19, depth=0.36)
     mesh_obj("plant_can", bm, M["steel"], coll, g2b(px, 0.18, pz))["uv"] = "box"
-    for k in range(9):
-        ang = k / 9 * 2 * math.pi + rng.uniform(-0.2, 0.2)
-        tilt = rng.uniform(0.4, 0.9)
+    bm = bmesh.new()
+    bmesh.ops.create_circle(bm, cap_ends=True, segments=18, radius=0.165)
+    mesh_obj("plant_soil", bm, M["earth"], coll, g2b(px, 0.34, pz))["uv"] = "box"
+    for k in range(15):
+        ang = k / 15 * 2 * math.pi * 2.3 + rng.uniform(-0.3, 0.3)
+        tilt = rng.uniform(0.25, 0.6) if k < 6 else rng.uniform(0.6, 1.05)
         bm = bmesh.new()
         bmesh.ops.create_grid(bm, x_segments=1, y_segments=4, size=0.5)
         for v in bm.verts:
             t = v.co.y + 0.5
-            v.co.x *= 0.09 * math.sin(math.pi * min(1.0, t * 1.1)) + 0.01
-            v.co.y = t * 0.55
+            v.co.x *= 0.13 * math.sin(math.pi * min(1.0, t * 1.1)) + 0.01
+            v.co.y = t * (0.5 if k < 6 else 0.62)
             v.co.z = -0.12 * t * t
         o = mesh_obj(f"plant_leaf_{k}", bm, M["leaf"], coll, g2b(px, 0.36, pz), (tilt, 0, ang))
         o["uv"] = "box"

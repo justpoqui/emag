@@ -137,16 +137,27 @@ def plank():
     gap = smooth(0.94, 0.99, edge)[None, :].repeat(SIZE, 0)
     rng = np.random.default_rng(21)
     tint = rng.uniform(0.75, 1.15, boards)[board_id][None, :].repeat(SIZE, 0)
-    painted = (rng.random(boards) < 0.5)[board_id][None, :].repeat(SIZE, 0)
+    # each board carries a different amount of old paint: some bare, some mostly painted
+    cover = rng.choice([0.0, 0.0, 0.25, 0.5, 0.75, 0.9], boards)[board_id][None, :].repeat(SIZE, 0)
     grain = fbm(22, 2.0, stretch=(1.0, 0.06))
     h = 0.5 * grain - 0.6 * gap
     wood = mix(hexcol("#4a3a2a"), hexcol("#7a6448"), smooth(0.2, 0.9, grain)) * tint[..., None]
-    paint = mix(hexcol("#5d6658"), hexcol("#7d8576"), fbm(23, 2.5))  # faded sage-grey paint
-    flake = smooth(0.45, 0.6, fbm(24, 1.4)) * painted
+    paint = mix(hexcol("#5a6455"), hexcol("#808878"), fbm(23, 3.0))  # faded sage-grey paint
+    patches = 0.55 * fbm(24, 3.2) + 0.3 * fbm(26, 1.6) + 0.15 * fbm(27, 0.9)  # worn areas, ragged edges
+    # per board, paint survives where `patches` is in its top `cover` share
+    thr = np.ones_like(patches)
+    for b in range(boards):
+        cols = board_id == b
+        c = cover[0, cols][0]
+        if c > 0:
+            thr[:, cols] = np.quantile(patches[:, cols], 1.0 - c)
+    flake = smooth(thr - 0.015, thr + 0.015, patches) * (cover > 0)
+    lip = smooth(0.0, 0.6, flake) - smooth(0.6, 1.0, flake)  # a dark rim where paint lifts
     col = mix(wood, paint, flake)
-    h = h + 0.15 * flake
+    col = mix(col, hexcol("#2a231b"), np.clip(lip, 0, 1) * 0.5)
+    h = h + 0.2 * flake
     col = mix(col, hexcol("#16110c"), gap * 0.9)
-    rough = np.where(flake > 0.5, 0.7, 0.85) + 0.05 * fbm(25, 1.5)
+    rough = np.where(flake > 0.5, 0.68, 0.86) + 0.05 * fbm(25, 1.5)
     save("plank", col, h, rough, np.zeros_like(h), 5.0, 2.0)
 
 
