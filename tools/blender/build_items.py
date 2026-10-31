@@ -491,6 +491,15 @@ def main():
         if "--export" in sys.argv:
             os.makedirs(IMODELS, exist_ok=True)
             kit.merge_by_material(coll, prefix=f"prop_{item}_01_")
+            for o in coll.objects:
+                if o.type == "MESH":  # triangles only, so the exporter can work out tangents for the normal map
+                    bm = bmesh.new()
+                    bm.from_mesh(o.data)
+                    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+                    bm.to_mesh(o.data)
+                    bm.free()
+                elif o.name.split(".")[0] in ("hang",):  # markers keep their plain names in every export
+                    o.name = o.name.split(".")[0]
             bpy.ops.object.select_all(action="DESELECT")
             for o in coll.objects:
                 o.select_set(True)
@@ -500,6 +509,9 @@ def main():
                 export_tangents=True, export_lights=False, export_cameras=False, export_materials="EXPORT",
                 export_image_format="AUTO",
             )
+            for o in coll.objects:  # out of the way of the next item's markers
+                if o.type == "EMPTY":
+                    o.name = f"{o.name}_{item}_done"
 
 
 if __name__ == "__main__":

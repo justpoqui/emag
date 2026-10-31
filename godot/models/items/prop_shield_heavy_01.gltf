@@ -15,7 +15,7 @@
 	],
 	"nodes":[
 		{
-			"name":"hang.002",
+			"name":"hang",
 			"translation":[
 				0,
 				0.36399999260902405,
@@ -58,9 +58,10 @@
 						"POSITION":0,
 						"NORMAL":1,
 						"TEXCOORD_0":2,
-						"TEXCOORD_1":3
+						"TEXCOORD_1":3,
+						"TANGENT":4
 					},
-					"indices":4,
+					"indices":5,
 					"material":0
 				}
 			]
@@ -101,7 +102,7 @@
 		{
 			"bufferView":0,
 			"componentType":5126,
-			"count":3400,
+			"count":3788,
 			"max":[
 				0.12680000066757202,
 				0.2180364727973938,
@@ -117,23 +118,29 @@
 		{
 			"bufferView":1,
 			"componentType":5126,
-			"count":3400,
+			"count":3788,
 			"type":"VEC3"
 		},
 		{
 			"bufferView":2,
 			"componentType":5126,
-			"count":3400,
+			"count":3788,
 			"type":"VEC2"
 		},
 		{
 			"bufferView":3,
 			"componentType":5126,
-			"count":3400,
+			"count":3788,
 			"type":"VEC2"
 		},
 		{
 			"bufferView":4,
+			"componentType":5126,
+			"count":3788,
+			"type":"VEC4"
+		},
+		{
+			"bufferView":5,
 			"componentType":5123,
 			"count":6468,
 			"type":"SCALAR"
@@ -142,32 +149,38 @@
 	"bufferViews":[
 		{
 			"buffer":0,
-			"byteLength":40800,
+			"byteLength":45456,
 			"byteOffset":0,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":40800,
-			"byteOffset":40800,
+			"byteLength":45456,
+			"byteOffset":45456,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":27200,
-			"byteOffset":81600,
+			"byteLength":30304,
+			"byteOffset":90912,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":27200,
-			"byteOffset":108800,
+			"byteLength":30304,
+			"byteOffset":121216,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":60608,
+			"byteOffset":151520,
 			"target":34962
 		},
 		{
 			"buffer":0,
 			"byteLength":12936,
-			"byteOffset":136000,
+			"byteOffset":212128,
 			"target":34963
 		}
 	],
@@ -179,7 +192,7 @@
 	],
 	"buffers":[
 		{
-			"byteLength":148936,
+			"byteLength":225064,
 			"uri":"prop_shield_heavy_01.bin"
 		}
 	]
