@@ -1,6 +1,7 @@
-## The raider: third-person walking, sprinting, crouching and jumping with the
+## The Diver: third-person walking, sprinting, crouching and jumping with the
 ## web game's over-the-shoulder camera (game.js updateCamera). Speeds come
-## from config.js PLAYER.
+## from config.js PLAYER. The model's animations (char_diver_base.glb: idle,
+## walk, run, crouch_idle, crouch_walk, jump) follow what the Diver is doing.
 extends CharacterBody3D
 
 @export var walk_speed := 4.6
@@ -11,10 +12,22 @@ extends CharacterBody3D
 ## Radians of turn per pixel of mouse movement (input.js sensitivity).
 @export var sensitivity := 0.0022
 @export var fov := 72.0
+## Ground speed (m/s) at which each moving animation plays at its authored
+## rate; faster or slower movement speeds the cycle up or down to match.
+@export var walk_anim_speed := 3.0
+@export var run_anim_speed := 6.0
+@export var crouch_anim_speed := 1.8
+## Seconds to blend from one animation to the next.
+@export var anim_blend := 0.18
+
+const LOOPS: Array[StringName] = [&"idle", &"walk", &"run", &"crouch_idle", &"crouch_walk"]
 
 var yaw := 0.0
 var pitch := 0.0
 var crouching := false
+var sprinting := false
+var anim: AnimationPlayer
+var current_anim := &""
 
 @onready var model: Node3D = $Model
 @onready var camera: Camera3D = $Camera
@@ -24,6 +37,12 @@ func _ready() -> void:
 	camera.top_level = true
 	camera.fov = fov
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	anim = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	if anim:
+		for name in LOOPS:  # glTF carries no loop flag: the cycles loop, the jump plays once
+			if anim.has_animation(name):
+				anim.get_animation(name).loop_mode = Animation.LOOP_LINEAR
+		_play(&"idle", 1.0)
 
 
 ## Puts the raider at `pos`, facing `facing` (radians, 0 = +Z).
@@ -54,7 +73,7 @@ func _physics_process(delta: float) -> void:
 	var forward := Vector3(sin(yaw), 0, cos(yaw))
 	var right := Vector3(-cos(yaw), 0, sin(yaw))
 	var dir := (forward * input.y + right * input.x).normalized()
-	var sprinting := Input.is_physical_key_pressed(KEY_SHIFT) and input.y > 0 and not crouching
+	sprinting = Input.is_physical_key_pressed(KEY_SHIFT) and input.y > 0 and not crouching
 	var speed := crouch_speed if crouching else (sprint_speed if sprinting else walk_speed)
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
@@ -70,6 +89,37 @@ func _physics_process(delta: float) -> void:
 
 func _process(_delta: float) -> void:
 	_update_camera()
+	_update_animation()
+
+
+## Picks the animation for what the Diver is doing and matches its rate to
+## the ground speed, so the feet keep pace with the movement.
+func _update_animation() -> void:
+	if anim == null:
+		return
+	var ground := Vector2(velocity.x, velocity.z).length()
+	if not is_on_floor():
+		_play(&"jump", 1.0)
+	elif crouching:
+		if ground > 0.2:
+			_play(&"crouch_walk", ground / crouch_anim_speed)
+		else:
+			_play(&"crouch_idle", 1.0)
+	elif ground > 0.2:
+		if sprinting:
+			_play(&"run", ground / run_anim_speed)
+		else:
+			_play(&"walk", ground / walk_anim_speed)
+	else:
+		_play(&"idle", 1.0)
+
+
+func _play(name: StringName, rate: float) -> void:
+	anim.speed_scale = clampf(rate, 0.5, 2.5)
+	if name == current_anim or not anim.has_animation(name):
+		return
+	current_anim = name
+	anim.play(name, anim_blend)
 
 
 ## Over-the-shoulder camera: pivot 0.95 m right of and 0.3 m above the eye,
