@@ -12,7 +12,9 @@
 				1,
 				2,
 				3,
-				4
+				4,
+				5,
+				6
 			]
 		}
 	],
@@ -21,8 +23,8 @@
 			"name":"fore",
 			"translation":[
 				0,
-				-0.05000000074505806,
-				0.27000001072883606
+				-0.03999999910593033,
+				0.30000001192092896
 			]
 		},
 		{
@@ -30,7 +32,7 @@
 			"translation":[
 				0,
 				-0.10000000149011612,
-				-0.10000000149011612
+				-0.06499999761581421
 			]
 		},
 		{
@@ -38,77 +40,195 @@
 			"translation":[
 				0,
 				0.012000000104308128,
-				0.5920000076293945
+				0.6100000143051147
 			]
 		},
 		{
 			"mesh":0,
-			"name":"wpn_mule_gun_steel_01"
+			"name":"wpn_mule_gun_cloth_01",
+			"rotation":[
+				0.059964004904031754,
+				0,
+				0,
+				0.998200535774231
+			],
+			"translation":[
+				0,
+				-0.052000001072883606,
+				-0.3709999918937683
+			]
 		},
 		{
 			"mesh":1,
-			"name":"wpn_mule_gun_wood_01"
+			"name":"wpn_mule_gun_scrap_metal_01",
+			"translation":[
+				0,
+				0.004000000189989805,
+				0.029999999329447746
+			]
+		},
+		{
+			"mesh":2,
+			"name":"wpn_mule_gun_scrap_wood_01"
+		},
+		{
+			"mesh":3,
+			"name":"wpn_mule_gun_steel_01",
+			"rotation":[
+				0.5,
+				0.5,
+				-0.4999999403953552,
+				0.5000000596046448
+			],
+			"translation":[
+				0.02174999937415123,
+				-0.019999999552965164,
+				-0.30000001192092896
+			]
 		}
 	],
 	"materials":[
 		{
 			"doubleSided":true,
-			"name":"mat_gun_steel_01",
+			"name":"mat_gun_cloth_01",
 			"normalTexture":{
 				"index":0
 			},
+			"occlusionTexture":{
+				"index":1
+			},
 			"pbrMetallicRoughness":{
+				"baseColorFactor":[
+					0.6200000047683716,
+					0.6000000238418579,
+					0.5,
+					1
+				],
 				"baseColorTexture":{
-					"index":1
+					"index":2
 				},
 				"metallicRoughnessTexture":{
-					"index":2
+					"index":1
 				}
 			}
 		},
 		{
 			"doubleSided":true,
-			"name":"mat_gun_wood_01",
+			"name":"mat_gun_scrap_metal_01",
 			"normalTexture":{
 				"index":3
 			},
+			"occlusionTexture":{
+				"index":4
+			},
 			"pbrMetallicRoughness":{
+				"baseColorFactor":[
+					0.7200000286102295,
+					0.6800000071525574,
+					0.6399999856948853,
+					1
+				],
 				"baseColorTexture":{
-					"index":4
+					"index":5
 				},
 				"metallicRoughnessTexture":{
-					"index":5
+					"index":4
+				}
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"mat_gun_scrap_wood_01",
+			"normalTexture":{
+				"index":6
+			},
+			"occlusionTexture":{
+				"index":7
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":8
+				},
+				"metallicRoughnessTexture":{
+					"index":7
+				}
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"mat_gun_steel_01",
+			"normalTexture":{
+				"index":9
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":10
+				},
+				"metallicRoughnessTexture":{
+					"index":11
 				}
 			}
 		}
 	],
 	"meshes":[
 		{
-			"name":"wpn_mule_gun_steel_01",
+			"name":"wpn_mule_gun_cloth_01",
 			"primitives":[
 				{
 					"attributes":{
 						"POSITION":0,
 						"NORMAL":1,
 						"TEXCOORD_0":2,
-						"TEXCOORD_1":3
+						"TEXCOORD_1":3,
+						"TANGENT":4
 					},
-					"indices":4,
+					"indices":5,
 					"material":0
 				}
 			]
 		},
 		{
-			"name":"wpn_mule_gun_wood_01",
+			"name":"wpn_mule_gun_scrap_metal_01",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":5,
-						"NORMAL":6,
-						"TEXCOORD_0":7
+						"POSITION":6,
+						"NORMAL":7,
+						"TEXCOORD_0":8,
+						"TANGENT":9
 					},
-					"indices":8,
+					"indices":10,
 					"material":1
+				}
+			]
+		},
+		{
+			"name":"wpn_mule_gun_scrap_wood_01",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":11,
+						"NORMAL":12,
+						"TEXCOORD_0":13,
+						"TANGENT":14
+					},
+					"indices":15,
+					"material":2
+				}
+			]
+		},
+		{
+			"name":"wpn_mule_gun_steel_01",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":16,
+						"NORMAL":17,
+						"TEXCOORD_0":18,
+						"TEXCOORD_1":19
+					},
+					"indices":20,
+					"material":3
 				}
 			]
 		}
@@ -137,9 +257,78 @@
 		{
 			"sampler":0,
 			"source":5
+		},
+		{
+			"sampler":0,
+			"source":6
+		},
+		{
+			"sampler":0,
+			"source":7
+		},
+		{
+			"sampler":0,
+			"source":8
+		},
+		{
+			"sampler":0,
+			"source":9
+		},
+		{
+			"sampler":0,
+			"source":10
+		},
+		{
+			"sampler":0,
+			"source":11
 		}
 	],
 	"images":[
+		{
+			"mimeType":"image/png",
+			"name":"canvas_normal",
+			"uri":"../../textures/weapons/canvas_normal.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"canvas_orm",
+			"uri":"../../textures/weapons/canvas_orm.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"canvas_albedo",
+			"uri":"../../textures/weapons/canvas_albedo.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"steel_normal",
+			"uri":"../../textures/weapons/steel_normal.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"steel_orm",
+			"uri":"../../textures/weapons/steel_orm.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"steel_albedo",
+			"uri":"../../textures/weapons/steel_albedo.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"plank_normal",
+			"uri":"../../textures/weapons/plank_normal.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"plank_orm",
+			"uri":"../../textures/weapons/plank_orm.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"plank_albedo",
+			"uri":"../../textures/weapons/plank_albedo.png"
+		},
 		{
 			"mimeType":"image/png",
 			"name":"gunsteel_normal",
@@ -154,152 +343,301 @@
 			"mimeType":"image/png",
 			"name":"gunsteel_orm",
 			"uri":"../../textures/weapons/gunsteel_orm.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"gunwood_normal",
-			"uri":"../../textures/weapons/gunwood_normal.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"gunwood_albedo",
-			"uri":"../../textures/weapons/gunwood_albedo.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"gunwood_orm",
-			"uri":"../../textures/weapons/gunwood_orm.png"
 		}
 	],
 	"accessors":[
 		{
 			"bufferView":0,
 			"componentType":5126,
-			"count":5085,
+			"count":2320,
 			"max":[
-				0.0494999997317791,
-				0.06799999624490738,
-				0.5920000076293945
+				0.03999999910593033,
+				0.135946586728096,
+				0.8226045370101929
 			],
 			"min":[
-				-0.02500000037252903,
-				-0.18761183321475983,
-				-0.3680000305175781
+				-0.023000000044703484,
+				-0.07500000298023224,
+				-0.010999999940395355
 			],
 			"type":"VEC3"
 		},
 		{
 			"bufferView":1,
 			"componentType":5126,
-			"count":5085,
+			"count":2320,
 			"type":"VEC3"
 		},
 		{
 			"bufferView":2,
 			"componentType":5126,
-			"count":5085,
+			"count":2320,
 			"type":"VEC2"
 		},
 		{
 			"bufferView":3,
 			"componentType":5126,
-			"count":5085,
+			"count":2320,
 			"type":"VEC2"
 		},
 		{
 			"bufferView":4,
-			"componentType":5123,
-			"count":11568,
-			"type":"SCALAR"
+			"componentType":5126,
+			"count":2320,
+			"type":"VEC4"
 		},
 		{
 			"bufferView":5,
-			"componentType":5126,
-			"count":866,
-			"max":[
-				0.024192553013563156,
-				0.029925672337412834,
-				0.42500001192092896
-			],
-			"min":[
-				-0.024192553013563156,
-				-0.129580557346344,
-				-0.36000001430511475
-			],
-			"type":"VEC3"
+			"componentType":5123,
+			"count":4884,
+			"type":"SCALAR"
 		},
 		{
 			"bufferView":6,
 			"componentType":5126,
-			"count":866,
+			"count":1104,
+			"max":[
+				0.020999999716877937,
+				0.05603715032339096,
+				0.11999999731779099
+			],
+			"min":[
+				-0.017000000923871994,
+				-0.028999999165534973,
+				-0.11999999731779099
+			],
 			"type":"VEC3"
 		},
 		{
 			"bufferView":7,
 			"componentType":5126,
+			"count":1104,
+			"type":"VEC3"
+		},
+		{
+			"bufferView":8,
+			"componentType":5126,
+			"count":1104,
+			"type":"VEC2"
+		},
+		{
+			"bufferView":9,
+			"componentType":5126,
+			"count":1104,
+			"type":"VEC4"
+		},
+		{
+			"bufferView":10,
+			"componentType":5123,
+			"count":1656,
+			"type":"SCALAR"
+		},
+		{
+			"bufferView":11,
+			"componentType":5126,
+			"count":866,
+			"max":[
+				0.020499998703598976,
+				0.019804056733846664,
+				0.4300000071525574
+			],
+			"min":[
+				-0.020500000566244125,
+				-0.14192645251750946,
+				-0.36000001430511475
+			],
+			"type":"VEC3"
+		},
+		{
+			"bufferView":12,
+			"componentType":5126,
+			"count":866,
+			"type":"VEC3"
+		},
+		{
+			"bufferView":13,
+			"componentType":5126,
 			"count":866,
 			"type":"VEC2"
 		},
 		{
-			"bufferView":8,
+			"bufferView":14,
+			"componentType":5126,
+			"count":866,
+			"type":"VEC4"
+		},
+		{
+			"bufferView":15,
 			"componentType":5123,
-			"count":3768,
+			"count":3024,
+			"type":"SCALAR"
+		},
+		{
+			"bufferView":16,
+			"componentType":5126,
+			"count":4880,
+			"max":[
+				0.0033286979887634516,
+				0.018568260595202446,
+				0.15086212754249573
+			],
+			"min":[
+				-0.9100000262260437,
+				-0.04274995997548103,
+				-0.06449999660253525
+			],
+			"type":"VEC3"
+		},
+		{
+			"bufferView":17,
+			"componentType":5126,
+			"count":4880,
+			"type":"VEC3"
+		},
+		{
+			"bufferView":18,
+			"componentType":5126,
+			"count":4880,
+			"type":"VEC2"
+		},
+		{
+			"bufferView":19,
+			"componentType":5126,
+			"count":4880,
+			"type":"VEC2"
+		},
+		{
+			"bufferView":20,
+			"componentType":5123,
+			"count":10212,
 			"type":"SCALAR"
 		}
 	],
 	"bufferViews":[
 		{
 			"buffer":0,
-			"byteLength":61020,
+			"byteLength":27840,
 			"byteOffset":0,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":61020,
-			"byteOffset":61020,
+			"byteLength":27840,
+			"byteOffset":27840,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":40680,
-			"byteOffset":122040,
+			"byteLength":18560,
+			"byteOffset":55680,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":40680,
-			"byteOffset":162720,
+			"byteLength":18560,
+			"byteOffset":74240,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":23136,
-			"byteOffset":203400,
+			"byteLength":37120,
+			"byteOffset":92800,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":9768,
+			"byteOffset":129920,
+			"target":34963
+		},
+		{
+			"buffer":0,
+			"byteLength":13248,
+			"byteOffset":139688,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":13248,
+			"byteOffset":152936,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":8832,
+			"byteOffset":166184,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":17664,
+			"byteOffset":175016,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":3312,
+			"byteOffset":192680,
 			"target":34963
 		},
 		{
 			"buffer":0,
 			"byteLength":10392,
-			"byteOffset":226536,
+			"byteOffset":195992,
 			"target":34962
 		},
 		{
 			"buffer":0,
 			"byteLength":10392,
-			"byteOffset":236928,
+			"byteOffset":206384,
 			"target":34962
 		},
 		{
 			"buffer":0,
 			"byteLength":6928,
-			"byteOffset":247320,
+			"byteOffset":216776,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":7536,
-			"byteOffset":254248,
+			"byteLength":13856,
+			"byteOffset":223704,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":6048,
+			"byteOffset":237560,
+			"target":34963
+		},
+		{
+			"buffer":0,
+			"byteLength":58560,
+			"byteOffset":243608,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":58560,
+			"byteOffset":302168,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":39040,
+			"byteOffset":360728,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":39040,
+			"byteOffset":399768,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":20424,
+			"byteOffset":438808,
 			"target":34963
 		}
 	],
@@ -311,7 +649,7 @@
 	],
 	"buffers":[
 		{
-			"byteLength":261784,
+			"byteLength":459232,
 			"uri":"wpn_mule.bin"
 		}
 	]

@@ -113,13 +113,18 @@ def gun_materials():
         nt.links.new(nrm.outputs["Color"], nmap.inputs["Color"])
         nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
         return m
-    return {"steel": pbr_from("mat_gun_steel_01", "gunsteel"), "wood": pbr_from("mat_gun_wood_01", "gunwood")}
+    return {"steel": pbr_from("mat_gun_steel_01", "gunsteel"), "wood": pbr_from("mat_gun_wood_01", "gunwood"),
+            # scrap-built guns (author: the base weapons are made from scrap) reuse
+            # the Sanctuary's rusted old-paint steel, painted planks and cloth
+            "scrap": kit.pbr("mat_gun_scrap_metal_01", "steel", tint=(0.72, 0.68, 0.64)),
+            "plank": kit.pbr("mat_gun_scrap_wood_01", "plank"),
+            "cloth": kit.pbr("mat_gun_cloth_01", "canvas", tint=(0.62, 0.6, 0.5))}
 
 
 # ---------- parts ----------
 
 def tag(o, grain=False):
-    o["tile"] = GUN_TILE
+    o["tile"] = 1.8 if o.data and getattr(o.data, "materials", None) and o.data.materials and o.data.materials[0].name.startswith("mat_gun_scrap_metal") else GUN_TILE
     if grain:
         o["grain"] = "long"
     return o
@@ -202,65 +207,149 @@ def marker(name, coll, pos):
 
 # ---------- the guns ----------
 
+def weld(name, M, coll, p0, p1, r=0.0022):
+    """A weld bead: one continuous, lumpy run along a seam, darker and
+    rougher than the plates it joins."""
+    rr = np.random.default_rng(abs(hash(name)) % 2 ** 32)
+    tube(f"{name}_run", M["steel"], coll, p0, p1, r, seg=8, bev=0)
+    n = max(2, int(math.dist(p0, p1) / 0.012))
+    for k in range(n):
+        t = (k + rr.uniform(0.2, 0.8)) / n
+        p = [p0[i] + (p1[i] - p0[i]) * t for i in range(3)]
+        bm = bmesh.new()
+        bmesh.ops.create_icosphere(bm, subdivisions=1, radius=r * rr.uniform(1.1, 1.5))
+        d = Vector(kit.g2b(*p1)) - Vector(kit.g2b(*p0))
+        o = kit.mesh_obj(f"{name}_{k}", bm, M["steel"], coll, kit.g2b(*p), d.to_track_quat("Z", "Y").to_euler())
+        o.scale = (0.8, 0.8, 2.2)  # stretched along the seam: a ripple of the bead
+        o["uv"] = "box"
+        tag(o)
+
+
+def hex_bolt(name, M, coll, p, axis="x", r=0.0045, h=0.004):
+    """A hex bolt head (six-sided) sticking out along `axis`."""
+    x, y, z = p
+    d = {"x": (h, 0, 0), "y": (0, h, 0), "z": (0, 0, h)}[axis]
+    return tag(kit.cylinder(name, M["steel"], coll, (x, y, z), (x + d[0], y + d[1], z + d[2]), r, segments=6, bev=0.0006))
+
+
+def hose_clamp(name, M, coll, z, y, r):
+    """A hose clamp round barrel and bar: a steel band and its screw housing."""
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=False, segments=20, radius1=r, radius2=r, depth=0.01)
+    o = kit.mesh_obj(name, bm, M["steel"], coll, kit.g2b(0, y, z), (R90, 0, 0))
+    o["uv"] = "box"
+    tag(o)
+    part(f"{name}_screw", M["steel"], coll, (r * 0.75, y + r * 0.6, z), (0.009, 0.007, 0.012), bev=0.001)
+
+
+def rope(name, M, coll, pts, r=0.0035):
+    """A rope or cord through the given points (a smooth swept tube)."""
+    cu = bpy.data.curves.new(f"{name}_curve", "CURVE")
+    cu.dimensions = "3D"
+    cu.bevel_depth = r
+    cu.bevel_resolution = 2
+    cu.use_fill_caps = True
+    sp = cu.splines.new("NURBS")
+    sp.points.add(len(pts) - 1)
+    for p_, v in zip(sp.points, pts):
+        p_.co = (*kit.g2b(*v), 1.0)
+    sp.use_endpoint_u = True
+    sp.order_u = 3
+    tmp = bpy.data.objects.new(f"{name}_tmp", cu)
+    coll.objects.link(tmp)
+    dg = bpy.context.evaluated_depsgraph_get()
+    me = bpy.data.meshes.new_from_object(tmp.evaluated_get(dg), depsgraph=dg)
+    coll.objects.unlink(tmp)
+    bpy.data.objects.remove(tmp)
+    me.materials.clear()
+    me.materials.append(M["cloth"])
+    for poly in me.polygons:
+        poly.use_smooth = True
+    o = bpy.data.objects.new(name, me)
+    coll.objects.link(o)
+    o["uv"] = "box"
+    return tag(o, True)
+
+
+def tape(name, M, coll, centre, size, rot=(0, 0, 0)):
+    """A wrap of cloth tape: a thin sleeve just proud of what it binds."""
+    return part(name, M["cloth"], coll, centre, size, rot=rot, bev=0.002)
+
+
 def build_mule(M, coll):
-    """The Mule: an old wood-stocked semi-auto carbine with iron sights,
-    the gun every Diver starts with. 18-round box magazine. ~0.95 m."""
-    S, W = M["steel"], M["wood"]
-    # the one-piece stock: butt, semi-pistol wrist, forend running under the barrel
-    stock = [(-0.36, 0.018), (-0.25, 0.012), (-0.12, 0.002), (-0.075, -0.012), (0.14, -0.018), (0.4, -0.018),
-             (0.425, -0.03), (0.425, -0.055), (0.4, -0.066), (0.12, -0.07), (0.09, -0.076), (0.0, -0.078),
-             (-0.04, -0.08), (-0.085, -0.122), (-0.115, -0.124), (-0.14, -0.092), (-0.25, -0.11), (-0.36, -0.132)]
-    def stock_taper(z, y):
-        if z > 0.12:
-            return 0.78  # slim forend
-        if -0.14 < z < -0.04:
-            return 0.86 if y < -0.06 else 0.92  # the wrist, slimmer where the hand wraps it
-        return 1.0 if z < -0.2 else 0.95
-    profile("mule_stock", W, coll, stock, 0.048, bev=0.014, taper=stock_taper)
-    # the upper handguard over the barrel, held by the band
-    profile("mule_handguard", W, coll, [(0.15, 0.0), (0.37, 0.004), (0.375, 0.018), (0.36, 0.03), (0.16, 0.028), (0.15, 0.016)], 0.034, bev=0.008)
-    # steel butt plate with two screws
-    profile("mule_buttplate", S, coll, [(-0.366, 0.02), (-0.356, 0.02), (-0.356, -0.134), (-0.366, -0.134)], 0.05, bev=0.003, grain=False)
-    for k, y in enumerate((-0.01, -0.1)):
-        tube(f"mule_buttscrew{k}", S, coll, (0, y, -0.368), (0, y, -0.362), 0.004, seg=8, bev=0)
-    # the receiver: ejection port, bolt handle, safety, rear peep sight with ears
-    # a shaped receiver: rounded top, sloping down to the barrel, a step at the rear
-    profile("mule_receiver", S, coll, [(-0.08, -0.018), (-0.08, 0.02), (-0.06, 0.036), (0.02, 0.04), (0.09, 0.036),
-                                      (0.13, 0.026), (0.142, 0.016), (0.142, -0.016)], 0.03, bev=0.006, grain=False,
-            taper=lambda z, y: 0.82 if y > 0.03 else 1.0)
-    part("mule_port", M["steel"], coll, (0.0152, 0.016, 0.06), (0.002, 0.016, 0.05), bev=0)
-    tube("mule_bolt_handle", S, coll, (0.015, 0.018, 0.075), (0.042, 0.018, 0.075), 0.004, seg=10)
-    tag(kit.cylinder("mule_bolt_knob", S, coll, (0.042, 0.018, 0.068), (0.042, 0.018, 0.082), 0.0075, segments=12, bev=0.002))
-    part("mule_safety", S, coll, (-0.016, -0.03, -0.005), (0.006, 0.01, 0.012), bev=0.002)
-    part("mule_rear_sight_base", S, coll, (0, 0.046, -0.055), (0.018, 0.012, 0.03), bev=0.003)
-    tag(kit.cylinder("mule_peep", S, coll, (0, 0.06, -0.056), (0, 0.06, -0.05), 0.007, segments=14, bev=0.001))
-    for s in (-1, 1):
-        part(f"mule_rear_ear{s}", S, coll, (s * 0.011, 0.058, -0.053), (0.004, 0.02, 0.022), bev=0.0015)
-    # the barrel, crowned at the muzzle; the front sight post between its ears
-    tube("mule_barrel", S, coll, (0, 0.012, 0.14), (0, 0.012, 0.59), 0.0095, seg=18)
-    tube("mule_muzzle", S, coll, (0, 0.012, 0.582), (0, 0.012, 0.592), 0.0108, seg=18)
-    part("mule_front_base", S, coll, (0, 0.025, 0.567), (0.016, 0.012, 0.03), bev=0.003)
-    part("mule_front_post", S, coll, (0, 0.04, 0.567), (0.003, 0.02, 0.004), bev=0.0008)
-    for s in (-1, 1):
-        part(f"mule_front_ear{s}", S, coll, (s * 0.0075, 0.038, 0.567), (0.003, 0.018, 0.014), bev=0.001)
-    # the barrel band round stock and handguard, with its sling swivel
-    part("mule_band", S, coll, (0, -0.017, 0.34), (0.05, 0.1, 0.022), bev=0.009)
-    ring("mule_band_swivel", S, coll, (0, -0.078, 0.34), 0.012, 0.0022, plane="zy", n=14)
-    ring("mule_butt_swivel", S, coll, (0, -0.135, -0.27), 0.011, 0.0022, plane="zy", n=14)
-    # the 18-round box magazine, ribbed, with a base plate
-    part("mule_mag", S, coll, (0, -0.105, 0.05), (0.024, 0.15, 0.052), rot=(0.06, 0, 0), bev=0.003)
-    part("mule_mag_base", S, coll, (0, -0.182, 0.054), (0.028, 0.008, 0.058), rot=(0.06, 0, 0), bev=0.002)
-    for s in (-1, 1):
-        part(f"mule_mag_rib{s}", S, coll, (s * 0.0125, -0.105, 0.05), (0.002, 0.11, 0.008), rot=(0.06, 0, 0), bev=0.0005)
-    part("mule_mag_catch", S, coll, (0.014, -0.045, 0.012), (0.004, 0.01, 0.014), bev=0.001)
-    # trigger guard and trigger
-    ring("mule_guard", S, coll, (0, -0.078, -0.012), 0.032, 0.0035, plane="zy", a0=math.pi, a1=2 * math.pi, n=16)
-    part("mule_trigger", S, coll, (0, -0.09, -0.008), (0.006, 0.026, 0.006), rot=(-0.3, 0, 0), bev=0.0015)
-    # where the game holds it and where shots leave it
-    marker("muzzle", coll, (0, 0.012, 0.592))
-    marker("grip", coll, (0, -0.1, -0.1))
-    marker("fore", coll, (0, -0.05, 0.27))
-    return {"length": 0.95, "views": [((1.55, 0.08, 0.12), (0, -0.03, 0.12)), ((0.75, 0.35, -0.6), (0, -0.03, 0.1)), ((0.22, 0.09, -0.12), (0, -0.01, 0.02))]}
+    """The Mule, scrap-built (author: base weapons are made from scrap): a
+    semi-auto carbine the Divers put together from pipe, plate, fence boards
+    and tape. 18 rounds, two magazines taped end to end. ~0.95 m."""
+    S, Wd = M["scrap"], M["plank"]  # rusted old plate for the welded receiver
+    D = M["steel"]  # darker worn steel: pipe, clamps, bolts, magazines, small parts
+    rr = np.random.default_rng(31)
+
+    # the stock: two old painted fence boards screwed side by side, cut straight with a saw
+    for k, (x, sh) in enumerate(((-0.0105, 0.0), (0.0105, 0.004))):
+        o = profile(f"mule_board{k}", Wd, coll, [(-0.36, 0.016 + sh), (-0.085, 0.002), (-0.085, -0.044), (-0.36, -0.124 + sh * 2)], 0.02, x=x, bev=0.003)
+        o["tile"] = 1.2
+    for k, (z, y) in enumerate(((-0.3, -0.02), (-0.3, -0.09), (-0.16, -0.035), (-0.16, -0.065))):
+        tag(kit.cylinder(f"mule_screw{k}", D, coll, (0.0205, y, z), (0.023, y, z), 0.0035, segments=10, bev=0))
+    # a chunk of old tyre for a butt pad
+    part("mule_buttpad", M["cloth"], coll, (0, -0.052, -0.371), (0.046, 0.15, 0.022), rot=(0.12, 0, 0), bev=0.006)
+    # the grip: a wooden block, wrapped in tape
+    gp = (0, -0.085, -0.058)
+    part("mule_grip", Wd, coll, gp, (0.03, 0.11, 0.038), rot=(0.32, 0, 0), bev=0.004)
+    for k, dy in enumerate((-0.03, 0.0, 0.03)):
+        tape(f"mule_grip_tape{k}", M, coll, (0, gp[1] + dy * 0.949, gp[2] + dy * 0.315), (0.034, 0.016, 0.042), rot=(0.32, 0, 0))
+
+    # the receiver: scrap plate welded into a box, a side plate bolted on
+    part("mule_receiver", S, coll, (0, 0.004, 0.03), (0.034, 0.058, 0.24), bev=0.002)
+    part("mule_receiver_lid", S, coll, (0.001, 0.036, 0.02), (0.03, 0.008, 0.2), rot=(0, 0.01, 0), bev=0.0015)
+    part("mule_sideplate", S, coll, (0.019, 0.0, 0.0), (0.004, 0.045, 0.12), bev=0.001)
+    for k, (z, y) in enumerate(((-0.05, 0.016), (-0.05, -0.016), (0.05, 0.016), (0.05, -0.016))):
+        hex_bolt(f"mule_bolt{k}", M, coll, (0.021, y, z))
+    weld("mule_weld_top", M, coll, (0.0165, 0.033, -0.085), (0.0165, 0.033, 0.145))
+    weld("mule_weld_top2", M, coll, (-0.0165, 0.033, -0.085), (-0.0165, 0.033, 0.145))
+    weld("mule_weld_front", M, coll, (-0.017, 0.024, 0.152), (0.017, 0.024, 0.152), r=0.003)
+    part("mule_port", S, coll, (0.0175, 0.02, 0.085), (0.002, 0.014, 0.045), bev=0)  # the hand-cut ejection slot
+    # the bolt handle: a bent rod with a nut for a knob
+    ring("mule_bolt_handle", D, coll, (0.017, 0.02, 0.105), 0.02, 0.0035, plane="xy", a0=0, a1=math.pi / 2.2, n=10)
+    tag(kit.cylinder("mule_bolt_nut", D, coll, (0.034, 0.038, 0.1), (0.034, 0.038, 0.11), 0.007, segments=6, bev=0.001))
+
+    # the barrel: a length of steel pipe, a pipe coupling at the muzzle
+    tube("mule_barrel", D, coll, (0, 0.012, 0.15), (0, 0.012, 0.575), 0.0115, seg=16)
+    tube("mule_coupling", D, coll, (0, 0.012, 0.565), (0, 0.012, 0.61), 0.017, seg=16)
+    for k in range(4):  # holes drilled through the coupling, by hand, unevenly
+        a = k * math.pi / 2 + 0.3
+        part(f"mule_port_hole{k}", D, coll, (0.017 * math.cos(a), 0.012 + 0.017 * math.sin(a), 0.588 + rr.uniform(-0.004, 0.004)), (0.006, 0.006, 0.006), bev=0)
+    # a flat bar under the barrel, held on by hose clamps; the forend plank screwed under it
+    part("mule_bar", D, coll, (0, -0.008, 0.31), (0.018, 0.008, 0.32), bev=0.001)
+    for k, z in enumerate((0.2, 0.33, 0.46)):
+        hose_clamp(f"mule_clamp{k}", M, coll, z, 0.003, 0.021)
+    o = profile("mule_forend", Wd, coll, [(0.16, -0.013), (0.43, -0.013), (0.43, -0.05), (0.18, -0.052)], 0.036, bev=0.003)
+    o["tile"] = 1.2
+    for k, z in enumerate((0.26, 0.4)):
+        tape(f"mule_forend_tape{k}", M, coll, (0, -0.031, z), (0.04, 0.044, 0.02))
+
+    # sights: a bent-plate notch at the rear, a bolt welded on at the front
+    part("mule_rear_plate", S, coll, (0, 0.05, -0.05), (0.022, 0.02, 0.003), rot=(-0.15, 0, 0), bev=0.0005)
+    part("mule_rear_foot", S, coll, (0, 0.041, -0.044), (0.022, 0.003, 0.014), bev=0.0005)
+    hex_bolt("mule_front_sight", M, coll, (0, 0.028, 0.555), axis="y", r=0.004, h=0.016)
+    weld("mule_front_weld", M, coll, (-0.006, 0.025, 0.555), (0.006, 0.025, 0.555), r=0.0025)
+
+    # two magazines taped end to end (one upside down) for a fast swap
+    part("mule_mag", D, coll, (0, -0.1, 0.055), (0.024, 0.14, 0.05), rot=(0.05, 0, 0), bev=0.006)
+    part("mule_mag2", D, coll, (0.026, -0.1, 0.06), (0.024, 0.14, 0.05), rot=(0.05, 0, 0), bev=0.006)
+    for k, x in enumerate((0.0, 0.026)):  # a pressed rib down each magazine
+        part(f"mule_mag_rib{k}", D, coll, (x + 0.0125, -0.1, 0.057), (0.002, 0.1, 0.012), rot=(0.05, 0, 0), bev=0.0008)
+    for k, dy in enumerate((-0.06, 0.0)):
+        tape(f"mule_mag_tape{k}", M, coll, (0.013, -0.1 + dy, 0.057), (0.054, 0.022, 0.054), rot=(0.05, 0, 0))
+    # trigger guard: a bent rod; the trigger a cut tab
+    ring("mule_guard", D, coll, (0, -0.032, -0.018), 0.03, 0.0032, plane="zy", a0=math.pi, a1=2 * math.pi, n=16)
+    part("mule_trigger", D, coll, (0, -0.046, -0.014), (0.005, 0.024, 0.006), rot=(-0.3, 0, 0), bev=0.001)
+    # a rope sling from the front clamp to the butt
+    rope("mule_sling", M, coll, [(0.0, -0.02, 0.46), (0.026, -0.07, 0.3), (0.03, -0.1, 0.08), (0.028, -0.1, -0.15), (0.012, -0.08, -0.33)])
+
+    marker("muzzle", coll, (0, 0.012, 0.61))
+    marker("grip", coll, (0, -0.1, -0.065))
+    marker("fore", coll, (0, -0.04, 0.3))
+    return {"length": 0.97, "views": [((1.55, 0.08, 0.12), (0, -0.03, 0.12)), ((0.75, 0.35, -0.6), (0, -0.03, 0.1)), ((0.22, 0.09, -0.12), (0, -0.01, 0.02))]}
 
 
 GUNS = {"mule": build_mule}

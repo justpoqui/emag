@@ -974,6 +974,7 @@ LOD0 is the full-detail model; LOD1/LOD2 are shown further away.
 | World texture density | 512 px/m everywhere | 2048 cap; 1.5 GB per level | **Tiling materials, trim sheets and decals; no unique building textures** |
 | Sanctuary lamps | Every lamp live | Overlap and shadow cost | **Live, with short ranges, distance fade, ≤ 4 shadow casters (High) / 1 (Low), one light per 4–6 bulbs** |
 | Husk eye detail | Readable to its sight range | LOD would shrink it | **Eye mesh excluded from LOD** |
+| Scrap-built guns (Mule, Sparrow, Badger) | 2 materials per weapon | One rusty material made the whole gun one colour; scrap reads as mismatched parts | **Up to 4 materials (rusted plate, worn steel, painted wood, cloth tape and rope), author decision 2026-10-31; ~2 extra draw calls per gun** |
 
 ### 8.13 Done checklist (per asset)
 
