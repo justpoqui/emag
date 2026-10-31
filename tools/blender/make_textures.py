@@ -54,6 +54,15 @@ def ridged(n):
     return 1.0 - np.abs(2.0 * n - 1.0)
 
 
+def contour(n, width_px, level=0.5):
+    """A continuous line of about width_px pixels along where n crosses level
+    (distance to the crossing estimated from the gradient), 1 on the line."""
+    gu = (np.roll(n, -1, 1) - np.roll(n, 1, 1)) * 0.5
+    gv = (np.roll(n, -1, 0) - np.roll(n, 1, 0)) * 0.5
+    dist = np.abs(n - level) / np.maximum(np.sqrt(gu ** 2 + gv ** 2), 1e-6)
+    return np.clip(1.0 - dist / width_px, 0.0, 1.0)
+
+
 def smooth(e0, e1, x):
     t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)
@@ -98,20 +107,72 @@ def save(name, albedo, height, rough, metal, nstrength, ao_amount):
 
 # ---------- materials ----------
 
+def voronoi(cells, seed):
+    """Tileable jittered Voronoi with `cells` cells per side. Returns the
+    nearest cell's id, the offset from its seed (pixels) and F2 - F1 (the
+    distance to the nearest cell edge, in pixels)."""
+    r = np.random.default_rng(seed)
+    cs = SIZE / cells
+    jit = r.random((cells, cells, 2))
+    yy, xx = np.mgrid[0:SIZE, 0:SIZE].astype(float)
+    ci, cj = (yy // cs).astype(int), (xx // cs).astype(int)
+    f1 = np.full((SIZE, SIZE), 1e9)
+    f2 = np.full((SIZE, SIZE), 1e9)
+    best = np.zeros((SIZE, SIZE), int)
+    off = np.zeros((SIZE, SIZE, 2))
+    for di in (-1, 0, 1):
+        for dj in (-1, 0, 1):
+            ni, nj = ci + di, cj + dj
+            wi, wj = ni % cells, nj % cells
+            sy = (ni + jit[wi, wj, 0]) * cs
+            sx = (nj + jit[wi, wj, 1]) * cs
+            dy, dx = yy - sy, xx - sx
+            d = np.sqrt(dy ** 2 + dx ** 2)
+            closer = d < f1
+            f2 = np.where(closer, f1, np.minimum(f2, d))
+            best = np.where(closer, wi * cells + wj, best)
+            off[closer] = np.stack([dy, dx], -1)[closer]
+            f1 = np.where(closer, d, f1)
+    return best, off, f2 - f1
+
+
 def rock():
-    """Hewn mine rock: chisel facets, cracks, soot and damp patches."""
-    base = fbm(1, 2.3)
-    facets = ridged(fbm(2, 1.7))
-    chisel = ridged(fbm(8, 1.2, lo=24.0))  # tool marks and small facets
-    cracks = smooth(0.93, 0.99, ridged(fbm(3, 1.3)))
-    h = 0.45 * base + 0.3 * facets + 0.22 * chisel - 0.3 * cracks + 0.12 * fbm(4, 0.6)
-    tone = fbm(5, 2.6)
-    col = mix(hexcol("#4a4239"), hexcol("#8c8170"), smooth(0.15, 0.95, 0.6 * h + 0.4 * tone))
-    soot = smooth(0.55, 0.85, fbm(6, 3.0))  # soot and damp from the lamps and seepage
-    col = mix(col, hexcol("#2a2520"), soot * 0.55)
-    col = mix(col, hexcol("#221d18"), cracks * 0.8)
-    rough = 0.86 + 0.1 * fbm(7, 1.5) - 0.1 * soot
-    save("rock", col, h, rough, np.zeros_like(h), 22.0, 3.0)
+    """Hewn mine rock: broken angular fragments at two sizes, each its own
+    tone and chisel facet, with dark seams between them; faint bedding,
+    a few pale veins, soot and damp."""
+    r = np.random.default_rng(1)
+    big_id, big_off, big_edge = voronoi(10, 101)
+    small_id, small_off, small_edge = voronoi(34, 102)
+    big_tone = r.random(10 * 10)[big_id]
+    small_tone = r.random(34 * 34)[small_id]
+    # every fragment is a small tilted plane: chiselled facets in the normal map
+    big_slope = r.uniform(-0.012, 0.012, (100, 2))[big_id]
+    small_slope = r.uniform(-0.02, 0.02, (34 * 34, 2))[small_id]
+    facet_h = (big_slope * big_off).sum(-1) + (small_slope * small_off).sum(-1)
+    seams_small = 1.0 - smooth(0.0, 2.2, small_edge)
+    seams_big = 1.0 - smooth(0.0, 3.0, big_edge)
+    # only some seams open up: most fragments meet without a visible line
+    seams = np.maximum(seams_small * 0.25 * smooth(0.55, 0.8, fbm(21, 2.2)),
+                       seams_big * smooth(0.55, 0.8, fbm(22, 2.4)))
+    grain = blur(fbm(9, 1.0), 0.7)
+    rows = np.arange(SIZE)[:, None] / SIZE
+    strata = 0.5 + 0.5 * np.sin(2 * np.pi * (3 * rows + 0.6 * fbm(10, 3.0)))
+    vein_n = blur(fbm(12, 3.0), 14.0)
+    vein_n = (vein_n - vein_n.min()) / np.ptp(vein_n)
+    veins = contour(vein_n, 1.4, 0.4) * smooth(0.6, 0.8, fbm(19, 2.6))
+    big_tone = blur(big_tone, 2.0)
+    small_tone = blur(small_tone, 1.5)
+    h = facet_h + 0.2 * big_tone + 0.06 * small_tone + 0.08 * grain - 0.3 * seams + 0.03 * veins
+    tone = 0.35 * big_tone + 0.12 * small_tone + 0.18 * strata + 0.35 * fbm(5, 2.6)
+    col = mix(hexcol("#4a4238"), hexcol("#978b77"), smooth(0.1, 0.9, tone))
+    col = mix(col, hexcol("#7c6a52"), smooth(0.7, 0.95, strata) * 0.2)  # faint ochre bands
+    col = col * (0.82 + 0.36 * grain)[..., None]
+    col = mix(col, hexcol("#b5a993"), veins * 0.7)
+    col = mix(col, hexcol("#2a241d"), seams * 0.4)
+    soot = smooth(0.55, 0.85, fbm(6, 3.0))
+    col = mix(col, hexcol("#26211c"), soot * 0.45)
+    rough = 0.82 + 0.12 * grain - 0.08 * soot - 0.2 * veins + 0.06 * seams
+    save("rock", col, h, rough, np.zeros_like(h), 14.0, 3.0)
 
 
 def timber():

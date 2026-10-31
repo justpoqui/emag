@@ -238,35 +238,81 @@ def make_pictures():
     grime(st, 0.6, 2).save(p)
     out["stash"] = p
 
-    # Topside camera feed: bleached, harsh daylight over the ruined skyline
-    sc = Image.new("RGB", (512, 512))
-    a = np.zeros((512, 512, 3))
-    yy = np.linspace(0, 1, 512)[:, None]
-    sky = np.array([0.93, 0.9, 0.82]) * (1 - yy) + np.array([0.82, 0.74, 0.6]) * yy
-    a[:] = sky[:, None, :] if sky.ndim == 2 else sky
-    xs = np.arange(512)
-    skyline = 300 + 18 * np.sin(xs * 0.03) - np.where((xs // 40) % 3 == 0, 60, 0) - np.where((xs // 23) % 5 == 0, 30, 0)
-    for x in xs:
-        a[int(skyline[x]):, x] = (0.27, 0.23, 0.2)
-    a[::4] *= 0.86  # scanlines
-    sc = Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8))
-    d = ImageDraw.Draw(sc)
-    d.ellipse((60, 70, 82, 92), fill=(255, 74, 42))
-    d.text((96, 81), "CAM 03 · TOPSIDE", font=font(30), fill=(232, 226, 212), anchor="lm")
-    p = os.path.join(TEX, "screen_topside_albedo.png")
-    sc.save(p)
-    out["screen"] = p
+    # The Divers' insignia: a shield holding the Sanctuary's headframe (the
+    # lift tower over the shaft) above a downward dive chevron. Painted by
+    # hand in Lamp Amber and bone. Motto: "WE COME BACK".
+    def insignia(d, cx, cy, sc, amber=(198, 140, 74), bone=(222, 210, 186), field=(46, 50, 47)):
+        def P(x, y):
+            return (cx + x * sc, cy + y * sc)
+        shield = [P(-100, -120), P(100, -120), P(100, 10), P(70, 80), P(0, 130), P(-70, 80), P(-100, 10)]
+        d.polygon(shield, fill=field)
+        d.line(shield + [shield[0]], fill=bone, width=max(2, int(9 * sc)), joint="curve")
+        # headframe: two legs, cross braces, the sheave wheel on top
+        lw = max(2, int(8 * sc))
+        d.line([P(-58, 40), P(0, -82), P(58, 40)], fill=amber, width=lw, joint="curve")
+        d.line([P(-36, -4), P(36, -4)], fill=amber, width=lw)
+        d.line([P(-46, 18), P(18, -50)], fill=amber, width=max(1, lw // 2))
+        d.line([P(46, 18), P(-18, -50)], fill=amber, width=max(1, lw // 2))
+        d.ellipse([P(-17, -100), P(17, -66)], outline=amber, width=lw)
+        # the dive chevron, pointing down the shaft
+        d.line([P(-34, 52), P(0, 92), P(34, 52)], fill=bone, width=max(2, int(11 * sc)), joint="curve")
 
-    # Two old posters, sun-faded and torn at the corners
-    for key, title, bg in (("poster_dustline", "THE DUSTLINE", (92, 108, 102)), ("poster_plating", "KEEP YOUR PLATING", (128, 98, 74))):
+    def chip(im, seed, amount=0.5):
+        """Paint worn off in patches: blend toward the cloth underneath."""
+        a = np.asarray(im).astype(float)
+        rr = np.random.default_rng(seed)
+        n = np.asarray(Image.fromarray((rr.random((40, 30)) * 255).astype(np.uint8)).resize((a.shape[1], a.shape[0]), Image.BICUBIC)).astype(float) / 255
+        n2 = np.asarray(Image.fromarray((rr.random((160, 120)) * 255).astype(np.uint8)).resize((a.shape[1], a.shape[0]), Image.BICUBIC)).astype(float) / 255
+        worn = np.clip((0.6 * n + 0.4 * n2 - (1 - amount * 0.5)) * 6, 0, 1)
+        return worn
+
+    # the banner: painted canvas with a swallowtail, hung on a rod
+    BW, BH = 768, 1024
+    cloth = np.asarray(Image.open(os.path.join(TEX, "canvas_albedo.png")).convert("RGB").resize((BW, BH))).astype(float)
+    painted = Image.new("RGB", (BW, BH), (0, 0, 0))
+    mask = Image.new("L", (BW, BH), 0)
+    for im_, fill in ((painted, None), (mask, 255)):
+        d = ImageDraw.Draw(im_)
+        if fill:
+            insignia(d, BW / 2, 470, 2.6, amber=fill, bone=fill, field=fill)
+            d.text((BW / 2, 120), "DIVERS", font=font(118), fill=fill, anchor="mm")
+            d.text((BW / 2, 840), "WE COME BACK", font=font(62), fill=fill, anchor="mm")
+        else:
+            insignia(d, BW / 2, 470, 2.6)
+            d.text((BW / 2, 120), "DIVERS", font=font(118), fill=(222, 210, 186), anchor="mm")
+            d.text((BW / 2, 840), "WE COME BACK", font=font(62), fill=(198, 140, 74), anchor="mm")
+    m = np.asarray(mask).astype(float) / 255 * (1 - chip(mask, 41, 0.55))
+    col = cloth * 0.8 * (1 - m[..., None]) + np.asarray(painted).astype(float) * m[..., None]
+    col = np.asarray(grime(Image.fromarray(np.clip(col, 0, 255).astype(np.uint8)), 0.45, 42)).astype(float)
+    alpha = np.full((BH, BW), 255, np.uint8)
+    yy, xx = np.mgrid[0:BH, 0:BW]
+    notch = (yy > BH - 150) & (np.abs(xx - BW / 2) < (yy - (BH - 150)) * (BW / 2) / 150)
+    alpha[notch] = 0  # swallowtail
+    fray = np.random.default_rng(43).random((BH, BW)) < 0.25
+    alpha[(yy > BH - 160) & fray & ~notch & (np.abs(np.abs(xx - BW / 2) - (yy - (BH - 150)) * (BW / 2) / 150) < 6)] = 0
+    banner = np.dstack([np.clip(col, 0, 255).astype(np.uint8), alpha])
+    p = os.path.join(TEX, "banner_divers_albedo.png")
+    Image.fromarray(banner, "RGBA").save(p)
+    out["banner"] = p
+
+    # Two old posters, sun-faded and torn at the corners: the insignia, and
+    # the plating notice with a shield plate instead of a circle
+    for key, title, sub, bg in (("poster_divers", "STAND WITH THE DIVERS", "WE COME BACK", (92, 104, 98)),
+                                ("poster_plating", "KEEP YOUR PLATING", "CHECK IT EVERY DIVE", (128, 98, 74))):
         im = Image.new("RGBA", (360, 512), (*bg, 255))
         d = ImageDraw.Draw(im)
-        d.ellipse((100, 90, 260, 250), outline=(30, 28, 26), width=14)
-        d.ellipse((160, 150, 200, 190), fill=(30, 28, 26))
-        d.text((180, 380), title, font=font(30), fill=(28, 26, 24), anchor="mm")
+        if key == "poster_divers":
+            insignia(d, 180, 200, 0.95)
+        else:
+            plate = [(110, 110), (250, 110), (250, 230), (180, 300), (110, 230)]
+            d.polygon(plate, fill=(54, 58, 56))
+            for bx_, by_ in ((128, 128), (232, 128), (128, 214), (232, 214)):
+                d.ellipse((bx_ - 6, by_ - 6, bx_ + 6, by_ + 6), fill=(150, 146, 136))
+        d.text((180, 380), title, font=font(26 if len(title) > 18 else 30), fill=(28, 26, 24), anchor="mm")
+        d.text((180, 420), sub, font=font(20), fill=(48, 42, 36), anchor="mm")
         d.polygon([(0, 0), (40, 0), (0, 34)], fill=(0, 0, 0, 0))
         d.polygon([(360, 512), (300, 512), (360, 470)], fill=(0, 0, 0, 0))
-        im = grime(im, 0.55, hash(key) % 100)
+        im = grime(im, 0.55, len(key))
         p = os.path.join(TEX, f"{key}_albedo.png")
         im.save(p)
         out[key] = p
@@ -501,8 +547,8 @@ def build(pics):
         "leaf": pbr("mat_leaf_01", None, tint=srgb("#5a6a3c"), rough=0.6),
         "sign": pbr("mat_sign_sanctuary_01", "sign_sanctuary"),
         "stash": picture_material("mat_sign_stash_01", pics["stash"], rough=0.6),
-        "screen": picture_material("mat_screen_topside_01", pics["screen"], emission_strength=1.6, rough=0.2),
-        "poster_dustline": picture_material("mat_poster_dustline_01", pics["poster_dustline"], alpha=True),
+        "poster_divers": picture_material("mat_poster_divers_01", pics["poster_divers"], alpha=True),
+        "banner": picture_material("mat_banner_divers_01", pics["banner"], rough=0.9, alpha=True),
         "poster_plating": picture_material("mat_poster_plating_01", pics["poster_plating"], alpha=True),
         "tally": picture_material("mat_decal_tally_01", pics["tally"], alpha=True),
         "photo": picture_material("mat_photo_family_01", pics["photo"], rough=0.5),
@@ -536,8 +582,11 @@ def build(pics):
     for name, (x0, x1) in (("plank_wall_back_l", left), ("plank_wall_back_r", right)):
         box(name, M["plank"], coll, ((x0 + x1) / 2, H / 2, -3.5), (x1 - x0, H, 0.08), bev=0.006)
     box("plank_wall_back_lintel", M["plank"], coll, (door_x, H - 0.35, -3.5), (door_w, 0.7, 0.08), bev=0.006)
-    for k, y in enumerate((0.35, 1.25, 2.25)):  # battens nailed across the boards
-        box(f"timber_batten_{k}", M["timber"], coll, (0.9, y, -3.44), (6.0, 0.09, 0.04), rot=(0, 0.004 * (k - 1), 0), bev=0.006, grain="long")
+    for k, y in enumerate((0.35, 1.25, 2.25)):  # battens nailed across the boards, stopping at the door frame
+        x0, x1 = door_x + door_w / 2 + 0.14, 3.9
+        box(f"timber_batten_r{k}", M["timber"], coll, ((x0 + x1) / 2, y, -3.44), (x1 - x0, 0.09, 0.04), rot=(0, 0.004 * (k - 1), 0), bev=0.006, grain="long")
+        x0, x1 = -3.9, door_x - door_w / 2 - 0.14
+        box(f"timber_batten_l{k}", M["timber"], coll, ((x0 + x1) / 2, y, -3.44), (x1 - x0, 0.09, 0.04), bev=0.006, grain="long")
     for s in (-1, 1):  # door frame
         box(f"timber_doorpost_{s}", M["timber"], coll, (door_x + s * (door_w / 2 + 0.06), (H - 0.7) / 2, -3.5), (0.12, H - 0.7, 0.16), rot=(0, 0, 0.01 * s), bev=0.015, grain="long")
     box("timber_doorhead", M["timber"], coll, (door_x, H - 0.68, -3.5), (door_w + 0.3, 0.14, 0.18), bev=0.015, grain="long")
@@ -632,25 +681,22 @@ def build(pics):
         for px in (-0.55, 0.55):
             cylinder(f"rack_peg_{k}_{px}", M["bare"], coll, (-0.4 + px, y + 0.02, -3.38), (-0.4 + px, y + 0.02, -3.26), 0.012)
 
-    # --- the topside monitor: a porthole screen on the plank wall ---
-    wx, wy, wz = 2.6, 2.15, -3.43
+    # --- the Divers' banner: painted canvas hung from a rod on the plank wall ---
+    wx, wy, wz = 2.55, 1.95, -3.4
+    cylinder("banner_rod", M["dark"], coll, (wx - 0.62, wy + 0.78, wz), (wx + 0.62, wy + 0.78, wz), 0.014)
+    for s_ in (-1, 1):
+        cylinder(f"banner_cord_{s_}", M["canvas"], coll, (wx + s_ * 0.5, wy + 0.78, wz), (wx, wy + 1.05, wz - 0.02), 0.004, segments=5, bev=0)
+    box("banner_nail", M["bare"], coll, (wx, wy + 1.05, wz - 0.03), (0.02, 0.02, 0.04), bev=0.004)
     bm = bmesh.new()
-    bmesh.ops.create_circle(bm, cap_ends=True, segments=40, radius=0.72)
-    o = mesh_obj("monitor_screen", bm, M["screen"], coll, g2b(wx, wy, wz + 0.02), (R90, 0, 0), smooth=False)
-    me = o.data
-    me.uv_layers.new()
-    for poly in me.polygons:
-        for li in poly.loop_indices:
-            co = me.vertices[me.loops[li].vertex_index].co
-            me.uv_layers[0].data[li].uv = (co.x / 1.44 + 0.5, co.y / 1.44 + 0.5)
+    bm.loops.layers.uv.new()
+    bmesh.ops.create_grid(bm, x_segments=12, y_segments=16, size=0.5, calc_uvs=True)
+    for v in bm.verts:
+        u_, v_ = v.co.x + 0.5, v.co.y + 0.5
+        v.co.x *= 1.1
+        v.co.y *= 1.47
+        v.co.z = 0.025 * math.sin(u_ * math.pi * 3) * (1 - v_) + 0.012 * math.sin(v_ * 7)  # hangs in soft folds
+    o = mesh_obj("banner_divers", bm, M["banner"], coll, g2b(wx, wy, wz + 0.03), (R90, 0, 0))
     o["uv"] = "keep"
-    bm = bmesh.new()
-    bmesh.ops.create_cone(bm, cap_ends=False, segments=40, radius1=0.8, radius2=0.8, depth=0.1)
-    mesh_obj("monitor_frame", bm, M["steel"], coll, g2b(wx, wy, wz), (R90, 0, 0))["uv"] = "box"
-    bm = bmesh.new()
-    bmesh.ops.create_cone(bm, cap_ends=True, segments=40, radius1=0.8, radius2=0.8, depth=0.02)
-    o = mesh_obj("monitor_back", bm, M["dark"], coll, g2b(wx, wy, wz - 0.05), (R90, 0, 0))
-    o["uv"] = "box"
 
     # --- signboard, posters, tally marks, photo ---
     # the signboard: its own thick board, hung off the planks on two steel brackets
@@ -660,7 +706,7 @@ def build(pics):
     for k, bx_ in enumerate((-0.75, 1.15)):
         box(f"sign_bracket_{k}", M["steel"], coll, (bx_, sy_ + 0.33, -3.4), (0.04, 0.04, 0.18), bev=0.006)
         cylinder(f"sign_hanger_{k}", M["dark"], coll, (bx_, sy_ + 0.33, -3.33), (bx_, sy_ + 0.27, -3.33), 0.006)
-    plane("poster_dustline", M["poster_dustline"], coll, (-3.86, 1.75, 2.2), 0.7, 1.0, (R90, 0, R90 - 0.02))
+    plane("poster_divers", M["poster_divers"], coll, (-3.86, 1.75, 2.2), 0.7, 1.0, (R90, 0, R90 - 0.02))
     plane("poster_plating", M["poster_plating"], coll, (3.86, 1.75, 0.3), 0.7, 1.0, (R90, 0.03, -R90))
     plane("decal_tally", M["tally"], coll, (-3.0, 1.0, -3.455), 0.8, 0.4, (R90, 0, 0))
     plane("photo_family", M["photo"], coll, (-3.6, 1.15, -3.455), 0.18, 0.135, (R90, 0.05, 0))
@@ -757,11 +803,29 @@ def lights(coll, bulbs):
     for k in range(0, len(bulbs), 5):
         x, y, z = bulbs[k]
         add_light(f"light_string_{k}", "POINT", (x, y - 0.06, z), warm, 35, 0.03, coll)
-    # the topside monitor throws a little pale, cold light: the only cool light in the room
-    add_light("light_monitor", "AREA", (2.6, 2.15, -3.3), (0.85, 0.9, 1.0), 10, coll=coll, size=1.2)
+    # a small lamp over the banner, so the insignia reads from the doorway
+    add_light("light_banner", "SPOT", (2.55, 3.0, -3.0), (1.0, 0.7, 0.45), 40, 0.05, coll, spot_size=math.radians(70), spot_blend=0.6)
 
 
 # ---------- preview render ----------
+
+def preview_hallway():
+    """A dim stretch of the hallway behind the door, for preview renders only
+    (never exported: in the game the real hallway is there)."""
+    coll = bpy.data.collections.new("preview_only")
+    bpy.context.scene.collection.children.link(coll)
+    rock = bpy.data.materials["mat_rock_mine_01"]
+    earth = bpy.data.materials["mat_earth_packed_01"]
+    R90 = math.pi / 2
+    displaced_panel("pv_hall_floor", earth, coll, (-1.0, 0.0, -5.1), 6.0, 3.0, (0, 0, 0), step=0.1, depth=0.02, seed=8, facet=0.6, lumps=False, tilt=0.02, edge=0.15)
+    displaced_panel("pv_hall_back", rock, coll, (-1.0, H / 2, -6.6), 6.0, H + 0.2, (R90, 0, 0), seed=9)
+    displaced_panel("pv_hall_ceiling", rock, coll, (-1.0, H, -5.1), 6.0, 3.0, (math.pi, 0, 0), step=0.07, seed=10)
+    for o in list(coll.objects):
+        finalize(o)
+    add_light("pv_hall_light", "POINT", (-2.4, H - 0.7, -5.4), (1.0, 0.66, 0.38), 90, 0.05, coll)
+
+
+
 
 def setup_render(out_png, cam_pos, look_at, fov=48.0, res=(1280, 720), samples=64):
     scn = bpy.context.scene
@@ -806,6 +870,7 @@ def main():
     print(f"objects {len(coll.objects)}  triangles {tris}  materials {len(mats)}")
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(WORK, "env_sanctuary_quarters.blend"))
     if DO_RENDER:
+        preview_hallway()
         bpy.data.objects["front_wall"].hide_render = True
         setup_render(os.path.join(WORK, "preview_front.png"), (0.6, 1.75, 4.6), (-0.2, 1.3, -3.2))
         setup_render(os.path.join(WORK, "preview_corner.png"), (-2.6, 1.7, 2.6), (3.0, 1.1, -1.5))
