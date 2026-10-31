@@ -534,28 +534,49 @@
 		{
 			"doubleSided":true,
 			"name":"mat_metal_bare_01",
+			"normalTexture":{
+				"index":17
+			},
+			"occlusionTexture":{
+				"index":18
+			},
 			"pbrMetallicRoughness":{
 				"baseColorFactor":[
-					0.2015562504529953,
-					0.2345505803823471,
-					0.2746773064136505,
+					0.949999988079071,
+					0.9200000166893005,
+					0.8799999952316284,
 					1
 				],
-				"roughnessFactor":0.3499999940395355
+				"baseColorTexture":{
+					"index":19
+				},
+				"metallicRoughnessTexture":{
+					"index":18
+				}
 			}
 		},
 		{
 			"doubleSided":true,
 			"name":"mat_metal_dark_01",
+			"normalTexture":{
+				"index":20
+			},
+			"occlusionTexture":{
+				"index":21
+			},
 			"pbrMetallicRoughness":{
 				"baseColorFactor":[
-					0.023153366521000862,
-					0.02518685907125473,
-					0.027320891618728638,
+					0.41999998688697815,
+					0.4000000059604645,
+					0.3700000047683716,
 					1
 				],
-				"metallicFactor":0.800000011920929,
-				"roughnessFactor":0.5
+				"baseColorTexture":{
+					"index":22
+				},
+				"metallicRoughnessTexture":{
+					"index":21
+				}
 			}
 		},
 		{
@@ -563,7 +584,7 @@
 			"name":"mat_photo_family_01",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":17
+					"index":23
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.5
@@ -575,7 +596,7 @@
 			"name":"mat_poster_divers_01",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":18
+					"index":24
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
@@ -587,7 +608,7 @@
 			"name":"mat_poster_plating_01",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":19
+					"index":25
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
@@ -596,48 +617,6 @@
 		{
 			"doubleSided":true,
 			"name":"mat_rock_mine_01",
-			"normalTexture":{
-				"index":20
-			},
-			"occlusionTexture":{
-				"index":21
-			},
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":22
-				},
-				"metallicRoughnessTexture":{
-					"index":21
-				}
-			}
-		},
-		{
-			"doubleSided":true,
-			"name":"mat_rock_mine_02",
-			"normalTexture":{
-				"index":23
-			},
-			"occlusionTexture":{
-				"index":24
-			},
-			"pbrMetallicRoughness":{
-				"baseColorFactor":[
-					0.800000011920929,
-					0.7799999713897705,
-					0.7400000095367432,
-					1
-				],
-				"baseColorTexture":{
-					"index":25
-				},
-				"metallicRoughnessTexture":{
-					"index":24
-				}
-			}
-		},
-		{
-			"doubleSided":true,
-			"name":"mat_rug_woven_01",
 			"normalTexture":{
 				"index":26
 			},
@@ -655,7 +634,7 @@
 		},
 		{
 			"doubleSided":true,
-			"name":"mat_sign_sanctuary_01",
+			"name":"mat_rock_mine_02",
 			"normalTexture":{
 				"index":29
 			},
@@ -663,6 +642,12 @@
 				"index":30
 			},
 			"pbrMetallicRoughness":{
+				"baseColorFactor":[
+					0.800000011920929,
+					0.7799999713897705,
+					0.7400000095367432,
+					1
+				],
 				"baseColorTexture":{
 					"index":31
 				},
@@ -673,10 +658,46 @@
 		},
 		{
 			"doubleSided":true,
+			"name":"mat_rug_woven_01",
+			"normalTexture":{
+				"index":32
+			},
+			"occlusionTexture":{
+				"index":33
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":34
+				},
+				"metallicRoughnessTexture":{
+					"index":33
+				}
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"mat_sign_sanctuary_01",
+			"normalTexture":{
+				"index":35
+			},
+			"occlusionTexture":{
+				"index":36
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":37
+				},
+				"metallicRoughnessTexture":{
+					"index":36
+				}
+			}
+		},
+		{
+			"doubleSided":true,
 			"name":"mat_sign_stash_01",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":32
+					"index":38
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.6000000238418579
@@ -685,48 +706,6 @@
 		{
 			"doubleSided":true,
 			"name":"mat_steel_painted_01",
-			"normalTexture":{
-				"index":33
-			},
-			"occlusionTexture":{
-				"index":34
-			},
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":35
-				},
-				"metallicRoughnessTexture":{
-					"index":34
-				}
-			}
-		},
-		{
-			"doubleSided":true,
-			"name":"mat_steel_painted_02",
-			"normalTexture":{
-				"index":36
-			},
-			"occlusionTexture":{
-				"index":37
-			},
-			"pbrMetallicRoughness":{
-				"baseColorFactor":[
-					0.2541520893573761,
-					0.3049873113632202,
-					0.2462013214826584,
-					1
-				],
-				"baseColorTexture":{
-					"index":38
-				},
-				"metallicRoughnessTexture":{
-					"index":37
-				}
-			}
-		},
-		{
-			"doubleSided":true,
-			"name":"mat_timber_mine_01",
 			"normalTexture":{
 				"index":39
 			},
@@ -739,6 +718,48 @@
 				},
 				"metallicRoughnessTexture":{
 					"index":40
+				}
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"mat_steel_painted_02",
+			"normalTexture":{
+				"index":42
+			},
+			"occlusionTexture":{
+				"index":43
+			},
+			"pbrMetallicRoughness":{
+				"baseColorFactor":[
+					0.2541520893573761,
+					0.3049873113632202,
+					0.2462013214826584,
+					1
+				],
+				"baseColorTexture":{
+					"index":44
+				},
+				"metallicRoughnessTexture":{
+					"index":43
+				}
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"mat_timber_mine_01",
+			"normalTexture":{
+				"index":45
+			},
+			"occlusionTexture":{
+				"index":46
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":47
+				},
+				"metallicRoughnessTexture":{
+					"index":46
 				}
 			}
 		}
@@ -1182,6 +1203,18 @@
 		},
 		{
 			"sampler":0,
+			"source":11
+		},
+		{
+			"sampler":0,
+			"source":12
+		},
+		{
+			"sampler":0,
+			"source":13
+		},
+		{
+			"sampler":0,
 			"source":14
 		},
 		{
@@ -1194,15 +1227,15 @@
 		},
 		{
 			"sampler":0,
-			"source":14
+			"source":17
 		},
 		{
 			"sampler":0,
-			"source":15
+			"source":18
 		},
 		{
 			"sampler":0,
-			"source":16
+			"source":19
 		},
 		{
 			"sampler":0,
@@ -1246,15 +1279,27 @@
 		},
 		{
 			"sampler":0,
-			"source":24
+			"source":11
 		},
 		{
 			"sampler":0,
-			"source":25
+			"source":12
 		},
 		{
 			"sampler":0,
-			"source":26
+			"source":13
+		},
+		{
+			"sampler":0,
+			"source":11
+		},
+		{
+			"sampler":0,
+			"source":12
+		},
+		{
+			"sampler":0,
+			"source":13
 		},
 		{
 			"sampler":0,
@@ -1327,6 +1372,21 @@
 		},
 		{
 			"mimeType":"image/png",
+			"name":"steel_normal",
+			"uri":"../../textures/sanctuary/steel_normal.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"steel_orm",
+			"uri":"../../textures/sanctuary/steel_orm.png"
+		},
+		{
+			"mimeType":"image/png",
+			"name":"steel_albedo",
+			"uri":"../../textures/sanctuary/steel_albedo.png"
+		},
+		{
+			"mimeType":"image/png",
 			"name":"photo_family_albedo",
 			"uri":"../../textures/sanctuary/photo_family_albedo.png"
 		},
@@ -1389,21 +1449,6 @@
 			"mimeType":"image/png",
 			"name":"sign_stash_albedo",
 			"uri":"../../textures/sanctuary/sign_stash_albedo.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"steel_normal",
-			"uri":"../../textures/sanctuary/steel_normal.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"steel_orm",
-			"uri":"../../textures/sanctuary/steel_orm.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"steel_albedo",
-			"uri":"../../textures/sanctuary/steel_albedo.png"
 		},
 		{
 			"mimeType":"image/png",
