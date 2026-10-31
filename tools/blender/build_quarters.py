@@ -571,11 +571,10 @@ def finalize(o):
 
 # ---------- the room ----------
 
-def build(pics):
-    coll = bpy.data.collections.new("env_sanctuary_quarters")
-    bpy.context.scene.collection.children.link(coll)
-
-    M = {
+def make_materials(pics):
+    """The shared Sanctuary material set (art bible 6.2: one material per
+    surface type, varied by tint)."""
+    return {
         "rock": pbr("mat_rock_mine_01", "rock"),
         "rock_ceiling": pbr("mat_rock_mine_02", "rock", tint=(0.8, 0.78, 0.74)),
         "earth": pbr("mat_earth_packed_01", "earth"),
@@ -600,6 +599,13 @@ def build(pics):
         "tally": picture_material("mat_decal_tally_01", pics["tally"], alpha=True),
         "photo": picture_material("mat_photo_family_01", pics["photo"], rough=0.5),
     }
+
+
+def build(pics):
+    coll = bpy.data.collections.new("env_sanctuary_quarters")
+    bpy.context.scene.collection.children.link(coll)
+
+    M = make_materials(pics)
 
     R90 = math.pi / 2
 
@@ -904,7 +910,7 @@ def setup_render(out_png, cam_pos, look_at, fov=48.0, res=(1280, 720), samples=6
     bpy.ops.render.render(write_still=True)
 
 
-def merge_by_material(coll, keep=()):
+def merge_by_material(coll, keep=(), prefix="quarters_"):
     """Joins every static mesh that shares a material into one mesh (art
     bible 8.4: fewer draw calls). Objects named in `keep` stay separate so
     the game can show or hide them (the front wall)."""
@@ -920,7 +926,7 @@ def merge_by_material(coll, keep=()):
         if len(objs) > 1:
             bpy.ops.object.join()
         merged = bpy.context.view_layer.objects.active
-        merged.name = merged.data.name = name.replace("mat_", "quarters_")
+        merged.name = merged.data.name = name.replace("mat_", prefix)
 
 
 def main():

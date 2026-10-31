@@ -147,13 +147,13 @@ def rock():
     small_tone = r.random(34 * 34)[small_id]
     # every fragment is a small tilted plane: chiselled facets in the normal map
     big_slope = r.uniform(-0.012, 0.012, (100, 2))[big_id]
-    small_slope = r.uniform(-0.02, 0.02, (34 * 34, 2))[small_id]
+    small_slope = r.uniform(-0.012, 0.012, (34 * 34, 2))[small_id]
     facet_h = (big_slope * big_off).sum(-1) + (small_slope * small_off).sum(-1)
     seams_small = 1.0 - smooth(0.0, 2.2, small_edge)
     seams_big = 1.0 - smooth(0.0, 3.0, big_edge)
     # only some seams open up: most fragments meet without a visible line
-    seams = np.maximum(seams_small * 0.25 * smooth(0.55, 0.8, fbm(21, 2.2)),
-                       seams_big * smooth(0.55, 0.8, fbm(22, 2.4)))
+    seams = np.maximum(seams_small * 0.06 * smooth(0.55, 0.8, fbm(21, 2.2)),
+                       seams_big * smooth(0.7, 0.9, fbm(22, 2.4)))
     grain = blur(fbm(9, 1.0), 0.7)
     rows = np.arange(SIZE)[:, None] / SIZE
     strata = 0.5 + 0.5 * np.sin(2 * np.pi * (3 * rows + 0.6 * fbm(10, 3.0)))
@@ -163,7 +163,7 @@ def rock():
     big_tone = blur(big_tone, 2.0)
     small_tone = blur(small_tone, 1.5)
     h = facet_h + 0.2 * big_tone + 0.06 * small_tone + 0.08 * grain - 0.3 * seams + 0.03 * veins
-    tone = 0.35 * big_tone + 0.12 * small_tone + 0.18 * strata + 0.35 * fbm(5, 2.6)
+    tone = 0.16 * big_tone + 0.05 * small_tone + 0.17 * strata + 0.62 * fbm(5, 2.6)
     col = mix(hexcol("#4a4238"), hexcol("#978b77"), smooth(0.1, 0.9, tone))
     col = mix(col, hexcol("#7c6a52"), smooth(0.7, 0.95, strata) * 0.2)  # faint ochre bands
     col = col * (0.82 + 0.36 * grain)[..., None]
