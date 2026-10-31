@@ -656,7 +656,8 @@ def build_hallway(M, P, coll):
     return [((-3.8, 1.75, -4.4), (12.0, 1.5, -6.6)),
             ((11.0, 1.7, -7.6), (14.5, 1.9, -3.6)), ((-0.6, 1.6, -5.6), (-2.4, 1.4, -8.6)),
             ((8.5, 1.55, -4.2), (4.0, 2.4, -8.6)), ((-3.6, 1.6, -7.8), (-1.5, 2.6, -3.6)),
-            ((28.0, 1.9, -4.6), (32.5, 2.4, -8.0))]
+            ((28.0, 1.9, -4.6), (32.5, 2.4, -8.0)),
+            ((14.2, 1.7, -7.2), (18.4, 1.3, -3.2)), ((23.6, 1.7, -7.2), (27.8, 1.3, -3.2))]  # the open CLINIC and RADIO & PARTS shopfronts
 
 
 def ammo_can(name, M, coll, x, y, z, yaw=0.0):
@@ -958,9 +959,11 @@ def build_clinic(M, P, coll):
         kit.box(f"clinic_cot{k}_pillow", bone, coll, (cx, 0.63, cz_ + 0.72), (0.5, 0.1, 0.3), soft=True, puff=0.5)
         kit.box(f"clinic_cot{k}_head", M["steel_locker"], coll, (cx, 0.72, cz_ + 0.95), (0.78, 0.55, 0.04), bev=0.012)
     kit.cylinder("clinic_curtain_rail", M["bare"], coll, (16.75, 2.3, 0.2), (16.75, 2.3, 2.5), 0.012, segments=8)
-    for k in range(4):  # canvas panels hanging in folds, one pulled back
-        z = 0.45 + k * (0.5 if k < 3 else 0.32)
-        kit.box(f"clinic_curtain{k}", bone, coll, (16.75 + (-1) ** k * 0.03, 1.4, z), (0.03, 1.8, 0.5 if k < 3 else 0.3), rot=(0, 0, 0), soft=True, puff=0.25)
+    for k in range(14):  # canvas hanging in folds from rings, bunched up at the back where it's pulled open
+        z = 0.3 + k * (0.12 if k < 10 else 0.06)
+        x = 16.75 + 0.035 * math.sin(k * 1.9)
+        kit.box(f"clinic_curtain{k}", bone, coll, (x, 1.3, z), (0.02, 1.9, 0.14), rot=(0, (-1) ** k * 0.5, 0), soft=True, puff=0.15)
+        kit.cylinder(f"clinic_curtain_ring{k}", M["bare"], coll, (x, 2.27, z - 0.012), (x, 2.27, z + 0.012), 0.018, segments=8, bev=0)
     # an IV stand by the first cot, a bag hung on it
     kit.cylinder("clinic_iv_pole", M["bare"], coll, (16.6, 0, 1.0), (16.6, 1.95, 1.0), 0.012, segments=8)
     kit.cylinder("clinic_iv_base", M["dark"], coll, (16.6, 0, 1.0), (16.6, 0.04, 1.0), 0.2, segments=5, bev=0.004)
@@ -984,9 +987,10 @@ def build_clinic(M, P, coll):
             else:
                 kit.cylinder(f"clinic_bottle{k}_{j}", bottle, coll, (bx, y + 0.01, mz - 0.08), (bx, y + 0.01 + h, mz - 0.08), 0.035, segments=10)
     for s_ in (-1, 1):  # the doors, one a little open
-        kit.plane(f"clinic_cabinet_glass{s_}", glass, coll, (mx + s_ * 0.31, 1.15, mz - 0.215 - (0.08 if s_ > 0 else 0)), 0.58, 1.4, (R90, 0, math.pi + (0.3 if s_ > 0 else 0)))
+        # the right-hand door stands open, so the shelves show
+        kit.plane(f"clinic_cabinet_glass{s_}", glass, coll, (mx + s_ * 0.31 + (0.22 if s_ > 0 else 0), 1.15, mz - 0.215 - (0.28 if s_ > 0 else 0)), 0.58, 1.4, (R90, 0, math.pi + (1.2 if s_ > 0 else 0)))
     kit.box("clinic_cabinet_lock", M["bare"], coll, (mx, 1.1, mz - 0.225), (0.04, 0.08, 0.02), bev=0.006)
-    light(room, "clinic_cabinet_light", "POINT", (mx, 2.2, mz - 0.6), WARM, 30, coll=coll)
+    light(room, "clinic_cabinet_light", "POINT", (mx, 1.5, mz - 0.75), WARM, 45, coll=coll)
     # a wash basin and a jug; the steriliser pot on a burner
     kit.cylinder("clinic_basin_stand", M["dark"], coll, (x1 - 0.35, 0, 0.1), (x1 - 0.35, 0.8, 0.1), 0.025, segments=8)
     kit.cylinder("clinic_basin", M["bare"], coll, (x1 - 0.35, 0.8, 0.1), (x1 - 0.35, 0.92, 0.1), 0.22, segments=20)
@@ -1020,7 +1024,7 @@ def build_clinic(M, P, coll):
     for k in range(4):
         kit.cylinder(f"clinic_empty_jar{k}", ice, coll, (x0 + 0.33 + (k % 2) * 0.22, 0.4, -1.65 + (k // 2) * 0.18), (x0 + 0.33 + (k % 2) * 0.22, 0.55, -1.65 + (k // 2) * 0.18), 0.05, segments=10)
     light(room, "clinic_entry_light", "POINT", (dx, 2.6, -2.7), WARM, 50, coll=coll)
-    return [((dx, 1.65, -3.2), (dx, 1.1, 2.4)), ((x1 - 0.4, 1.7, -3.0), (16.4, 0.9, 1.2)), ((16.3, 1.6, 0.0), (19.6, 1.0, 1.8))]
+    return [((dx, 1.65, -3.2), (dx, 1.1, 2.4)), ((x1 - 0.4, 1.7, -3.0), (16.4, 0.9, 1.2)), ((17.2, 1.65, -0.35), (19.4, 0.8, 1.7))]
 
 
 def build_radio(M, P, coll):
@@ -1112,7 +1116,7 @@ def build_radio(M, P, coll):
         bmesh.ops.create_cone(bm, cap_ends=False, segments=20, radius1=0.3, radius2=0.3, depth=0.16)
         bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=0.12)
         kit.mesh_obj(f"radio_tyre{k}", bm, M["dark"], coll, kit.g2b(28.75 + rng.uniform(-0.03, 0.03), 0.08 + k * 0.17, -3.0), (0, 0, rng.uniform(0, 3)))["uv"] = "box"
-    board("radio_bin2_label", P["sign_bin_2"], coll, (28.75, 0.95, -2.66), 0.5, 0.18, (R90, 0, 0), thick=0.02)
+    board("radio_bin2_label", P["sign_bin_2"], coll, (28.75, 1.0, -3.3), 0.5, 0.18, (R90, 0, 0), timber=M["timber"], thick=0.02)  # nailed to the wall over the tyres
     for k in range(4):  # crates up the west wall, nearly to the roof
         crate(f"radio_stack{k}", M, coll, (x0 + 0.4 + rng.uniform(-0.03, 0.03), 0.34 + k * 0.69, -2.0), yaw=rng.uniform(-0.08, 0.08))
     board("radio_we_buy", P["sign_we_buy"], coll, (x1 - 0.07, 1.65, -2.4), 1.1, 0.6, (R90, 0, -R90), timber=M["timber"])
@@ -1122,7 +1126,7 @@ def build_radio(M, P, coll):
         bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=0.03)
         kit.mesh_obj(f"radio_cable_coil{k}", bm, M["dark"] if k % 2 else M["rust"], coll, kit.g2b(x1 - 0.1, 1.1 + k * 0.02, -3.0 + k * 0.38), (0, R90, 0))["uv"] = "box"
     light(room, "radio_entry_light", "POINT", (dx, 2.6, -2.6), WARM, 50, coll=coll)
-    return [((dx, 1.65, -3.2), (dx, 1.1, 2.2)), ((25.4, 1.7, -3.1), (29.2, 1.0, 0.8)), ((29.5, 1.6, -2.0), (25.8, 1.2, 1.6))]
+    return [((dx, 1.65, -3.2), (dx, 1.1, 2.2)), ((26.1, 1.7, -3.25), (29.3, 1.0, 0.9)), ((29.5, 1.6, -2.0), (25.8, 1.2, 1.6))]
 
 
 def tool_board(name, M, coll, pos, w, facing_rot, seed):
@@ -1161,7 +1165,7 @@ def build_workshop(M, P, coll):
     rock_wall("work_back", M, coll, "x", z0, x0, x1, +1, seed=54)
     rock_wall("work_front", M, coll, "x", z1, x0, x1, -1, doors=((14, 1.8),), seed=55)
     door_portal("work_door", M, coll, "x", 14, z1 - 0.1, 0.25)
-    for k, z in enumerate((-8.0, -12.5)):  # old steel arch ribs, as in the Trade Hall
+    for k, z in enumerate((-9.7, -12.8)):  # old steel arch ribs, as in the Trade Hall, in the gaps between the side benches
         pts = [(14 + 4.7 * math.cos(a), -1.25 + 4.65 * math.sin(a), z) for a in np.linspace(0.12, math.pi - 0.12, 25)]
         for j in range(len(pts) - 1):
             kit.cylinder(f"work_rib{k}_{j}", M["dark"], coll, pts[j], pts[j + 1], 0.06, segments=8, bev=0)
@@ -1183,7 +1187,7 @@ def build_workshop(M, P, coll):
     kit.box("work_engine_stand", M["timber"], coll, (14, 0.45, -10.8), (0.8, 0.12, 0.5), bev=0.015)  # the trestle it will come down onto
     for s_ in (-1, 1):
         kit.box(f"work_engine_trestle{s_}", M["timber"], coll, (14 + s_ * 0.32, 0.2, -10.8), (0.08, 0.4, 0.45), bev=0.01)
-    work_lamp("work_lamp", M, coll, 14, H - 0.8, -9.6, room, watts=380)
+    work_lamp("work_lamp", M, coll, 12.2, H - 0.85, -10.2, room, watts=380)  # off the hoist line, clear of the door view
 
     # the seven benches: top, legs, a shelf under, a pegboard of tools over the wall ones, the board saying what it is for
     spots = ((11, -14.3, 0), (14, -14.3, 0), (17, -14.3, 0), (9.85, -11.0, R90), (18.15, -11.0, -R90), (18.15, -8.4, -R90), (9.85, -8.4, R90))
@@ -1243,8 +1247,8 @@ def build_workshop(M, P, coll):
     kit.cylinder("bench3_mortar", M["rock"], coll, (10.0, y, -10.45), (10.0, y + 0.09, -10.45), 0.07, segments=14)
     kit.cylinder("bench3_pestle", M["rock"], coll, (10.0, y + 0.05, -10.45), (10.07, y + 0.18, -10.4), 0.015, segments=8)
     # 4 EXPLOSIVES (east wall): a sandbag wall in front, canisters, a coil of fuse, a careful note
-    for k in range(3):
-        kit.box(f"bench4_sandbag{k}", M["canvas"], coll, (17.55, 0.12 + (k // 2) * 0.2, -11.6 + (k % 2) * 0.5 + (k // 2) * 0.25), (0.3, 0.2, 0.5), rot=(0, rng.uniform(-0.1, 0.1), 0), soft=True, puff=0.5)
+    for k in range(3):  # sandbags stacked beside the bench, not in front of it
+        kit.box(f"bench4_sandbag{k}", M["canvas"], coll, (18.3 - (k % 2) * 0.3, 0.12 + (k // 2) * 0.2, -12.4), (0.3, 0.2, 0.5), rot=(0, 0, R90 + rng.uniform(-0.1, 0.1)), soft=True, puff=0.5)
     for k in range(4):
         kit.cylinder(f"bench4_canister{k}", M["steel_locker"], coll, (18.1, y, -11.5 + k * 0.14), (18.1, y + 0.16, -11.5 + k * 0.14), 0.05, segments=12)
         kit.cylinder(f"bench4_canister{k}_cap", M["dark"], coll, (18.1, y + 0.16, -11.5 + k * 0.14), (18.1, y + 0.18, -11.5 + k * 0.14), 0.03, segments=8, bev=0)
@@ -1294,7 +1298,7 @@ def build_workshop(M, P, coll):
     for s1 in (-1, 1):
         for s2 in (-1, 1):
             kit.box(f"work_rack_post{s1}{s2}", M["steel"], coll, (15.6 + s1 * 0.58, 0.85, -7.2 + s2 * 0.18), (0.03, 1.7, 0.03), bev=0.003)
-    return [((14, 1.7, -7.4), (14, 1.2, -14.0)), ((10.0, 1.8, -7.6), (17.0, 1.0, -13.0)), ((17.6, 1.7, -7.6), (11.5, 1.0, -13.5))]
+    return [((14, 1.7, -7.4), (14, 1.2, -14.0)), ((10.6, 1.8, -8.9), (17.0, 1.0, -13.0)), ((17.3, 1.7, -8.9), (11.5, 1.0, -13.5))]
 
 
 def build_checkout(M, P, coll):
@@ -1404,7 +1408,10 @@ def build_lift(M, P, coll):
                                       ((34.75, (H + top) / 2, z0 - 0.15), x1 - x0 + 0.3, (R90, 0, 0)),
                                       ((x1 + 0.05, (H + top) / 2, -5.1), z1 - z0 + 0.3, (R90, 0, -R90)),
                                       ((x0 - 0.05, (H + top) / 2, -5.1), z1 - z0 + 0.3, (R90, 0, R90)))):
-        kit.displaced_panel(f"lift_shaft{k}", M["rock"], coll, pos, w, top - H, rot, step=0.08, depth=0.12, seed=73 + k)
+        kit.displaced_panel(f"lift_shaft{k}", M["rock"], coll, pos, w + 0.7, top - H, rot, step=0.08, depth=0.12, seed=73 + k)  # overlapping at the corners
+    # the top of the shaft: open sky, the one cool light in the Sanctuary
+    sky = kit.pbr("mat_daylight_01", None, tint=(0.85, 0.9, 1.0), emission=(0.8, 0.88, 1.0), emission_strength=3.0)
+    kit.plane("lift_sky", sky, coll, (34.75, top - 0.05, -5.1), x1 - x0 + 0.6, z1 - z0 + 0.6, (math.pi, 0, 0))
     for k, z in enumerate((z0 - 0.05, z1 + 0.05)):
         kit.box(f"lift_collar{k}", M["timber"], coll, (34.75, H + 0.1, z), (x1 - x0 + 0.4, 0.26, 0.22), bev=0.02, grain="long")
     # the sheave wheel the cable runs over, on a steel beam across the shaft
@@ -1442,7 +1449,7 @@ def build_lift(M, P, coll):
         kit.box(f"lift_stripe{k}", M["hazard"] if k % 2 == 0 else M["dark"], coll, (x0 - 0.3, 0.008, z0 + 0.15 + k * 0.3), (0.5, 0.012, 0.3), rot=(0, 0, 0.0), bev=0)
     for k in range(10):
         kit.box(f"lift_frame_stripe{k}", M["hazard"] if k % 2 == 0 else M["dark"], coll, (x0 - 0.085, H - 0.1, z0 + 0.15 + k * 0.3), (0.012, 0.18, 0.3), bev=0)
-    board("lift_sign", P["sign_lift"], coll, (34.75, 2.45, z0 + 0.06), 1.4, 0.36, (R90, 0, 0), timber=M["timber"])
+    board("lift_sign", P["sign_lift"], coll, (x1 - 0.14, 2.3, -5.75), 1.0, 0.26, (R90, 0, -R90), timber=M["timber"])  # over the beacon, facing the way in
     return [((31.0, 1.7, -5.1), (36.0, 1.2, -5.1)), ((33.4, 1.4, -4.0), (35.6, 4.5, -5.6))]
 
 

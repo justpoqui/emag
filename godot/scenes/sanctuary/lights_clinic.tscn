@@ -1,0 +1,38 @@
+[gd_scene format=3]
+
+[node name="Lights_clinic" type="Node3D"]
+
+[node name="clinic_counter_lamp_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.0, 2.07, -0.75)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 1.342
+omni_range = 4.7
+
+[node name="clinic_surgery_lamp_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19.55, 1.8699999999999999, 1.4)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 1.789
+shadow_enabled = true
+distance_fade_enabled = true
+distance_fade_begin = 20.0
+distance_fade_shadow = 12.0
+distance_fade_length = 5.0
+omni_range = 6.26
+
+[node name="clinic_cabinet_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.8, 1.5, 1.5300000000000002)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.671
+omni_range = 2.5
+
+[node name="clinic_burner_glow" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15.9, 0.6, 0.3)
+light_color = Color(1.000, 0.550, 0.300, 1)
+light_energy = 0.283
+omni_range = 2.5
+
+[node name="clinic_entry_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.8, 2.6, -2.7)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.707
+omni_range = 2.5
