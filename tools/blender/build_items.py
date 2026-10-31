@@ -497,7 +497,122 @@ def build_frag(M, coll):
     return {"views": [((0.26, 0.17, 0.26), (0, 0.055, 0)), ((-0.24, 0.11, -0.19), (0, 0.055, 0)), ((0.16, 0.22, 0.12), (0, 0.075, 0))]}
 
 
-ITEMS = {"frag": build_frag, "bandage": build_bandage, "med_kit": build_med_kit, "shield_cell": build_shield_cell,
+def cartridge(name, A, coll, base, d, case_len, r, bullet_len, tip="copper", case="brass", seg=10):
+    """A round from its base along unit direction d: a case (with a rim), then
+    the bullet narrowing to a rounded point. Shotgun shells pass bullet_len 0
+    and case="plastic" for a hull on a brass head."""
+    from mathutils import Vector
+    def at(t):
+        return tuple(base[i] + d[i] * t for i in range(3))
+    cell(fine(kit.cylinder(f"{name}_rim", A, coll, at(0), at(0.0012), r * 1.08, segments=seg, bev=0)), "brass")
+    if bullet_len == 0:  # a shotgun shell: a brass head, then the hull
+        cell(fine(kit.cylinder(f"{name}_head", A, coll, at(0.0012), at(case_len * 0.22), r, segments=seg, bev=0)), "brass")
+        cell(fine(kit.cylinder(f"{name}_hull", A, coll, at(case_len * 0.22), at(case_len), r * 0.97, segments=seg, bev=0.0008)), case)
+        cell(fine(kit.cylinder(f"{name}_crimp", A, coll, at(case_len - 0.0008), at(case_len + 0.0004), r * 0.72, segments=6, bev=0)), "rubber")  # the folded crimp
+        return
+    cell(fine(kit.cylinder(f"{name}_case", A, coll, at(0.0012), at(case_len), r, segments=seg, bev=0.0004)), case)
+    bm = bmesh.new()  # the bullet: a lathed ogive, round-nosed
+    rings = []
+    for k in range(7):
+        t = k / 6
+        rad = r * 0.88 * max(0.12, (1 - t ** 1.7) ** 0.55)
+        rings.append([bm.verts.new((rad * math.cos(a), rad * math.sin(a), -bullet_len / 2 + t * bullet_len)) for a in np.linspace(0, 2 * math.pi, seg, endpoint=False)])
+    for a_, b_ in zip(rings, rings[1:]):
+        for j in range(seg):
+            bm.faces.new((a_[j], a_[(j + 1) % seg], b_[(j + 1) % seg], b_[j]))
+    bm.faces.new(rings[-1])
+    bm.faces.new(list(reversed(rings[0])))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    rot = Vector(kit.g2b(*d)).to_track_quat("Z", "Y").to_euler()
+    o = kit.mesh_obj(f"{name}_bullet", bm, A, coll, kit.g2b(*at(case_len + bullet_len / 2)), rot)
+    o["uv"] = "box"
+    cell(fine(o), tip)
+
+
+def build_ammo_light(M, coll):
+    """Light Ammo (Mule, Sparrow): a battered paper box, its flap torn open
+    and bent back, short rounds standing in rows. ~7 x 5 cm."""
+    A = M["atlas"]
+    W, D, Hh, t = 0.072, 0.05, 0.03, 0.0015
+    cell(fine(kit.box("ammol_floor", A, coll, (0, t / 2, 0), (W, t, D), bev=0)), "cork")  # brown cardboard
+    for sx in (-1, 1):
+        cell(fine(kit.box(f"ammol_side{sx}", A, coll, (sx * (W / 2 - t / 2), Hh / 2, 0), (t, Hh, D), rot=(0, 0, 0), bev=0.0004)), "cork")
+        cell(fine(kit.box(f"ammol_end{sx}", A, coll, (0, Hh / 2, sx * (D / 2 - t / 2)), (W, Hh, t), rot=(0, 0, 0), bev=0.0004)), "cork")
+    flap = [(0, Hh, -D / 2), (0, Hh + 0.012, -D / 2 - 0.006), (0, Hh + 0.02, -D / 2 - 0.018), (0, Hh + 0.022, -D / 2 - 0.035)]
+    cell(strip("ammol_flap", A, coll, flap, W - 0.002, thick=0.0012, ragged=0.0005, seed=91), "cork")
+    cell(fine(kit.box("ammol_label", A, coll, (0, Hh * 0.55, D / 2 + 0.0002), (0.04, 0.014, 0.0005), bev=0)), "paper")  # a scrap of the old label
+    for i in range(5):
+        for j in range(3):
+            if (i, j) in ((4, 2), (3, 2), (4, 1), (4, 0)):
+                continue  # a couple already used
+            x, z = -W / 2 + 0.011 + i * 0.0125, -D / 2 + 0.012 + j * 0.013
+            cartridge(f"ammol_round{i}{j}", A, coll, (x, t, z), (0, 1, 0), 0.019, 0.0045, 0.013, seg=7)
+    cartridge("ammol_loose", A, coll, (0.05, 0.0045, 0.02), (0.6, 0, 0.8), 0.019, 0.0045, 0.013, seg=8)
+    return {"views": [((0.16, 0.13, 0.17), (0, 0.02, 0.0)), ((-0.14, 0.1, -0.1), (0, 0.02, 0.0)), ((0.04, 0.16, 0.06), (0, 0.02, 0.0))]}
+
+
+def build_ammo_medium(M, coll):
+    """Medium Ammo (Badger): rifle rounds lying side by side in an old tin,
+    its lid peeled back and curled. ~11 x 6 cm."""
+    A = M["atlas"]
+    W, D, Hh = 0.11, 0.062, 0.022
+    t = 0.0012
+    cell(fine(kit.box("ammom_floor", A, coll, (0, t / 2, 0), (W, t, D), bev=0)), "steel_bare")
+    for sx in (-1, 1):  # an open tin: thin walls, rolled rims
+        cell(fine(kit.box(f"ammom_side{sx}", A, coll, (sx * (W / 2 - t / 2), Hh / 2, 0), (t, Hh, D), bev=0.0005)), "steel_rust")
+        cell(fine(kit.box(f"ammom_end{sx}", A, coll, (0, Hh / 2, sx * (D / 2 - t / 2)), (W, Hh, t), bev=0.0005)), "steel_rust")
+        cell(fine(kit.cylinder(f"ammom_rim{sx}", A, coll, (-W / 2, Hh, sx * (D / 2 - t / 2)), (W / 2, Hh, sx * (D / 2 - t / 2)), 0.0015, segments=6, bev=0)), "steel_rust")
+    lid = []
+    for k, a in enumerate(np.linspace(0, 1.6 * math.pi, 14)):  # the lid rolled back on itself at one end
+        rr = 0.008 - 0.0025 * k / 13
+        lid.append((W / 2 + 0.002 + rr * math.sin(a), Hh + rr * (1 - math.cos(a)), 0))
+    lid = [(W / 2 - 0.004, Hh + 0.0008, 0)] + lid  # peeled back from the far end and rolled
+    cell(strip("ammom_lid", A, coll, lid, D - 0.004, thick=0.0008, side=(0, 0, 1)), "steel_bare")
+    for k in range(7):
+        z = -D / 2 + 0.008 + k * 0.0078
+        cartridge(f"ammom_round{k}", A, coll, (-W / 2 + 0.006 + (k % 2) * 0.004, 0.0055, z), (1, 0, 0), 0.044, 0.0042, 0.02)  # lying in the tin
+    return {"views": [((0.18, 0.15, 0.2), (0, 0.02, 0.0)), ((-0.16, 0.1, -0.14), (0, 0.02, 0.0)), ((0.02, 0.17, 0.08), (0, 0.02, 0.0))]}
+
+
+def build_ammo_heavy(M, coll):
+    """Heavy Ammo (Hammerhead, Heron): five big rounds held upright in a
+    strip of leather loops stitched to a backing, the strip curved a little
+    so it stands. ~12 cm long."""
+    A = M["atlas"]
+    n, step, r = 5, 0.022, 0.0068
+    pts = [(-n * step / 2 + k * step * 0.5, 0.004, 0.004 * math.sin(k * 0.6)) for k in range(2 * n + 1)]
+    cell(strip("ammoh_backing", A, coll, [(p[0], 0.016, p[2] - 0.008) for p in pts], 0.03, thick=0.003, side=(0, 1, 0), ragged=0.0004, seed=93), "leather")
+    for k in range(n):
+        x = -n * step / 2 + step * (k + 0.5)
+        loop = [(x - r - 0.002, 0.016, -0.008), (x - r - 0.002, 0.016, -0.0005), (x, 0.016, r + 0.002), (x + r + 0.002, 0.016, -0.0005), (x + r + 0.002, 0.016, -0.008)]
+        cell(strip(f"ammoh_loop{k}", A, coll, loop, 0.016, thick=0.0025, side=(0, 1, 0), seed=94 + k), "leather")
+        cartridge(f"ammoh_round{k}", A, coll, (x, 0.0, -0.001), (0, 1, 0), 0.042, r, 0.026, seg=12)
+    return {"views": [((0.17, 0.12, 0.2), (0, 0.035, 0.0)), ((-0.15, 0.09, -0.15), (0, 0.035, 0.0)), ((0.05, 0.1, 0.09), (0, 0.05, 0.0))]}
+
+
+def build_ammo_shotgun(M, coll):
+    """Shotgun Shells (Boar): five shells, faded hulls on brass heads,
+    stacked three and two and bundled with a perished rubber band pulled
+    tight round them; a sixth lies loose beside. ~7 cm long."""
+    A = M["atlas"]
+    r, L = 0.0105, 0.066
+    lift = 0.0036  # the bundle rests on the band where it runs underneath
+    centres = [(lift + r, -2 * r), (lift + r, 0.0), (lift + r, 2 * r), (lift + r + r * math.sqrt(3), -r), (lift + r + r * math.sqrt(3), r)]  # (y, z): three below, two in the grooves
+    for k, (y, z) in enumerate(centres):
+        cartridge(f"ammos_shell{k}", A, coll, (-L / 2 + (0.003 if k % 2 else 0), y, z), (1, 0, 0), L, r, 0, case="canvas_olive", seg=12)  # waxed paper hulls, faded
+    cartridge("ammos_loose", A, coll, (-0.02, r, 0.05), (0.94, 0, -0.34), L, r, 0, case="canvas_olive", seg=12)
+    # the band: traced round the outline of the bundle, hugging each shell and running straight between them
+    band = []
+    for a in np.linspace(0, 2 * math.pi, 49):
+        u = (math.cos(a), math.sin(a))  # (y, z) direction
+        cy_, cz_ = max(centres, key=lambda c: c[0] * u[0] + c[1] * u[1])
+        band.append((0.006, cy_ + (r + 0.0016) * u[0], cz_ + (r + 0.0016) * u[1]))
+    cell(wire("ammos_band", A, coll, band, 0.0018), "rubber")
+    return {"views": [((0.15, 0.12, 0.17), (0, 0.018, 0.012)), ((-0.14, 0.08, -0.12), (0, 0.018, 0.0)), ((0.07, 0.07, -0.13), (0, 0.02, 0.0))]}
+
+
+ITEMS = {"ammo_light": build_ammo_light, "ammo_medium": build_ammo_medium, "ammo_heavy": build_ammo_heavy, "ammo_shotgun": build_ammo_shotgun,
+         "frag": build_frag, "bandage": build_bandage, "med_kit": build_med_kit, "shield_cell": build_shield_cell,
          "shield_light": lambda M, c: build_shield(M, c, "light"), "shield_medium": lambda M, c: build_shield(M, c, "medium"),
          "shield_heavy": lambda M, c: build_shield(M, c, "heavy")}
 
