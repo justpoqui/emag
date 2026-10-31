@@ -67,8 +67,8 @@ def make_item_atlas():
         "herb": ("#56603a", "#7d6b40", fine_, 0.8, 0.0),
         "glass_amber": ("#24110a", "#3a1e0e", mid * 0.2, 0.18, 0.0),
         "cork": ("#a98458", "#7a5c38", fine_, 0.9, 0.0),
-        "steel_rust": ("#5c3a26", "#3b2a20", fine_, 0.8, 0.4),
-        "steel_bare": ("#7d7b76", "#4c4a46", mid * 0.4, 0.45, 0.9),
+        "steel_rust": ("#4b3a30", "#33281f", fine_ * 0.3 + mid * 0.1, 0.8, 0.4),  # rust kept under 35% saturation (art bible 6.2)
+        "steel_bare": ("#7d7b76", "#4c4a46", mid * 0.12, 0.45, 0.9),
         "brass": ("#9c7c3c", "#5c4a28", mid * 0.3, 0.4, 1.0),
         "leather": ("#4e3626", "#76563c", mid, 0.65, 0.0),
         "paper": ("#d6cdb4", "#a89a76", fine_ * 0.4, 0.92, 0.0),
@@ -366,7 +366,83 @@ def build_shield_cell(M, coll):
     return {"views": [((0.2, 0.13, 0.18), (0, 0.028, 0.0)), ((-0.18, 0.08, -0.15), (0, 0.028, 0.0)), ((0.23, 0.05, 0.0), (0, 0.028, 0.0))]}
 
 
-ITEMS = {"bandage": build_bandage, "med_kit": build_med_kit, "shield_cell": build_shield_cell}
+def build_shield(M, coll, tier):
+    """A shield pack: the bevelled steel case a Diver clips to the back of
+    their pack (art bible 5: scratched and stickered, doesn't glow), stood
+    upright. Its tier reads from the size and build of the case and from the
+    row of hexagonal charge windows on the front (3, 5 or 7 Shield Ice cells:
+    hexagons are for shields only). Webbing straps and buckles on the back."""
+    A = M["atlas"]
+    W, H, D, cells, case = {
+        "light": (0.2, 0.26, 0.05, 3, "steel_bare"),
+        "medium": (0.22, 0.29, 0.07, 5, "steel_bare"),
+        "heavy": (0.25, 0.31, 0.095, 7, "steel_rust"),
+    }[tier]
+    p = f"shield_{tier}"
+    body = kit.box(f"{p}_case", A, coll, (0, H / 2, 0), (W, H, D), bev=0)
+    kit.bevel(body, min(D * 0.3, 0.02), 4)
+    cell(fine(body), case)
+    # a raised face plate, a little smaller, its own bevel; a seam all round
+    face = kit.box(f"{p}_face", A, coll, (0, H / 2 + 0.005, D / 2 + 0.003), (W - 0.03, H - 0.04, 0.008), bev=0)
+    kit.bevel(face, 0.004, 2)
+    cell(fine(face), "steel_bare")
+    # the charge windows: a row of hex cells of Shield Ice across the face, in a dark bezel
+    rh = 0.012
+    span = (cells - 1) * rh * 1.9
+    cell(fine(kit.box(f"{p}_bezel", A, coll, (0, H * 0.72, D / 2 + 0.0075), (span + 0.034, 0.034, 0.003), bev=0.0015)), "rubber")
+    for k in range(cells):
+        x = -span / 2 + k * rh * 1.9
+        o = kit.cylinder(f"{p}_cell{k}", A, coll, (x, H * 0.72, D / 2 + 0.008), (x, H * 0.72, D / 2 + 0.011), rh, segments=6, bev=0.0008)
+        cell(fine(o), "shield_ice")
+    # screws at the face plate's corners
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            x, y = sx * (W / 2 - 0.028), H / 2 + 0.005 + sy * (H / 2 - 0.034)
+            cell(fine(kit.cylinder(f"{p}_screw{sx}{sy}", A, coll, (x, y, D / 2 + 0.007), (x, y, D / 2 + 0.0095), 0.004, segments=6, bev=0)), "steel_rust")
+    # stickers: a worn paper one slapped on, a second half torn away
+    cell(fine(kit.box(f"{p}_sticker0", A, coll, (-W * 0.18, H * 0.35, D / 2 + 0.0078), (0.05, 0.035, 0.0006), rot=(0, 0, 0.12), bev=0)), "paper")
+    cell(fine(kit.box(f"{p}_sticker1", A, coll, (W * 0.22, H * 0.3, D / 2 + 0.0078), (0.03, 0.022, 0.0006), rot=(0, 0, -0.3), bev=0)), "paper")
+    # the back: two webbing straps with steel buckles, to clip it on the pack
+    for sx in (-1, 1):
+        x = sx * W * 0.28
+        loop = [(x, H - 0.02, -D / 2 + 0.002), (x, H - 0.008, -D / 2 - 0.012), (x, H * 0.55, -D / 2 - 0.016), (x, 0.03, -D / 2 - 0.012), (x, 0.012, -D / 2 + 0.002)]
+        cell(strip(f"{p}_strap{sx}", A, coll, loop, 0.03, thick=0.002, ragged=0.0004, seed=70 + sx), "canvas_olive")
+        cell(fine(kit.box(f"{p}_buckle{sx}", A, coll, (x, H * 0.5, -D / 2 - 0.019), (0.036, 0.024, 0.004), bev=0.0015)), "steel_bare")
+    if tier != "light":  # vents down the sides
+        for sx in (-1, 1):
+            for k in range(4 if tier == "medium" else 5):
+                y = H * 0.25 + k * 0.03
+                cell(fine(kit.box(f"{p}_vent{sx}_{k}", A, coll, (sx * (W / 2 + 0.0008), y, 0), (0.002, 0.008, D * 0.55), bev=0)), "rubber")
+    if tier == "heavy":  # armour plates bolted on the shoulders, and a carry handle on top
+        for sx in (-1, 1):
+            plate = kit.box(f"{p}_armour{sx}", A, coll, (sx * W * 0.33, H * 0.9, D / 2 + 0.006), (W * 0.3, 0.05, 0.01), rot=(0.0, 0, sx * 0.08), bev=0)
+            kit.bevel(plate, 0.004, 1)
+            cell(fine(plate), "steel_rust")
+            for j in (-1, 1):
+                x = sx * W * 0.33 + j * W * 0.1
+                cell(fine(kit.cylinder(f"{p}_armour{sx}_bolt{j}", A, coll, (x, H * 0.9, D / 2 + 0.011), (x, H * 0.9, D / 2 + 0.0145), 0.0045, segments=6, bev=0)), "steel_bare")
+    # the handle (author: it hangs from the side of the Diver's backpack by this and swings
+    # with movement): a steel bail pivoting in two lugs on top, a rubber grip sleeve on it
+    hw, hh, hr = {"light": (0.04, 0.034, 0.0035), "medium": (0.05, 0.04, 0.0045), "heavy": (0.06, 0.045, 0.0055)}[tier]
+    for sx in (-1, 1):
+        lug = kit.box(f"{p}_lug{sx}", A, coll, (sx * hw, H + 0.006, 0), (0.008, 0.016, 0.014), bev=0)
+        kit.bevel(lug, 0.003, 1)
+        cell(fine(lug), "steel_rust")
+        cell(fine(kit.cylinder(f"{p}_pin{sx}", A, coll, (sx * hw - 0.007, H + 0.009, 0), (sx * hw + 0.007, H + 0.009, 0), 0.0028, segments=8, bev=0.0006)), "steel_bare")
+    bail = [(-hw - 0.005, H + 0.009, 0)]
+    for a in np.linspace(math.pi, 0, 11):
+        bail.append((hw * 1.02 * math.cos(a), H + 0.009 + hh * math.sin(a) ** 0.6, 0))
+    bail.append((hw + 0.005, H + 0.009, 0))
+    cell(wire(f"{p}_handle", A, coll, bail, hr), "steel_bare")
+    top = H + 0.009 + hh
+    cell(fine(kit.cylinder(f"{p}_grip", A, coll, (-hw * 0.45, top, 0), (hw * 0.45, top, 0), hr + 0.004, segments=10, bev=0.0015)), "rubber")
+    bw.marker("hang", coll, (0, top, 0))  # where the game hangs it from the pack
+    return {"views": [((0.5, 0.4, 0.6), (0, H * 0.62, 0)), ((-0.52, 0.32, -0.42), (0, H * 0.62, 0)), ((0.16, H + 0.12, 0.22), (0, H, 0))]}
+
+
+ITEMS = {"bandage": build_bandage, "med_kit": build_med_kit, "shield_cell": build_shield_cell,
+         "shield_light": lambda M, c: build_shield(M, c, "light"), "shield_medium": lambda M, c: build_shield(M, c, "medium"),
+         "shield_heavy": lambda M, c: build_shield(M, c, "heavy")}
 
 
 def studio(cam, look, out, fov=30):
