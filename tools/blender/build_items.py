@@ -75,7 +75,7 @@ def make_item_atlas():
         "rubber": ("#262422", "#3a3632", fine_ * 0.5, 0.85, 0.0),
         "copper": ("#a5603a", "#4a6a58", mid * 0.3, 0.4, 1.0),
         "plastic": ("#8a8a7a", "#5e5c50", fine_ * 0.3, 0.55, 0.0),
-        "husk": ("#2a2e30", "#4a4436", mid, 0.5, 0.6),
+        "husk": ("#3c434c", "#4d4640", mid * 0.15, 0.38, 0.75),  # Husk Slate (art bible 4), heat-tinted, never rust
         "shield_ice": ("#9fd8f0", "#7fa8b8", mid * 0.35, 0.3, 0.2),  # Shield Ice (art bible 4): pale, low saturation, never glowing
     }
     for i, name in enumerate(ATLAS):
@@ -790,7 +790,98 @@ def build_battery(M, coll):
     return {"views": [((0.24, 0.2, 0.26), (0, 0.05, 0.0)), ((-0.22, 0.15, -0.18), (0, 0.05, 0.0)), ((0.06, 0.2, 0.12), (0, 0.08, 0.0))]}
 
 
-ITEMS = {"scrap": build_scrap, "rubber": build_rubber, "plastic": build_plastic, "fabric": build_fabric, "chemicals": build_chemicals,
+def curved_panel(name, A, coll, w, l, bend, thick, y0, seed, ragged=0.0):
+    """A machined plate curved across its width (an arc of `bend` radians),
+    lying convex side up, `l` long along z."""
+    pts = []
+    R = w / max(bend, 1e-3)
+    for a in np.linspace(-bend / 2, bend / 2, 9):
+        pts.append((R * math.sin(a), y0 + R * (math.cos(a) - math.cos(bend / 2)), 0.0))
+    # strip runs along the arc (x), with width l along z
+    return strip(name, A, coll, pts, l, thick=thick, side=(0, 0, 1), ragged=ragged, seed=seed)
+
+
+def build_husk_plating(M, coll):
+    """Husk Plating ("plating stripped from Husks"): a curved slate armour
+    plate prised off a Husk, a second layer seated on it with a precise
+    seam, a machined chevron ridge, pale bare-metal edges, two mounting
+    bolts sheared off flush, scorched at one end (art bible 5.4: machined,
+    never rust). ~16 x 11 cm."""
+    A = M["atlas"]
+    R = 0.16 / 0.9  # both layers share one curvature, so the top one seats on the base
+    def arc(x):  # the base plate's top surface height at x
+        return 0.006 + R * (math.cos(math.asin(max(-1, min(1, x / R)))) - math.cos(0.45))
+    cell(curved_panel("hplate_base", A, coll, 0.16, 0.11, 0.9, 0.006, 0.006, 131), "husk")
+    lw = 2 * R * math.sin(0.11 / R / 2)
+    cell(curved_panel("hplate_layer", A, coll, 0.11, 0.075, 0.11 / R, 0.004, arc(lw / 2) + 0.0045, 132), "husk")
+    for sz in (-1, 1):  # pale bare-metal edges along the two long sides
+        pts = [(x, arc(x) - 0.003, sz * 0.0545) for x in np.linspace(-0.077, 0.077, 13)]
+        cell(wire(f"hplate_edge{sz}", A, coll, pts, 0.0022), "steel_bare")  # worn to bare metal
+    for k, sx in enumerate((-1, 1)):  # the chevron ridge: two machined arms meeting at a point
+        pts = [(sx * 0.03 * t, arc(sx * 0.03 * t) + 0.0045, 0.012 - 0.03 * t) for t in np.linspace(0, 1, 5)]
+        cell(wire(f"hplate_chevron{k}", A, coll, pts, 0.0016), "steel_bare")
+    for k, (x, z) in enumerate(((-0.06, -0.04), (0.06, 0.035))):  # sheared mounting bolts
+        y = arc(x) - 0.002
+        cell(fine(kit.cylinder(f"hplate_bolt{k}", A, coll, (x, y, z), (x, y + 0.0035, z), 0.0055, segments=12, bev=0.0006)), "steel_bare")
+    return {"views": [((0.2, 0.17, 0.22), (0, 0.015, 0.0)), ((-0.2, 0.1, -0.17), (0, 0.015, 0.0)), ((0.03, 0.22, 0.07), (0, 0.01, 0.0))]}
+
+
+def build_husk_circuit(M, coll):
+    """Husk Circuitry ("strange, warm circuit boards"): a board in a
+    machined slate frame, its copper traces laid in chevrons and diamonds,
+    the Husk way (art bible 3), three studs where it plugged in. ~10 x 7 cm."""
+    A = M["atlas"]
+    W, D = 0.1, 0.07
+    frame = kit.box("hcirc_frame", A, coll, (0, 0.003, 0), (W, 0.006, D), bev=0)
+    kit.bevel(frame, 0.004, 3)
+    cell(fine(frame), "steel_bare")
+    cell(fine(kit.box("hcirc_board", A, coll, (0, 0.0062, 0), (W - 0.012, 0.0012, D - 0.012), bev=0)), "husk")
+    y = 0.0069
+    for k in range(4):  # chevrons, nested
+        o = 0.008 * k
+        pts = [(-0.035 + o * 0.5, y, -0.022 + o), (-0.012, y, -0.004 + o), (-0.035 + o * 0.5, y, 0.014 + o)]
+        cell(wire(f"hcirc_chev{k}", A, coll, pts, 0.0006), "copper")
+    for k, (cx, cz, rr) in enumerate(((0.02, -0.01, 0.012), (0.02, -0.01, 0.007), (0.034, 0.018, 0.006))):  # diamonds
+        pts = [(cx, y, cz - rr), (cx + rr, y, cz), (cx, y, cz + rr), (cx - rr, y, cz), (cx, y, cz - rr)]
+        cell(wire(f"hcirc_diamond{k}", A, coll, pts, 0.0006), "copper")
+    for k in range(3):  # the studs on the edge where it plugged into the Husk
+        x = -0.02 + k * 0.02
+        cell(fine(kit.cylinder(f"hcirc_stud{k}", A, coll, (x, 0.003, D / 2), (x, 0.003, D / 2 + 0.007), 0.0025, segments=8, bev=0.0004)), "brass")
+    chip = kit.box("hcirc_chip", A, coll, (-0.028, 0.0085, 0.022), (0.016, 0.003, 0.016), rot=(0, 0, math.pi / 4), bev=0.0008)
+    cell(fine(chip), "husk")
+    return {"views": [((0.15, 0.13, 0.17), (0, 0.004, 0.0)), ((-0.14, 0.09, -0.12), (0, 0.004, 0.0)), ((0.01, 0.17, 0.05), (0, 0.004, 0.0))]}
+
+
+def build_husk_heart(M, coll):
+    """Husk Heart ("the heart of a big Husk, worth a fortune"): the core
+    pulled from a Pouncer or Warden (art bible 5.4: the glowing critical
+    spot), dark now: a glass lens sphere in a machined cage of layered
+    slate bands, pale at the edges, two torn-off couplings. Sits on its
+    lower ring. ~11 cm across."""
+    A = M["atlas"]
+    cy, R = 0.052, 0.04
+    bm = bmesh.new()
+    bmesh.ops.create_icosphere(bm, subdivisions=2, radius=R * 0.8)  # cut like a stone
+    lens = kit.mesh_obj("hheart_lens", bm, A, coll, kit.g2b(0, cy, 0))
+    lens["uv"] = "box"
+    cell(fine(lens), "glass_amber")
+    for k, (tilt, c) in enumerate(((0.0, "husk"), (1.05, "husk"), (-1.05, "husk"))):  # three machined bands caging it
+        bm = bmesh.new()
+        bmesh.ops.create_cone(bm, cap_ends=False, segments=24, radius1=R, radius2=R, depth=0.012)
+        bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=0.005)
+        o = kit.mesh_obj(f"hheart_band{k}", bm, A, coll, kit.g2b(0, cy, 0), (math.pi / 2 if k else 0, tilt, 0))
+        o["uv"] = "box"
+        kit.bevel(o, 0.0012, 1)
+        cell(fine(o), c)
+    for k, sx in enumerate((-1, 1)):  # couplings torn off where it was wired in, pale bare metal
+        cell(fine(kit.cylinder(f"hheart_coupling{k}", A, coll, (sx * R * 0.95, cy, 0), (sx * (R + 0.016), cy, 0), 0.009, segments=12, bev=0.0012)), "steel_bare")
+        cell(fine(kit.cylinder(f"hheart_coupling{k}_lip", A, coll, (sx * (R + 0.014), cy, 0), (sx * (R + 0.019), cy, 0), 0.012, segments=12, bev=0.001)), "husk")
+    cell(fine(kit.cylinder("hheart_foot", A, coll, (0, 0.0, 0), (0, 0.012, 0), 0.022, segments=24, bev=0.002)), "husk")
+    return {"views": [((0.2, 0.16, 0.22), (0, 0.05, 0.0)), ((-0.2, 0.12, -0.16), (0, 0.05, 0.0)), ((0.09, 0.08, 0.13), (0, 0.05, 0.0))]}
+
+
+ITEMS = {"husk_plating": build_husk_plating, "husk_circuit": build_husk_circuit, "husk_heart": build_husk_heart,
+         "scrap": build_scrap, "rubber": build_rubber, "plastic": build_plastic, "fabric": build_fabric, "chemicals": build_chemicals,
          "wires": build_wires, "battery": build_battery,
          "ammo_light": build_ammo_light, "ammo_medium": build_ammo_medium, "ammo_heavy": build_ammo_heavy, "ammo_shotgun": build_ammo_shotgun,
          "frag": build_frag, "bandage": build_bandage, "med_kit": build_med_kit, "shield_cell": build_shield_cell,
