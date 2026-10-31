@@ -528,7 +528,94 @@ def build_badger(M, coll):
     return {"length": 0.97, "views": [((1.55, 0.06, 0.08), (0, -0.03, 0.08)), ((0.75, 0.35, -0.6), (0, -0.03, 0.08)), ((0.25, 0.14, 0.12), (0, 0.05, -0.02))]}
 
 
-GUNS = {"mule": build_mule, "sparrow": build_sparrow, "badger": build_badger}
+def fluted_cylinder(name, mat, coll, cy, z0, z1, r, flute=0.0035, n=6, seg=72):
+    """A revolver cylinder: a round drum with `n` shallow flutes cut between
+    the chambers, extruded along the barrel axis."""
+    bm = bmesh.new()
+    verts = []
+    for k in range(seg):
+        a = 2 * math.pi * k / seg
+        f = math.cos(n * (a + math.pi / n) / 2) ** 16  # a flute centred between each pair of chambers
+        rr = r - flute * f
+        verts.append(bm.verts.new(kit.g2b(rr * math.cos(a), cy + rr * math.sin(a), z0)))
+    face = bm.faces.new(verts)
+    ext = bmesh.ops.extrude_face_region(bm, geom=[face])
+    moved = [e for e in ext["geom"] if isinstance(e, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, vec=kit.g2b(0, 0, z1 - z0), verts=moved)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    o = kit.mesh_obj(name, bm, mat, coll, (0, 0, 0), (0, 0, 0))
+    m = o.modifiers.new("Bevel", "BEVEL")
+    m.width = 0.0012
+    m.segments = 2
+    m.limit_method = "ANGLE"
+    o["uv"] = "box"
+    return tag(o)
+
+
+def build_hammerhead(M, coll):
+    """The Hammerhead: a heavy six-shot revolver ("heavy hand cannon, punches
+    through Husk plating"), pre-fall and looked after: worn blued steel with
+    the bluing rubbed through on the edges, a full-length underlug and
+    vent rib, walnut grip panels. ~0.4 m."""
+    D, W = M["steel"], M["wood"]
+    cy = 0.008  # the cylinder's axis; the top chamber lines up with the bore
+    by = 0.026  # the bore
+
+    # the frame: recoil shield, top strap, front of the window, the bottom rail
+    part("hh_shield", D, coll, (0, 0.012, -0.008), (0.036, 0.066, 0.044), bev=0.009)
+    part("hh_strap", D, coll, (0, 0.043, 0.055), (0.022, 0.011, 0.09), bev=0.004)
+    part("hh_frame_front", D, coll, (0, 0.01, 0.092), (0.03, 0.06, 0.016), bev=0.005)
+    part("hh_frame_bottom", D, coll, (0, -0.019, 0.05), (0.028, 0.01, 0.07), bev=0.002)
+    # the cylinder: six chambers, fluted, on its pin
+    fluted_cylinder("hh_cylinder", D, coll, cy, 0.017, 0.083, 0.0255)
+    for k in range(6):
+        a = R90 + k * math.pi / 3
+        tube(f"hh_chamber{k}", D, coll, (0.017 * math.cos(a), cy + 0.017 * math.sin(a), 0.082), (0.017 * math.cos(a), cy + 0.017 * math.sin(a), 0.0845), 0.0058, seg=12, bev=0)
+    tube("hh_pin", D, coll, (0, cy, 0.08), (0, cy, 0.086), 0.004, seg=10)
+    # the barrel: a heavy shroud with a full-length underlug, a vent rib on top
+    tube("hh_barrel", D, coll, (0, by, 0.098), (0, by, 0.33), 0.0135, seg=28, bev=0.002)
+    profile("hh_underlug", D, coll, [(0.098, 0.02), (0.33, 0.02), (0.33, -0.002), (0.31, -0.009), (0.15, -0.011), (0.098, -0.006)], 0.019, bev=0.004, grain=False)
+    part("hh_rib", D, coll, (0, 0.042, 0.215), (0.009, 0.008, 0.232), bev=0.0015)
+    tube("hh_crown", D, coll, (0, by, 0.329), (0, by, 0.332), 0.0105, seg=16, bev=0.0008)
+    tube("hh_bore", D, coll, (0, by, 0.331), (0, by, 0.3325), 0.0058, seg=12, bev=0)
+    for s in (-1, 1):
+        part(f"hh_rib_edge{s}", D, coll, (s * 0.0055, 0.0495, 0.215), (0.003, 0.005, 0.228), bev=0.0006)
+    for k in range(7):  # the vent rib's cross posts
+        part(f"hh_rib_post{k}", D, coll, (0, 0.049, 0.115 + k * 0.034), (0.008, 0.004, 0.006), bev=0.0005)
+    # the ejector rod, tucked under the barrel in the lug
+    tube("hh_ejector", D, coll, (0, cy - 0.004, 0.084), (0, cy - 0.004, 0.1), 0.0045, seg=10)
+    # sights: a ramped front blade, a notched rear on the strap
+    profile("hh_front_sight", D, coll, [(0.29, 0.049), (0.322, 0.049), (0.322, 0.064), (0.314, 0.064)], 0.004, bev=0.0005, grain=False)
+    for s in (-1, 1):
+        part(f"hh_rear_sight{s}", D, coll, (s * 0.0045, 0.0525, 0.0), (0.004, 0.007, 0.012), bev=0.0006)
+    # the hammer, cocked back over the grip, and the cylinder latch on the left
+    profile("hh_hammer", D, coll, [(-0.028, 0.03), (-0.019, 0.043), (-0.028, 0.051), (-0.047, 0.052), (-0.05, 0.046), (-0.036, 0.04), (-0.033, 0.026)], 0.007, bev=0.0015, grain=False)
+    part("hh_latch", D, coll, (-0.0195, 0.022, -0.004), (0.004, 0.009, 0.018), bev=0.001)
+    for k, (z, y) in enumerate(((-0.01, 0.0), (0.06, -0.008), (0.02, 0.034))):  # frame screws
+        tag(kit.cylinder(f"hh_screw{k}", D, coll, (0.0175 if k != 2 else 0.011, y, z), (0.0195 if k != 2 else 0.013, y, z), 0.0028, segments=10, bev=0))
+
+    # the grip: a steel frame, walnut panels either side, a lanyard ring
+    grip = [(-0.03, -0.012), (0.012, -0.014), (0.009, -0.03), (0.003, -0.055), (-0.007, -0.085), (-0.017, -0.112), (-0.026, -0.13),
+            (-0.04, -0.136), (-0.058, -0.134), (-0.068, -0.124), (-0.066, -0.1), (-0.058, -0.07), (-0.05, -0.042), (-0.045, -0.018), (-0.036, -0.004), (-0.028, 0.002)]
+    profile("hh_grip_frame", D, coll, grip, 0.02, bev=0.005, grain=False)
+    panel = [(-0.03, -0.02), (0.003, -0.021), (-0.001, -0.05), (-0.01, -0.08), (-0.02, -0.108), (-0.03, -0.124), (-0.042, -0.128),
+             (-0.056, -0.126), (-0.061, -0.112), (-0.056, -0.082), (-0.049, -0.055), (-0.043, -0.032)]
+    for s in (-1, 1):
+        o = profile(f"hh_panel{s}", W, coll, panel, 0.007, x=s * 0.0125, bev=0.003)
+        o["tile"] = 0.5
+        tag(kit.cylinder(f"hh_panel_screw{s}", D, coll, (s * 0.0155, -0.07, -0.03), (s * 0.0168, -0.07, -0.03), 0.004, segments=12, bev=0))
+    ring("hh_lanyard", D, coll, (0, -0.143, -0.048), 0.007, 0.0016, plane="zy", n=16)
+    # trigger guard and trigger
+    ring("hh_guard", D, coll, (0, -0.02, 0.03), 0.026, 0.0034, plane="zy", a0=math.pi, a1=2 * math.pi, n=18)
+    part("hh_trigger", D, coll, (0, -0.033, 0.024), (0.006, 0.026, 0.007), rot=(-0.35, 0, 0), bev=0.0015)
+
+    marker("muzzle", coll, (0, by, 0.333))
+    marker("grip", coll, (0, -0.07, -0.035))
+    marker("fore", coll, (0, -0.1, -0.03))  # a revolver: the off hand cups the grip
+    return {"length": 0.42, "views": [((0.75, 0.02, 0.12), (0, -0.03, 0.12)), ((0.4, 0.18, -0.3), (0, -0.02, 0.12)), ((0.17, 0.08, 0.16), (0, 0.01, 0.04))]}
+
+
+GUNS = {"mule": build_mule, "sparrow": build_sparrow, "badger": build_badger, "hammerhead": build_hammerhead}
 
 
 # ---------- render & export ----------
