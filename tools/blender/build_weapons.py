@@ -352,7 +352,81 @@ def build_mule(M, coll):
     return {"length": 0.97, "views": [((1.55, 0.08, 0.12), (0, -0.03, 0.12)), ((0.75, 0.35, -0.6), (0, -0.03, 0.1)), ((0.22, 0.09, -0.12), (0, -0.01, 0.02))]}
 
 
-GUNS = {"mule": build_mule}
+def build_sparrow(M, coll):
+    """The Sparrow, scrap-built: a compact SMG ("shreds small Husks up
+    close") made from square steel tube, a short pipe barrel in a punched
+    heat shield, a welded box magazine ahead of the grip, a pipe-stub front
+    grip and a folding wire stock. 32 rounds. ~0.78 m with the stock out."""
+    S, D, Wd = M["scrap"], M["steel"], M["plank"]
+    rr = np.random.default_rng(41)
+
+    # the body: a length of square steel tube, a welded end cap, a flat-bar rail
+    part("sparrow_body", S, coll, (0, 0.0, 0.04), (0.044, 0.05, 0.32), bev=0.003)
+    part("sparrow_endcap", S, coll, (0, 0.0, -0.123), (0.05, 0.056, 0.008), bev=0.002)
+    weld("sparrow_cap_weld", M, coll, (-0.022, 0.025, -0.118), (0.022, 0.025, -0.118))
+    part("sparrow_rail", D, coll, (0, 0.029, 0.03), (0.016, 0.006, 0.26), bev=0.001)
+    weld("sparrow_rail_weld_l", M, coll, (-0.008, 0.026, -0.09), (-0.008, 0.026, 0.15), r=0.0016)
+    weld("sparrow_rail_weld_r", M, coll, (0.008, 0.026, -0.09), (0.008, 0.026, 0.15), r=0.0016)
+    part("sparrow_port", D, coll, (0.0215, 0.008, 0.07), (0.002, 0.016, 0.06), bev=0)  # the hand-cut ejection slot
+    # the cocking handle: a hex bolt riding in a slot on the left
+    part("sparrow_cock_slot", D, coll, (-0.0225, 0.008, -0.02), (0.002, 0.008, 0.08), bev=0)
+    tube("sparrow_cock_rod", D, coll, (-0.022, 0.008, 0.0), (-0.042, 0.008, 0.0), 0.0035, seg=8)
+    hex_bolt("sparrow_cock_head", M, coll, (-0.042, 0.008, 0.0), axis="x", r=0.007, h=-0.008)
+
+    # the barrel: a short pipe inside a heat shield punched full of holes; a nut for a muzzle
+    tube("sparrow_barrel", D, coll, (0, 0.006, 0.2), (0, 0.006, 0.42), 0.009, seg=14)
+    tube("sparrow_shield", S, coll, (0, 0.006, 0.2), (0, 0.006, 0.36), 0.021, seg=20)
+    for row in range(3):
+        for k in range(5):
+            a = R90 + (row - 1) * 0.7
+            z = 0.225 + k * 0.028 + (row % 2) * 0.012
+            c, sn = math.cos(a), math.sin(a)
+            tag(kit.cylinder(f"sparrow_hole{row}_{k}", D, coll, (0.0205 * c, 0.006 + 0.0205 * sn, z), (0.0216 * c, 0.006 + 0.0216 * sn, z), 0.0042, segments=10, bev=0))
+    weld("sparrow_shield_weld", M, coll, (-0.015, 0.02, 0.2), (0.015, 0.02, 0.2), r=0.002)
+    hex_bolt("sparrow_muzzle_nut", M, coll, (0, 0.006, 0.405), axis="z", r=0.014, h=0.018)
+
+    # the magazine: a welded sheet-steel box ahead of the grip, taped, in a welded collar
+    part("sparrow_magwell", S, coll, (0, -0.035, 0.1), (0.028, 0.025, 0.062), bev=0.002)
+    part("sparrow_mag", D, coll, (0, -0.13, 0.1), (0.022, 0.19, 0.052), rot=(0.03, 0, 0), bev=0.005)
+    part("sparrow_mag_rib", D, coll, (0.0115, -0.13, 0.1), (0.002, 0.14, 0.01), rot=(0.03, 0, 0), bev=0.0008)
+    tape("sparrow_mag_tape", M, coll, (0, -0.16, 0.1), (0.026, 0.025, 0.056), rot=(0.03, 0, 0))
+    weld("sparrow_magwell_weld", M, coll, (-0.014, -0.024, 0.07), (-0.014, -0.024, 0.13), r=0.0018)
+
+    # the grip: a wooden block, taped; trigger guard and trigger
+    gp = (0, -0.075, -0.04)
+    part("sparrow_grip", M["wood"], coll, gp, (0.03, 0.105, 0.036), rot=(0.28, 0, 0), bev=0.004)["tile"] = 1.2
+    for k, dy in enumerate((-0.028, 0.002, 0.03)):
+        tape(f"sparrow_grip_tape{k}", M, coll, (0, gp[1] + dy * 0.961, gp[2] + dy * 0.276), (0.034, 0.015, 0.04), rot=(0.28, 0, 0))
+    ring("sparrow_guard", D, coll, (0, -0.026, -0.005), 0.028, 0.003, plane="zy", a0=math.pi, a1=2 * math.pi, n=16)
+    part("sparrow_trigger", D, coll, (0, -0.04, -0.002), (0.005, 0.022, 0.006), rot=(-0.3, 0, 0), bev=0.001)
+
+    # the front grip: a pipe stub, taped, with a pipe cap
+    tube("sparrow_fore_stub", D, coll, (0, -0.012, 0.29), (0, -0.1, 0.29), 0.012, seg=14)
+    tape("sparrow_fore_tape", M, coll, (0, -0.06, 0.29), (0.028, 0.06, 0.028))
+    tube("sparrow_fore_cap", D, coll, (0, -0.098, 0.29), (0, -0.112, 0.29), 0.0145, seg=14)
+    weld("sparrow_fore_weld", M, coll, (-0.012, -0.014, 0.29), (0.012, -0.014, 0.29), r=0.002)
+
+    # the folding wire stock: two bent rods on a hinge, a flat-bar butt with a cloth pad
+    tube("sparrow_hinge", D, coll, (-0.026, -0.018, -0.12), (0.026, -0.018, -0.12), 0.006, seg=12)
+    for k, (yf, yb) in enumerate(((0.012, 0.03), (-0.018, -0.06))):
+        for s in (-1, 1):
+            tube(f"sparrow_rod{k}_{s}", D, coll, (s * 0.018, yf, -0.125), (s * 0.016, yb, -0.4), 0.004, seg=8)
+    part("sparrow_butt", S, coll, (0, -0.015, -0.402), (0.045, 0.11, 0.008), bev=0.002)
+    part("sparrow_butt_pad", M["cloth"], coll, (0, -0.015, -0.41), (0.048, 0.1, 0.012), bev=0.004)
+
+    # sights: a nut welded upright for a rear peep, a nail for the front post
+    hex_bolt("sparrow_rear_peep", M, coll, (0, 0.032, -0.08), axis="z", r=0.008, h=0.006)
+    tag(kit.cylinder("sparrow_front_nail", D, coll, (0, 0.027, 0.345), (0, 0.045, 0.345), 0.0018, segments=6, bev=0))
+    # a cord sling from the front grip to the stock
+    rope("sparrow_sling", M, coll, [(0.0, -0.1, 0.29), (0.02, -0.14, 0.12), (0.025, -0.14, -0.1), (0.018, -0.06, -0.36)], r=0.003)
+
+    marker("muzzle", coll, (0, 0.006, 0.423))
+    marker("grip", coll, (0, -0.09, -0.045))
+    marker("fore", coll, (0, -0.07, 0.29))
+    return {"length": 0.83, "views": [((1.25, 0.05, 0.0), (0, -0.04, 0.0)), ((0.6, 0.28, -0.45), (0, -0.04, 0.0)), ((0.2, 0.06, 0.25), (0, -0.01, 0.05))]}
+
+
+GUNS = {"mule": build_mule, "sparrow": build_sparrow}
 
 
 # ---------- render & export ----------
