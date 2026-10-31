@@ -18,7 +18,7 @@ from PIL import Image
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUT = os.path.join(ROOT, "godot", "textures", "sanctuary")
-SIZE = int(sys.argv[1]) if len(sys.argv) > 1 else 1024
+SIZE = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 1024
 
 
 # ---------- periodic noise ----------

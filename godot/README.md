@@ -47,6 +47,7 @@ Blender, stop re-exporting those files, or the export will overwrite the edits.
 | --- | --- | --- |
 | The Diver's quarters | `tools/blender/build_quarters.py` (shared textures from `tools/blender/make_textures.py`) | `models/sanctuary/env_sanctuary_quarters.gltf` + `.bin`, textures in `textures/sanctuary/` |
 | Hallway, Trade Hall, Workshop, Checkout, Lift | `tools/blender/build_sanctuary.py` (same kit) | `models/sanctuary/env_sanctuary_<room>.gltf` + `.bin`, lamps in `scenes/sanctuary/lights_<room>.tscn` |
+| Weapons (one at a time: the Mule so far) | `tools/blender/build_weapons.py` | `models/weapons/wpn_<gun>.gltf` + `.bin`, textures in `textures/weapons/`; marker nodes `muzzle`, `grip`, `fore` |
 
 Rooms are rebuilt one at a time. `sanctuary.glb` (the web-game export)
 leaves out the finished rooms (the `FINISHED` list in

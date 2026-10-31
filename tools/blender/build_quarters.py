@@ -546,6 +546,7 @@ def finalize(o):
     bpy.data.meshes.remove(old)
     if o.get("uv") == "keep":
         return
+    tile = o.get("tile", TILE)  # metres per texture repeat (guns use a finer one)
     mw = o.matrix_world
     dims = [o.dimensions.x, o.dimensions.y, o.dimensions.z]
     long_axis = int(np.argmax(dims)) if o.get("grain") else None
@@ -564,7 +565,7 @@ def finalize(o):
             uax, vax = others
         for loop in f.loops:
             w = mw @ loop.vert.co
-            loop[uvl].uv = (w[uax] / TILE, w[vax] / TILE)
+            loop[uvl].uv = (w[uax] / tile, w[vax] / tile)
     bm.to_mesh(me)
     bm.free()
 
