@@ -423,6 +423,24 @@ HALL_S = -3.6  # the south wall, against the quarters and the shopfronts
 TRACK_Z = -7.55  # the abandoned rails run along the north side, by the doors
 WALK_N = -6.3  # the boardwalk runs along the south side, by the shops
 ROOM_SHIFT = -2.0  # Trade Hall, Workshop and Checkout sit 2 m further north
+SET_X = (-4.4, 0.4, 2.6, 6.2, 11.0, 16.4, 21.2, 26.0, 28.6, 32.4)  # timber mine sets down the hallway
+
+
+def check_clearance(coll, movers=("hall_duct", "hall_shaft", "hall_grille", "hall_ac"), fixed=("hall_set",)):
+    """Reports any ventilation part whose bounds cut into a timber post, cap
+    or brace (author: vents never go into posts or pillars). Returns the
+    clashes; the build prints them."""
+    def bounds(o):
+        pts = [o.matrix_world @ Vector(c) for c in o.bound_box]
+        return [min(p[i] for p in pts) for i in range(3)], [max(p[i] for p in pts) for i in range(3)]
+    a = [(o.name, *bounds(o)) for o in coll.objects if o.type == "MESH" and o.name.startswith(movers)]
+    b = [(o.name, *bounds(o)) for o in coll.objects if o.type == "MESH" and o.name.startswith(fixed)]
+    clash = []
+    for na, lo1, hi1 in a:
+        for nb, lo2, hi2 in b:
+            if all(lo1[i] < hi2[i] - 0.005 and lo2[i] < hi1[i] - 0.005 for i in range(3)):
+                clash.append((na, nb))
+    return clash
 
 
 def build_hallway(M, P, coll):
@@ -437,7 +455,7 @@ def build_hallway(M, P, coll):
     for at in (4, 14, 23.75):
         door_portal(f"hall_door_{at}", M, coll, "x", at, z0 - 0.12, 0.3)
     # timber mine sets spanning the wider tunnel
-    for k, x in enumerate((-4.4, 0.4, 2.6, 6.2, 11.0, 16.4, 21.2, 26.0, 28.6, 32.4)):
+    for k, x in enumerate(SET_X):
         mine_set(f"hall_set{k}", M, coll, x, z0 + 0.18, z1 - 0.18)
 
     # the boardwalk: planks laid lengthwise in staggered runs, a kerb beam on its edge
@@ -507,37 +525,43 @@ def build_hallway(M, P, coll):
     # the air: an air handler at the east end feeds the duct along the north
     # side; vent grilles breathe out of its underside, and shafts rise from it
     # up through the rock to the surface
-    dz = z0 + 0.55
-    kit.box("hall_duct", M["steel"], coll, (14, H - 0.3, dz), (37.8, 0.34, 0.5), bev=0.02)
+    # The duct hangs just under the timber caps and clear of the knee braces
+    # (author: vents never run into posts or beams); it sits over the rails,
+    # above the door heads. check_clearance() verifies this on every build.
+    dz = TRACK_Z - 0.05
+    dy0, dy1 = 2.8, 3.08  # duct bottom / top: above the door heads (2.78), below the caps (3.13)
+    dyc = (dy0 + dy1) / 2
+    kit.box("hall_duct", M["steel"], coll, (14, dyc, dz), (37.8, dy1 - dy0, 0.5), bev=0.02)
     for k, x in enumerate(np.arange(-4, 33, 3)):
-        kit.box(f"hall_duct_band{k}", M["dark"], coll, (x, H - 0.3, dz), (0.05, 0.38, 0.54), bev=0.004)
+        if min(abs(x - sx) for sx in SET_X) > 0.3:
+            kit.box(f"hall_duct_band{k}", M["dark"], coll, (x, dyc, dz), (0.05, dy1 - dy0 + 0.04, 0.54), bev=0.004)
     for k, x in enumerate(np.arange(-2.5, 32, 4.5)):  # louvred grilles on the underside
-        kit.box(f"hall_grille{k}", M["dark"], coll, (x, H - 0.475, dz), (0.6, 0.02, 0.36), bev=0.004)
+        kit.box(f"hall_grille{k}", M["dark"], coll, (x, dy0 - 0.012, dz), (0.6, 0.02, 0.36), bev=0.004)
         for j in range(6):
-            kit.box(f"hall_grille{k}_slat{j}", M["bare"], coll, (x - 0.25 + j * 0.1, H - 0.49, dz), (0.025, 0.03, 0.32), rot=(0, 0.5, 0), bev=0.002)
-    for k, x in enumerate((1.5, 10.0, 19.5, 27.3)):  # ventilation shafts up to the surface
-        kit.box(f"hall_shaft{k}", M["steel"], coll, (x, H + 0.2, dz), (0.44, 0.7, 0.44), bev=0.015)
+            kit.box(f"hall_grille{k}_slat{j}", M["bare"], coll, (x - 0.25 + j * 0.1, dy0 - 0.028, dz), (0.025, 0.03, 0.32), rot=(0, 0.5, 0), bev=0.002)
+    for k, x in enumerate((1.5, 10.0, 19.5, 27.3)):  # ventilation shafts up to the surface, between the sets
+        kit.box(f"hall_shaft{k}", M["steel"], coll, (x, (dy1 + H + 0.6) / 2, dz), (0.44, H + 0.6 - dy1, 0.44), bev=0.015)
         kit.box(f"hall_shaft{k}_collar", M["dark"], coll, (x, H - 0.03, dz), (0.66, 0.06, 0.66), bev=0.01)
         for j in range(4):  # bolts round the collar
             ox, oz = ((-0.27, -0.27), (0.27, -0.27), (-0.27, 0.27), (0.27, 0.27))[j]
             kit.cylinder(f"hall_shaft{k}_bolt{j}", M["bare"], coll, (x + ox, H - 0.07, dz + oz), (x + ox, H - 0.05, dz + oz), 0.012, segments=6, bev=0)
         kit.box(f"hall_shaft{k}_damper", M["dark"], coll, (x + 0.3, H - 0.05, dz), (0.06, 0.08, 0.12), bev=0.01)
     ax = 32.1
-    kit.box("hall_ac_unit", M["steel_locker"], coll, (ax, 0.75, z0 + 0.6), (1.2, 1.5, 0.9), bev=0.03)
+    kit.box("hall_ac_unit", M["steel_locker"], coll, (ax, 0.75, dz - 0.15), (1.2, 1.5, 0.9), bev=0.03)
     bm = bmesh.new()
     bmesh.ops.create_circle(bm, cap_ends=True, segments=32, radius=0.38)
-    kit.mesh_obj("hall_ac_fan_face", bm, M["dark"], coll, kit.g2b(ax - 0.61, 0.8, z0 + 0.6), (R90, 0, -R90), smooth=False)["uv"] = "box"
+    kit.mesh_obj("hall_ac_fan_face", bm, M["dark"], coll, kit.g2b(ax - 0.61, 0.8, dz - 0.15), (R90, 0, -R90), smooth=False)["uv"] = "box"
     for j in range(5):  # the fan guard
-        kit.box(f"hall_ac_guard{j}", M["bare"], coll, (ax - 0.63, 0.5 + j * 0.15, z0 + 0.6), (0.02, 0.02, 0.76), bev=0)
-    kit.box("hall_ac_riser", M["steel"], coll, (ax, (1.5 + H - 0.3) / 2, z0 + 0.6), (0.5, H - 1.8, 0.5), bev=0.015)
-    kit.box("hall_ac_panel", M["dark"], coll, (ax + 0.2, 1.1, z0 + 1.06), (0.36, 0.42, 0.02), bev=0.005)
-    light(room, "hall_ac_lamp", "POINT", (ax - 0.4, 1.3, z0 + 1.2), (0.94, 0.7, 0.35), 6, coll=coll)
+        kit.box(f"hall_ac_guard{j}", M["bare"], coll, (ax - 0.63, 0.5 + j * 0.15, dz - 0.15), (0.02, 0.02, 0.76), bev=0)
+    kit.box("hall_ac_riser", M["steel"], coll, (ax - 0.1, (1.5 + dy0) / 2, dz), (0.44, dy0 - 1.5, 0.44), bev=0.015)
+    kit.box("hall_ac_panel", M["dark"], coll, (ax + 0.2, 1.1, dz + 0.31), (0.36, 0.42, 0.02), bev=0.005)
+    light(room, "hall_ac_lamp", "POINT", (ax - 0.4, 1.3, dz + 0.5), (0.94, 0.7, 0.35), 6, coll=coll)
 
     # lamps over the walkway, string lights down the middle
     for k, x in enumerate((0, 9, 18.5, 28)):
         work_lamp(f"hall_lamp{k}", M, coll, x, H - 0.75, -5.2, room, watts=260)
     for k, x in enumerate((9.0, 19.0, 29.0)):  # between the doors, clear of the neon
-        work_lamp(f"hall_track_lamp{k}", M, coll, x, H - 0.8, TRACK_Z + 0.3, room, watts=160)
+        work_lamp(f"hall_track_lamp{k}", M, coll, x, H - 0.8, dz + 0.6, room, watts=160)
     string_lights("hall_string", M, coll, room, [((x, H - 0.35, -6.2), (x + 4.6, H - 0.35, -6.2)) for x in np.arange(-4.2, 32, 4.6)], sag=0.35, every=6, watts=25)
 
     # shopfronts cut into the south wall
@@ -583,7 +607,7 @@ def build_hallway(M, P, coll):
         kit.box(f"laundry{k}", M[tint], coll, (p[0], p[1] - 0.22, p[2]), (0.34, 0.4, 0.02), rot=(0, 0, -math.atan2(b[0] - a[0], b[2] - a[2]) + R90), soft=True, puff=0.3)
     # handmade neon over each doorway, hung from the ceiling on chains
     for at, text, colour in ((4, "TRADE HALL", (0.91, 0.58, 0.23)), (14, "WORKSHOP", (0.94, 0.7, 0.35)), (23.75, "CHECKOUT", (0.85, 0.34, 0.48))):
-        neon_sign(f"hall_neon_{int(at)}", text, colour, coll, room, (at, 2.68, dz + 0.5), 0.0, size=0.38)
+        neon_sign(f"hall_neon_{int(at)}", text, colour, coll, room, (at, 2.62, dz + 0.5), 0.0, size=0.38)
     neon_sign("hall_neon_quarters", "YOUR QUARTERS", (0.91, 0.58, 0.23), coll, room, (-2.0, 2.95, -3.72), math.pi, size=0.2)
     neon_sign("hall_neon_lift", "LIFT", (0.18, 0.9, 0.82), coll, room, (32.6, 2.85, -5.1), -R90, size=0.3)
     # benches on the boardwalk
@@ -842,6 +866,9 @@ def main():
             views[room] = [((c[0], c[1], c[2] + ROOM_SHIFT), (l[0], l[1], l[2] + ROOM_SHIFT)) for c, l in views[room]]
         for o in list(coll.objects):
             kit.finalize(o)
+        if room == "hallway":
+            clashes = check_clearance(coll)
+            print(f"hallway clearance: {len(clashes)} clashes" + "".join(f"\n  {a} x {b}" for a, b in clashes[:20]))
         tris = sum(len(p.vertices) - 2 for o in coll.objects if o.type == "MESH" for p in o.data.polygons)
         print(f"{room}: objects {len(coll.objects)}  triangles {tris}  lights {len(LIGHTS.get(room, []))}")
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(kit.WORK, "env_sanctuary_rooms.blend"))

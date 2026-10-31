@@ -176,17 +176,21 @@ def rock():
 
 
 def timber():
-    """Old mine timber: dark, split along the grain, oil-stained."""
+    """Old mine timber, long abandoned (author direction): weathered grey at
+    the surface, split along the grain, black with grime and old oil."""
     grain = fbm(11, 2.0, stretch=(1.0, 0.08))  # long along v
     fine = fbm(12, 1.2, stretch=(1.0, 0.05))
-    splits = smooth(0.95, 0.995, ridged(fbm(13, 1.6, stretch=(1.0, 0.04))))
-    h = 0.6 * grain + 0.3 * fine - 0.4 * splits
-    col = mix(hexcol("#2c2018"), hexcol("#5e4a35"), smooth(0.2, 0.9, 0.7 * grain + 0.3 * fine))
-    stain = smooth(0.6, 0.9, fbm(14, 3.0))
-    col = mix(col, hexcol("#1e1712"), stain * 0.5)
-    col = mix(col, hexcol("#140f0b"), splits * 0.85)
-    rough = 0.78 + 0.12 * fine - 0.12 * stain
-    save("timber", col, h, rough, np.zeros_like(h), 6.0, 2.0)
+    splits = smooth(0.93, 0.99, ridged(fbm(13, 1.6, stretch=(1.0, 0.04))))
+    checks = smooth(0.96, 0.995, ridged(fbm(15, 1.0, stretch=(1.0, 0.12))))  # short checking cracks
+    h = 0.6 * grain + 0.3 * fine - 0.45 * splits - 0.25 * checks
+    col = mix(hexcol("#2a2119"), hexcol("#5a4b3a"), smooth(0.2, 0.9, 0.7 * grain + 0.3 * fine))
+    weather = smooth(0.35, 0.75, fbm(16, 2.6))  # sun-less grey weathering
+    col = mix(col, hexcol("#5c5750"), weather * 0.45)
+    stain = smooth(0.55, 0.85, fbm(14, 3.0))
+    col = mix(col, hexcol("#17120e"), stain * 0.55)
+    col = mix(col, hexcol("#120d09"), np.clip(splits + checks * 0.7, 0, 1) * 0.85)
+    rough = 0.82 + 0.1 * fine - 0.1 * stain + 0.05 * weather
+    save("timber", col, h, rough, np.zeros_like(h), 7.0, 2.2)
 
 
 def plank():
@@ -218,28 +222,40 @@ def plank():
     col = mix(col, hexcol("#2a231b"), np.clip(lip, 0, 1) * 0.5)
     h = h + 0.2 * flake
     col = mix(col, hexcol("#16110c"), gap * 0.9)
+    col = mix(col, hexcol("#1d1813"), smooth(0.5, 0.85, fbm(28, 3.0)) * 0.4)  # years of grime
     rough = np.where(flake > 0.5, 0.68, 0.86) + 0.05 * fbm(25, 1.5)
     save("plank", col, h, rough, np.zeros_like(h), 5.0, 2.0)
 
 
 def steel():
-    """Painted steel (lockers, frames): chipped to bare metal, rust from chips."""
+    """Old painted steel, long abandoned (author direction): the paint mostly
+    gone, big rust patches with pitting, rust streaks run down from them, a
+    little bare metal left on worn edges."""
     mottle = fbm(31, 2.4)
-    chips = smooth(0.62, 0.68, fbm(32, 1.1) * 0.6 + fbm(33, 2.2) * 0.4)
+    rust_big = smooth(0.5, 0.62, 0.6 * fbm(36, 3.0) + 0.4 * fbm(37, 1.6))  # large rusted-through areas
+    flake = smooth(0.55, 0.62, fbm(32, 1.1) * 0.6 + fbm(33, 2.2) * 0.4)  # paint flaking at the edge of the rust
+    rust = np.clip(rust_big + flake * 0.7, 0, 1)
+    pits = smooth(0.8, 0.88, fbm(38, 0.9)) * rust
+    bare = smooth(0.85, 0.9, fbm(39, 1.2)) * (1 - rust)  # a few rubbed-bright spots
     dents = fbm(34, 2.8)
-    rust_src = smooth(0.7, 0.8, fbm(35, 1.0))
-    streak = np.clip(blur(np.roll(rust_src, 0, 0), 2.0), 0, 1)
-    # rust bleeds downward (towards higher rows) from chips
-    for k in range(1, 24, 3):
-        streak = np.maximum(streak, np.roll(rust_src, k * SIZE // 256, 0) * (1 - k / 24))
-    streak = blur(streak, 3.0) * 0.8
-    paint = mix(hexcol("#47513f"), hexcol("#606a56"), mottle)
-    col = mix(paint, hexcol("#5e3a24"), np.clip(streak, 0, 1) * 0.7)
-    col = mix(col, hexcol("#7c858f"), chips)
-    h = 0.3 * dents - 0.25 * chips
-    rough = mix(np.full((SIZE, SIZE, 1), 0.58), np.full((SIZE, SIZE, 1), 0.35), chips)[..., 0] + 0.25 * np.clip(streak, 0, 1)
-    metal = chips
-    save("steel", col, h, rough, metal, 4.0, 1.5)
+    src = smooth(0.5, 0.7, rust)
+    streak = src.copy()
+    for k in range(1, 40, 2):  # rust bleeds downward (towards higher rows)
+        streak = np.maximum(streak, np.roll(src, k * SIZE // 200, 0) * (1 - k / 40) ** 1.5)
+    streak = blur(streak, 2.0) * (0.6 + 0.4 * fbm(40, 1.4, stretch=(0.15, 1.0)))
+    paint = mix(hexcol("#434b3c"), hexcol("#59604f"), mottle)
+    paint = mix(paint, hexcol("#6b6a5a"), smooth(0.5, 0.9, fbm(41, 3.0)) * 0.4)  # faded, chalky
+    rust_col = mix(hexcol("#3a2a20"), hexcol("#6a4a34"), fbm(42, 1.3))  # dull, dark, under ~35% saturation
+    rust_col = mix(rust_col, hexcol("#2a1a12"), pits)
+    col = mix(paint, hexcol("#55392a"), np.clip(streak, 0, 1) * 0.6)
+    col = mix(col, rust_col, rust)
+    col = mix(col, hexcol("#6f7680"), bare)
+    grime = smooth(0.5, 0.85, fbm(43, 2.8))
+    col = mix(col, hexcol("#1f1b16"), grime * 0.35)
+    h = 0.25 * dents - 0.25 * rust * fbm(44, 0.8) - 0.3 * pits + 0.08 * flake
+    rough = 0.62 + 0.3 * rust - 0.3 * bare + 0.05 * grime
+    metal = np.clip(bare + 0.3 * (1 - rust) * (1 - grime), 0, 1) * 0.8
+    save("steel", col, h, rough, metal, 6.0, 1.8)
 
 
 def canvas():
@@ -248,7 +264,7 @@ def canvas():
     weave_n = SIZE // 4
     wu = np.sin(u * 2 * np.pi * weave_n / SIZE)
     weave = (wu[None, :] * wu[:, None]) * 0.5 + 0.5
-    stains = smooth(0.55, 0.85, fbm(41, 2.8))
+    stains = smooth(0.45, 0.8, fbm(41, 2.8))
     fade = fbm(42, 3.0)
     h = 0.6 * weave + 0.2 * fbm(43, 1.0)
     col = mix(hexcol("#57513f"), hexcol("#7a7258"), fade)

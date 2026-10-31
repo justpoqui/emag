@@ -586,8 +586,9 @@ def make_materials(pics):
         "blanket": pbr("mat_canvas_blanket_01", "canvas", tint=srgb("#b07a5c")),
         "mattress": pbr("mat_canvas_ticking_01", "canvas", tint=srgb("#d8cdb4")),
         "rug": pbr("mat_rug_woven_01", "rug"),
-        "bare": pbr("mat_metal_bare_01", None, tint=srgb("#7c858f"), rough=0.35, metal=1.0),
-        "dark": pbr("mat_metal_dark_01", None, tint=srgb("#2a2c2e"), rough=0.5, metal=0.8),
+        # small metal parts age with everything else: the rusted steel texture, tinted
+        "bare": pbr("mat_metal_bare_01", "steel", tint=(0.95, 0.92, 0.88)),
+        "dark": pbr("mat_metal_dark_01", "steel", tint=(0.42, 0.4, 0.37)),
         "glass": pbr("mat_glass_mirror_01", None, tint=srgb("#c8c4bc"), rough=0.04, metal=1.0),
         "bulb": pbr("mat_bulb_warm_01", None, tint=(1, 0.9, 0.75), emission=(1.0, 0.62, 0.32), emission_strength=25.0),
         "leaf": pbr("mat_leaf_01", None, tint=srgb("#5a6a3c"), rough=0.6),
