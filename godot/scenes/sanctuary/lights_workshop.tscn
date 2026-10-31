@@ -1,0 +1,56 @@
+[gd_scene format=3]
+
+[node name="Lights_workshop" type="Node3D"]
+
+[node name="work_lamp_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.2, 2.4699999999999998, -12.2)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 1.949
+shadow_enabled = true
+distance_fade_enabled = true
+distance_fade_begin = 20.0
+distance_fade_shadow = 12.0
+distance_fade_length = 5.0
+omni_range = 6.82
+
+[node name="bench0_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 2.2, -16.200000000000003)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.671
+omni_range = 2.5
+
+[node name="bench1_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 2.2, -16.200000000000003)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.671
+omni_range = 2.5
+
+[node name="bench2_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17, 2.2, -16.200000000000003)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.671
+omni_range = 2.5
+
+[node name="bench3_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.049999999999999, 2.2, -13.0)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.671
+omni_range = 2.5
+
+[node name="bench4_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.95, 2.2, -13.0)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.671
+omni_range = 2.5
+
+[node name="bench5_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.95, 2.2, -10.4)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.671
+omni_range = 2.5
+
+[node name="bench6_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.049999999999999, 2.2, -10.4)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.671
+omni_range = 2.5

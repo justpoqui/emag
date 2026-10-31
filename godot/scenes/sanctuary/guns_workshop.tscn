@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://models/weapons/wpn_mule.gltf" id="1_mule"]
+
+[node name="Guns_workshop" type="Node3D"]
+
+[node name="mule_0" parent="." instance=ExtResource("1_mule")]
+transform = Transform3D(3.7494e-33, -6.1232e-17, -1, 1, 6.1232e-17, 0, 6.1232e-17, -1, 6.1232e-17, 11.2099, 1.0363, -16.1561)
