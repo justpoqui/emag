@@ -168,6 +168,55 @@ def paper_texture(key, title, lines, seed, w=256, h=320, colour=(0.86, 0.82, 0.7
     Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8)).save(os.path.join(TEX, f"{key}_albedo.png"))
 
 
+def chalk_texture(key, title, lines, seed, w=1024, h=576):
+    """A slate chalkboard in hand chalk: smudged ghosts of old writing under
+    today's, a title, lines and a few tally ticks."""
+    r = np.random.default_rng(seed)
+    base = 0.13 + 0.03 * noise_img(w, h, (5, 3), seed) + 0.02 * noise_img(w, h, (40, 24), seed + 1)
+    col = np.stack([base * 0.95, base * 1.02, base], -1)
+    m = Image.new("L", (w, h), 0)
+    d = ImageDraw.Draw(m)
+    smudge = Image.new("L", (w, h), 0)
+    sd = ImageDraw.Draw(smudge)
+    for _ in range(16):  # where yesterday's drops were wiped off with the rag
+        x, y = r.uniform(0, w), r.uniform(0, h)
+        sd.ellipse((x - r.uniform(80, 200), y - r.uniform(15, 35), x + r.uniform(80, 200), y + r.uniform(15, 35)), fill=int(r.uniform(14, 26)))
+    sm = np.asarray(smudge.filter(ImageFilter.GaussianBlur(14))).astype(float) / 255
+    col = col + sm[..., None] * np.array([0.8, 0.8, 0.76])
+    d.text((w / 2, 70), title, font=font(84), fill=230, anchor="mm")
+    d.line((w * 0.2, 122, w * 0.8, 126), fill=200, width=4)
+    for k, (left, right) in enumerate(lines):
+        y = 200 + k * 112
+        d.text((70, y), left, font=font(58), fill=225, anchor="lm")
+        d.text((w - 70, y), right, font=font(44, bold=False), fill=205, anchor="rm")
+    a = np.asarray(m.filter(ImageFilter.GaussianBlur(1.1))).astype(float) / 255
+    a *= np.clip(0.55 + 0.6 * noise_img(w, h, (90, 50), seed + 2), 0, 1)  # chalk catches the grain unevenly
+    col = col * (1 - a[..., None]) + np.array([0.86, 0.85, 0.8]) * a[..., None]
+    Image.fromarray((np.clip(col, 0, 1) * 255).astype(np.uint8)).save(os.path.join(TEX, f"{key}_albedo.png"))
+
+
+def anatomy_texture():
+    """Nia's hand-drawn body chart: an outline of a person, the places that
+    bleed worst marked, KNOW WHERE IT HURTS along the bottom."""
+    w, h = 384, 640
+    im = Image.new("RGB", (w, h), (216, 206, 182))
+    d = ImageDraw.Draw(im)
+    ink = (52, 44, 36)
+    cx = w // 2
+    d.ellipse((cx - 38, 60, cx + 38, 150), outline=ink, width=5)  # head
+    d.line((cx, 150, cx, 170), fill=ink, width=5)
+    d.polygon([(cx - 80, 175), (cx + 80, 175), (cx + 60, 360), (cx - 60, 360)], outline=ink, width=5)  # torso
+    for s_ in (-1, 1):
+        d.line((cx + s_ * 80, 180, cx + s_ * 125, 330, cx + s_ * 135, 430), fill=ink, width=5, joint="curve")  # arms
+        d.line((cx + s_ * 45, 360, cx + s_ * 60, 470, cx + s_ * 62, 575), fill=ink, width=5, joint="curve")  # legs
+    for x, y in ((cx - 18, 230), (cx + 40, 300), (cx - 52, 455), (cx + 112, 320)):  # where it bleeds worst
+        d.ellipse((x - 11, y - 11, x + 11, y + 11), outline=(120, 70, 40), width=4)
+    d.text((cx, 34), "THE BODY", font=font(34), fill=ink, anchor="mm")
+    d.text((cx, 610), "KNOW WHERE IT HURTS", font=font(24), fill=ink, anchor="mm")
+    a = np.asarray(im).astype(float) / 255 * (0.84 + 0.16 * noise_img(w, h, (6, 9), 171))[..., None]
+    Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8)).save(os.path.join(TEX, "paper_anatomy_albedo.png"))
+
+
 def scorch_texture():
     """Scorch on rock: soot black at the heart, fading out in ragged licks."""
     W = 512
@@ -225,12 +274,20 @@ def make_room_pictures():
                                   ("HUSK PARTS  ·  GOOD PRICES", 0.82, 40, (0.78, 0.62, 0.42))], w=768, h=420, paint=(0.33, 0.29, 0.17), seed=43)
     for i, word in enumerate(("SCRAP", "WIRE", "RUBBER")):
         painted_board(f"sign_bin_{i}", [(word, 0.55, 110, (0.87, 0.81, 0.71))], w=512, h=180, paint=(0.24, 0.22, 0.18), seed=44 + i)
+    # Nia's prices: what she sells, at the game's prices (src/config.js: value x BUY_MARKUP 2.5)
+    painted_board("sign_clinic_prices", [("PRICES", 0.13, 64, (0.87, 0.81, 0.71)), ("BANDAGE ............ 100", 0.33, 40, (0.82, 0.76, 0.66)),
+                                         ("HERBAL MED KIT ..... 350", 0.5, 40, (0.82, 0.76, 0.66)), ("SHIELD CELL ........ 300", 0.67, 40, (0.82, 0.76, 0.66)),
+                                         ("SHIELDS FROM ....... 750", 0.84, 40, (0.78, 0.62, 0.42))], w=768, h=560, paint=(0.3, 0.33, 0.3), seed=48)
+    painted_board("sign_return_kit", [("RETURN WHAT", 0.32, 80, (0.87, 0.81, 0.71)), ("YOU BORROW", 0.72, 80, (0.87, 0.81, 0.71))], w=640, h=300, seed=49)
+    chalk_texture("chalk_drops", "TODAY'S DROPS", [("GOLDEN HOUR", "standard"), ("NIGHT RAID", "rich, crowded"), ("DUST STORM", "short sight")], 50)
+    anatomy_texture()
+    paper_texture("paper_clinic_1", "CHECK-UPS", ["Okoro - stitches out", "Vance - cough again", "Hale - ankle, rest", "Ash - shield burn"], 96)
+    paper_texture("paper_clinic_2", "BOIL IT", ["Water for wounds", "boiled, then cooled", "No exceptions"], 97)
     map_board_texture()
     paper_texture("paper_notice_1", "RATIONS", ["Thursday, after shift", "Bring your own tin", "No tin, no ration"], 91)
     paper_texture("paper_notice_2", "LIFT CREW", ["Wanted: 2 hands", "Ask at Checkout", "Pay in scrap"], 92)
     paper_texture("paper_notice_3", "CURFEW 22:00", ["Lamps out on the street", "Keep the shaft quiet"], 93)
     paper_texture("paper_signout", "SIGNED OUT", ["M. Okoro   GOLDEN", "~ R. Vance   NIGHT", "T. Hale    STORM", "~ J. Ash    NIGHT", "D. Mori    GOLDEN", "~ K. Bell   STORM"], 94)
-    paper_texture("paper_drops", "TODAY'S DROPS", ["GOLDEN HOUR  standard", "NIGHT RAID   rich, crowded", "DUST STORM   short sight"], 95, colour=(0.2, 0.19, 0.16))
     scorch_texture()
     target_texture()
 
@@ -939,7 +996,7 @@ def build_clinic(M, P, coll):
     kit.box("clinic_satchel", M["canvas"], coll, (18.0, 1.12, cz - 0.05), (0.4, 0.26, 0.14), rot=(0, 0, 0.2), soft=True, puff=0.35)
     kit.box("clinic_satchel_patch", bone, coll, (18.0, 1.14, cz - 0.123), (0.12, 0.12, 0.01), rot=(0, 0, 0.2), bev=0.002)
     kit.box("clinic_satchel_flap", M["canvas"], coll, (18.0, 1.22, cz - 0.06), (0.41, 0.06, 0.16), rot=(0.25, 0, 0.2), soft=True, puff=0.3)
-    kit.cylinder("clinic_jar", ice, coll, (18.55, 1.0, cz + 0.12), (18.55, 1.2, cz + 0.12), 0.06, segments=16)
+    kit.cylinder("clinic_jar", bottle, coll, (18.55, 1.0, cz + 0.12), (18.55, 1.2, cz + 0.12), 0.06, segments=16)
     kit.cylinder("clinic_jar_swabs", bone, coll, (18.55, 1.0, cz + 0.12), (18.55, 1.17, cz + 0.12), 0.05, segments=12)
     kit.box("clinic_ledger", M["blanket"], coll, (16.6, 1.015, cz - 0.15), (0.32, 0.03, 0.24), rot=(0, 0, -0.15), bev=0.008)
     board("clinic_sign", P["sign_trader_1"], coll, ((x0 + x1) / 2, 2.45, cz - 0.1), 1.5, 0.48, (R90, 0, math.pi), timber=M["timber"])
@@ -962,34 +1019,36 @@ def build_clinic(M, P, coll):
     for k in range(14):  # canvas hanging in folds from rings, bunched up at the back where it's pulled open
         z = 0.3 + k * (0.12 if k < 10 else 0.06)
         x = 16.75 + 0.035 * math.sin(k * 1.9)
-        kit.box(f"clinic_curtain{k}", bone, coll, (x, 1.3, z), (0.02, 1.9, 0.14), rot=(0, (-1) ** k * 0.5, 0), soft=True, puff=0.15)
+        kit.box(f"clinic_curtain{k}", bone, coll, (x, 1.3, z), (0.02, 1.9, 0.14), rot=(0, 0, (-1) ** k * 0.5), soft=True, puff=0.15)  # each fold turned a little either way
         kit.cylinder(f"clinic_curtain_ring{k}", M["bare"], coll, (x, 2.27, z - 0.012), (x, 2.27, z + 0.012), 0.018, segments=8, bev=0)
     # an IV stand by the first cot, a bag hung on it
     kit.cylinder("clinic_iv_pole", M["bare"], coll, (16.6, 0, 1.0), (16.6, 1.95, 1.0), 0.012, segments=8)
     kit.cylinder("clinic_iv_base", M["dark"], coll, (16.6, 0, 1.0), (16.6, 0.04, 1.0), 0.2, segments=5, bev=0.004)
-    kit.box("clinic_iv_bag", ice, coll, (16.6, 1.75, 1.04), (0.14, 0.22, 0.04), soft=True, puff=0.5)
+    kit.box("clinic_iv_bag", bone, coll, (16.6, 1.75, 1.04), (0.14, 0.22, 0.04), soft=True, puff=0.5)
     kit.cylinder("clinic_iv_line", M["canvas"], coll, (16.6, 1.62, 1.05), (16.25, 0.7, 1.2), 0.003, segments=4, bev=0)
     work_lamp("clinic_surgery_lamp", M, coll, 19.55, 1.95, 1.4, room, watts=320)
 
-    # the medicine cabinet on the back wall: glass doors, brown bottles, bandage boxes
+    # the medicine shelves on the back wall: an open steel case crowded with brown bottles, boxes and rolled bandages
     mx, mz = 17.8, z1 - 0.32
-    kit.box("clinic_cabinet", M["steel_locker"], coll, (mx, 1.0, mz), (1.3, 2.0, 0.42), bev=0.02)
-    glass = glass_material("mat_glass_cabinet_01")
-    for k, y in enumerate((0.55, 1.0, 1.45)):
-        kit.box(f"clinic_shelf{k}", M["dark"], coll, (mx, y, mz - 0.05), (1.2, 0.02, 0.32), bev=0.003)
-        for j in range(8):
-            if rng.random() < 0.2:
-                continue
-            bx = mx - 0.52 + j * 0.15
-            h = rng.uniform(0.12, 0.24)
-            if (j + k) % 3 == 0:
-                kit.box(f"clinic_box{k}_{j}", bone, coll, (bx, y + 0.08, mz - 0.08), (0.12, 0.14, 0.16), bev=0.006)
+    kit.box("clinic_cabinet_back", M["steel_locker"], coll, (mx, 1.0, mz + 0.19), (1.3, 2.0, 0.03), bev=0.006)
+    for s_ in (-1, 1):
+        kit.box(f"clinic_cabinet_side{s_}", M["steel_locker"], coll, (mx + s_ * 0.64, 1.0, mz), (0.03, 2.0, 0.42), bev=0.006)
+    kit.box("clinic_cabinet_top", M["steel_locker"], coll, (mx, 2.0, mz), (1.32, 0.04, 0.44), bev=0.008)
+    for k, y in enumerate((0.1, 0.55, 1.0, 1.45)):
+        kit.box(f"clinic_shelf{k}", M["dark"], coll, (mx, y, mz), (1.26, 0.025, 0.38), bev=0.003)
+        for j in range(9):
+            bx = mx - 0.54 + j * 0.135 + rng.uniform(-0.02, 0.02)
+            h = rng.uniform(0.12, 0.26)
+            pick = (j + k) % 4
+            if pick == 0:
+                kit.box(f"clinic_box{k}_{j}", bone, coll, (bx, y + 0.08, mz - 0.03), (0.11, 0.14, 0.17), rot=(0, 0, rng.uniform(-0.15, 0.15)), bev=0.006)
+            elif pick == 1:
+                kit.cylinder(f"clinic_roll{k}_{j}", bone, coll, (bx, y + 0.015, mz - 0.06), (bx, y + 0.095, mz - 0.06), 0.045, segments=12)
             else:
-                kit.cylinder(f"clinic_bottle{k}_{j}", bottle, coll, (bx, y + 0.01, mz - 0.08), (bx, y + 0.01 + h, mz - 0.08), 0.035, segments=10)
-    for s_ in (-1, 1):  # the doors, one a little open
-        # the right-hand door stands open, so the shelves show
-        kit.plane(f"clinic_cabinet_glass{s_}", glass, coll, (mx + s_ * 0.31 + (0.22 if s_ > 0 else 0), 1.15, mz - 0.215 - (0.28 if s_ > 0 else 0)), 0.58, 1.4, (R90, 0, math.pi + (1.2 if s_ > 0 else 0)))
-    kit.box("clinic_cabinet_lock", M["bare"], coll, (mx, 1.1, mz - 0.225), (0.04, 0.08, 0.02), bev=0.006)
+                kit.cylinder(f"clinic_bottle{k}_{j}", bottle, coll, (bx, y + 0.013, mz - 0.05), (bx, y + 0.013 + h, mz - 0.05), 0.033, segments=10)
+                kit.cylinder(f"clinic_bottle{k}_{j}_cork", M["timber"], coll, (bx, y + 0.013 + h, mz - 0.05), (bx, y + 0.035 + h, mz - 0.05), 0.016, segments=8, bev=0)
+    for k in range(3):  # labels chalked on the shelf edges
+        kit.box(f"clinic_shelf_label{k}", bone, coll, (mx - 0.35 + k * 0.35, 0.56 + k * 0.45, mz - 0.2), (0.12, 0.03, 0.005), bev=0)
     light(room, "clinic_cabinet_light", "POINT", (mx, 1.5, mz - 0.75), WARM, 45, coll=coll)
     # a wash basin and a jug; the steriliser pot on a burner
     kit.cylinder("clinic_basin_stand", M["dark"], coll, (x1 - 0.35, 0, 0.1), (x1 - 0.35, 0.8, 0.1), 0.025, segments=8)
@@ -1022,7 +1081,66 @@ def build_clinic(M, P, coll):
     kit.box("clinic_line", bone, coll, ((x0 + x1) / 2 - 0.35, 0.012, cz - 0.6), (x1 - x0 - 1.0, 0.004, 0.06), bev=0)  # "the line", painted on the floor
     crate("clinic_jar_crate", M, coll, (x0 + 0.45, 0.2, -1.55), (0.5, 0.4, 0.4), yaw=0.1)
     for k in range(4):
-        kit.cylinder(f"clinic_empty_jar{k}", ice, coll, (x0 + 0.33 + (k % 2) * 0.22, 0.4, -1.65 + (k // 2) * 0.18), (x0 + 0.33 + (k % 2) * 0.22, 0.55, -1.65 + (k // 2) * 0.18), 0.05, segments=10)
+        kit.cylinder(f"clinic_empty_jar{k}", bottle, coll, (x0 + 0.33 + (k % 2) * 0.22, 0.4, -1.65 + (k // 2) * 0.18), (x0 + 0.33 + (k % 2) * 0.22, 0.55, -1.65 + (k // 2) * 0.18), 0.05, segments=10)
+    # --- a shop as well as a clinic: a price board, a display shelf by the door, a bell ---
+    board("clinic_prices", P["sign_clinic_prices"], coll, (x1 - 0.07, 2.45, -2.45), 0.86, 0.62, (R90, 0, -R90), timber=M["timber"])
+    for k, y in enumerate((0.45, 0.95, 1.45)):
+        kit.box(f"clinic_display{k}", M["timber"], coll, (16.36, y, -3.22), (0.95, 0.04, 0.34), bev=0.006, grain="long")
+        for j in range(4):
+            px = 16.01 + j * 0.23
+            if (j + k) % 2:  # a med kit: a canvas case with Nia's stitched patch
+                kit.box(f"clinic_kit{k}_{j}", M["canvas"], coll, (px, y + 0.09, -3.2), (0.19, 0.14, 0.12), rot=(0, 0, rng.uniform(-0.1, 0.1)), soft=True, puff=0.3)
+                kit.box(f"clinic_kit{k}_{j}_patch", bone, coll, (px, y + 0.1, -3.135), (0.06, 0.06, 0.006), bev=0)
+            else:  # a tin of bandages
+                kit.cylinder(f"clinic_tin{k}_{j}", M["steel_locker"], coll, (px, y + 0.02, -3.2), (px, y + 0.16, -3.2), 0.06, segments=12)
+    for s_ in (-1, 1):
+        kit.box(f"clinic_display_side{s_}", M["timber"], coll, (16.36 + s_ * 0.49, 0.95, -3.22), (0.04, 1.9, 0.34), bev=0.006)
+    kit.cylinder("clinic_bell", M["hazard"], coll, (18.75, 1.0, cz - 0.2), (18.75, 1.07, cz - 0.2), 0.05, segments=14, bev=0.01)
+    kit.cylinder("clinic_bell_knob", M["dark"], coll, (18.75, 1.07, cz - 0.2), (18.75, 1.1, cz - 0.2), 0.012, segments=8, bev=0)
+    kit.cylinder("clinic_plant_pot", M["rust"], coll, (19.2, 1.0, cz + 0.15), (19.2, 1.13, cz + 0.15), 0.07, segments=12)
+    for j in range(5):
+        bm = bmesh.new()
+        bmesh.ops.create_icosphere(bm, subdivisions=1, radius=rng.uniform(0.04, 0.06))
+        kit.mesh_obj(f"clinic_plant_leaf{j}", bm, M["leaf"], coll, kit.g2b(19.2 + rng.uniform(-0.05, 0.05), 1.17 + rng.uniform(0, 0.08), cz + 0.15 + rng.uniform(-0.05, 0.05)), tuple(rng.uniform(0, 3, 3)))["uv"] = "box"
+    # crutches leaning by the bench
+    for k in range(2):
+        kit.cylinder(f"clinic_crutch{k}", M["timber"], coll, (x1 - 0.28 - k * 0.12, 0.0, -1.55), (x1 - 0.12 - k * 0.12, 1.3, -1.6), 0.016, segments=8)
+        kit.box(f"clinic_crutch{k}_pad", M["canvas"], coll, (x1 - 0.12 - k * 0.12, 1.33, -1.6), (0.05, 0.05, 0.2), soft=True, puff=0.4)
+    # dried herbs hanging in bunches from the front beam
+    for k in range(7):
+        hx = 15.9 + k * 0.6 + rng.uniform(-0.1, 0.1)
+        kit.cylinder(f"clinic_herb{k}_string", M["canvas"], coll, (hx, H - 0.26, -2.25), (hx, H - 0.55, -2.25), 0.003, segments=4, bev=0)
+        for j in range(4):
+            bm = bmesh.new()
+            bmesh.ops.create_cone(bm, cap_ends=True, segments=8, radius1=0.01, radius2=0.05, depth=0.22)
+            kit.mesh_obj(f"clinic_herb{k}_{j}", bm, M["leaf"] if (k + j) % 3 else M["timber_rot"], coll,
+                         kit.g2b(hx + rng.uniform(-0.03, 0.03), H - 0.66, -2.25 + rng.uniform(-0.03, 0.03)), (rng.uniform(-0.2, 0.2), rng.uniform(-0.2, 0.2), 0))["uv"] = "box"
+
+    # --- behind the counter: her satchels on pegs, her old dive pack, a stool, towels drying ---
+    for k in range(3):
+        sz_ = -0.35 + k * 0.42
+        kit.box(f"clinic_peg{k}", M["timber"], coll, (x0 + 0.1, 1.85, sz_), (0.1, 0.03, 0.03), bev=0.004)
+        kit.box(f"clinic_hung_satchel{k}", M["canvas"] if k != 1 else M["blanket"], coll, (x0 + 0.13, 1.6, sz_), (0.12, 0.34, 0.3), rot=(0, 0, rng.uniform(-0.06, 0.06)), soft=True, puff=0.35)
+        kit.box(f"clinic_hung_satchel{k}_patch", bone, coll, (x0 + 0.195, 1.6, sz_), (0.006, 0.08, 0.08), bev=0)
+        kit.cylinder(f"clinic_hung_strap{k}", M["canvas"], coll, (x0 + 0.13, 1.77, sz_ - 0.13), (x0 + 0.11, 1.86, sz_), 0.008, segments=5, bev=0)
+    # Nia was a Diver: her old pack hangs over the basin, scratched, patched, stickers peeling
+    kit.box("clinic_dive_pack", M["steel_locker"], coll, (x1 - 0.17, 1.7, 0.15), (0.2, 0.5, 0.36), bev=0.035)
+    kit.box("clinic_dive_pack_flap", M["canvas"], coll, (x1 - 0.27, 1.88, 0.15), (0.04, 0.14, 0.32), soft=True, puff=0.3)
+    for s_ in (-1, 1):
+        kit.box(f"clinic_dive_pack_strap{s_}", M["canvas"], coll, (x1 - 0.28, 1.62, 0.15 + s_ * 0.11), (0.02, 0.46, 0.04), bev=0.003)
+    kit.box("clinic_dive_patch", bone, coll, (x1 - 0.275, 1.55, 0.05), (0.004, 0.07, 0.09), bev=0)
+    kit.box("clinic_stool", M["timber"], coll, (17.9, 0.6, -0.25), (0.34, 0.05, 0.34), bev=0.02)
+    for s1 in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+        kit.box(f"clinic_stool_leg{s1}", M["rust"], coll, (17.9 + s1[0] * 0.13, 0.29, -0.25 + s1[1] * 0.13), (0.03, 0.58, 0.03), bev=0.004)
+    kit.cylinder("clinic_towel_line", M["canvas"], coll, (x1 - 0.05, 2.05, 0.45), (18.9, 2.0, 0.45), 0.004, segments=4, bev=0)
+    for k in range(3):
+        kit.box(f"clinic_towel{k}", bone if k != 1 else M["mattress"], coll, (19.15 + k * 0.28, 1.82, 0.45), (0.22, 0.4, 0.02), soft=True, puff=0.3)
+    kit.cylinder("clinic_bucket", M["steel"], coll, (18.85, 0, 0.2), (18.85, 0.28, 0.2), 0.13, segments=14)
+    kit.cylinder("clinic_mop", M["timber"], coll, (18.9, 0.05, 0.25), (19.05, 1.3, 0.4), 0.014, segments=6)
+    # papers on the walls: the body chart over the first cot, her check-up list and a notice by the second
+    kit.plane("clinic_anatomy", P["paper_anatomy"], coll, (16.3, 1.75, z1 - 0.07), 0.42, 0.7, (R90, 0, math.pi))
+    kit.plane("clinic_note1", P["paper_clinic_1"], coll, (19.0, 1.7, z1 - 0.07), 0.26, 0.33, (R90, 0, math.pi + 0.06))
+    kit.plane("clinic_note2", P["paper_clinic_2"], coll, (19.4, 1.62, z1 - 0.07), 0.24, 0.3, (R90, 0, math.pi - 0.08))
     light(room, "clinic_entry_light", "POINT", (dx, 2.6, -2.7), WARM, 50, coll=coll)
     return [((dx, 1.65, -3.2), (dx, 1.1, 2.4)), ((x1 - 0.4, 1.7, -3.0), (16.4, 0.9, 1.2)), ((17.2, 1.65, -0.35), (19.4, 0.8, 1.7))]
 
@@ -1316,11 +1434,43 @@ def build_checkout(M, P, coll):
     # the sign-out desk: steel desk, the drop screen, a logbook and a lamp
     kit.box("check_desk", M["steel_locker"], coll, (23.75, 0.5, -12.6), (3.2, 1.0, 0.8), bev=0.02)
     kit.box("check_desk_top", M["timber"], coll, (23.75, 1.02, -12.6), (3.3, 0.05, 0.9), bev=0.01, grain="long")
-    kit.box("check_screen_case", M["dark"], coll, (23.75, 1.4, -12.88), (1.5, 0.82, 0.08), rot=(0.25, 0, 0), bev=0.015)
-    kit.plane("check_screen", P["paper_drops"], coll, (23.75, 1.405, -12.83), 1.36, 0.7, (R90 + 0.25, 0, 0))
+    # today's drops, chalked up on a big slate behind the desk: the room's focus (art bible)
+    kit.box("check_chalk_frame", M["timber"], coll, (23.75, 1.65, -14.86), (2.06, 1.2, 0.06), bev=0.015, grain="long")
+    kit.plane("check_chalk", P["chalk_drops"], coll, (23.75, 1.65, -14.825), 1.9, 1.07, (R90, 0, 0))
+    kit.box("check_chalk_ledge", M["timber"], coll, (23.75, 1.03, -14.8), (2.0, 0.03, 0.08), bev=0.005, grain="long")
+    for k in range(3):
+        kit.cylinder(f"check_chalk_stick{k}", M["bone"], coll, (23.0 + k * 0.12, 1.055, -14.79), (23.07 + k * 0.12, 1.055, -14.79), 0.007, segments=6, bev=0)
+    kit.box("check_chalk_rag", M["canvas"], coll, (24.5, 1.06, -14.79), (0.16, 0.03, 0.07), soft=True, puff=0.4)
+    light(room, "check_chalk_light", "POINT", (23.75, 2.3, -14.15), (1.0, 0.72, 0.45), 70, coll=coll)
+    # the desk, in use: a radio set, a kettle on a burner, mugs, a clipboard, a lamp, a chair behind
+    kit.box("check_desk_radio", M["steel_locker"], coll, (23.4, 1.17, -12.85), (0.5, 0.26, 0.28), bev=0.012)
+    kit.box("check_desk_radio_grille", M["dark"], coll, (23.28, 1.17, -12.705), (0.18, 0.16, 0.01), bev=0.002)
+    for j in range(3):
+        kit.cylinder(f"check_desk_radio_knob{j}", M["bare"], coll, (23.5 + j * 0.06, 1.12, -12.71), (23.5 + j * 0.06, 1.12, -12.69), 0.014, segments=10, bev=0)
+    kit.box("check_desk_radio_lamp", M["bulb"], coll, (23.58, 1.22, -12.705), (0.06, 0.02, 0.01), bev=0)
+    kit.cylinder("check_desk_aerial", M["bare"], coll, (23.6, 1.3, -12.9), (23.75, 1.75, -12.95), 0.004, segments=4, bev=0)
+    kit.box("check_burner", M["dark"], coll, (25.05, 1.08, -12.75), (0.22, 0.06, 0.22), bev=0.008)
+    kit.cylinder("check_kettle", M["steel"], coll, (25.05, 1.11, -12.75), (25.05, 1.27, -12.75), 0.085, segments=14)
+    kit.cylinder("check_kettle_spout", M["steel"], coll, (25.1, 1.18, -12.72), (25.2, 1.25, -12.66), 0.012, segments=6)
+    for k in range(3):
+        kit.cylinder(f"check_mug{k}", M["steel_locker"] if k % 2 else M["bone"], coll, (24.4 + k * 0.13, 1.045, -12.35 - (k % 2) * 0.1), (24.4 + k * 0.13, 1.14, -12.35 - (k % 2) * 0.1), 0.035, segments=10)
+    kit.box("check_clipboard", M["timber"], coll, (22.95, 1.05, -12.35), (0.24, 0.012, 0.32), rot=(0, 0, -0.2), bev=0.003)
+    kit.box("check_clipboard_paper", M["bone"], coll, (22.95, 1.058, -12.34), (0.21, 0.004, 0.26), rot=(0, 0, -0.2), bev=0)
+    kit.cylinder("check_desk_lamp_arm", M["dark"], coll, (22.3, 1.045, -12.85), (22.4, 1.45, -12.7), 0.01, segments=6)
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=False, segments=14, radius1=0.09, radius2=0.03, depth=0.1)
+    kit.mesh_obj("check_desk_lamp_shade", bm, M["steel"], coll, kit.g2b(22.45, 1.42, -12.62), (0.4, 0, 0))["uv"] = "box"
+    light(room, "check_desk_lamp_light", "POINT", (22.5, 1.3, -12.5), WARM, 25, coll=coll)
+    kit.box("check_chair_seat", M["timber"], coll, (23.75, 0.48, -13.35), (0.45, 0.05, 0.42), bev=0.02)
+    kit.box("check_chair_back", M["timber"], coll, (23.75, 0.8, -13.55), (0.42, 0.55, 0.04), rot=(-0.1, 0, 0), bev=0.015)
+    for s1 in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+        kit.box(f"check_chair_leg{s1}", M["rust"], coll, (23.75 + s1[0] * 0.18, 0.23, -13.35 + s1[1] * 0.17), (0.03, 0.46, 0.03), bev=0.004)
+    kit.box("check_filing", M["steel_locker"], coll, (21.9, 0.65, -14.6), (0.5, 1.3, 0.55), bev=0.015)
+    for k in range(3):
+        kit.box(f"check_filing_drawer{k}", M["dark"], coll, (21.9, 0.28 + k * 0.38, -14.32), (0.42, 0.3, 0.01), bev=0.004)
+        kit.box(f"check_filing_pull{k}", M["bare"], coll, (21.9, 0.36 + k * 0.38, -14.31), (0.14, 0.02, 0.02), bev=0.003)
     kit.box("check_logbook", M["blanket"], coll, (22.6, 1.06, -12.5), (0.4, 0.04, 0.3), rot=(0, 0, 0.15), bev=0.01)
     kit.plane("check_signout", P["paper_signout"], coll, (25.0, 1.048, -12.45), 0.28, 0.35, (0, 0, -0.2))
-    light(room, "check_screen_light", "POINT", (23.75, 1.6, -12.3), (0.95, 0.72, 0.45), 25, coll=coll)
     board("check_sign", P["sign_checkout"], coll, (23.75, 2.6, -14.92), 2.4, 0.6, (R90, 0, 0), timber=M["timber"])
     # the survey map of the Dustline on the west wall, pinned and strung
     kit.box("check_map_frame", M["timber"], coll, (19.27, 1.75, -10.8), (0.06, 2.3, 2.3), bev=0.012)
@@ -1375,6 +1525,42 @@ def build_checkout(M, P, coll):
     barrel("check_water", M, coll, 21.6, -7.4, r=0.3, h=1.0, mat="steel_locker")
     kit.cylinder("check_water_tap", M["bare"], coll, (21.6, 0.25, -7.7), (21.6, 0.25, -7.78), 0.015, segments=6)
     kit.cylinder("check_cup", M["steel"], coll, (21.6, 1.0, -7.45), (21.6, 1.08, -7.45), 0.035, segments=10)
+    # a rack of packs and headlamps on the west wall, ready to go out
+    kit.box("check_gear_rail", M["timber"], coll, (19.24, 1.75, -8.7), (0.05, 0.08, 1.5), bev=0.006, grain="long")
+    for k in range(3):
+        gz = -9.25 + k * 0.5
+        kit.box(f"check_gear_hook{k}", M["bare"], coll, (19.3, 1.72, gz), (0.08, 0.02, 0.02), bev=0.003)
+        kit.box(f"check_gear_pack{k}", M["canvas"] if k != 1 else M["blanket"], coll, (19.4, 1.4, gz), (0.24, 0.55, 0.36), rot=(0, 0, rng.uniform(-0.05, 0.05)), soft=True, puff=0.35)
+        kit.box(f"check_gear_pack{k}_flap", M["canvas"], coll, (19.46, 1.62, gz), (0.2, 0.12, 0.34), soft=True, puff=0.3)
+    for k in range(2):
+        hz = -9.0 + k * 0.5
+        kit.cylinder(f"check_headlamp{k}_band", M["dark"], coll, (19.3, 2.05, hz - 0.08), (19.3, 2.05, hz + 0.08), 0.06, segments=12, bev=0)
+        kit.cylinder(f"check_headlamp{k}_lamp", M["bare"], coll, (19.33, 2.0, hz), (19.38, 2.0, hz), 0.025, segments=10)
+    # the loan table: torches, flares, rope and rations, and the board that says bring them back
+    kit.box("check_loan_table", M["timber"], coll, (27.0, 0.8, -11.55), (0.6, 0.05, 1.1), bev=0.012, grain="long")
+    for s1 in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+        kit.box(f"check_loan_leg{s1}", M["rust"], coll, (27.0 + s1[0] * 0.25, 0.39, -11.55 + s1[1] * 0.5), (0.04, 0.78, 0.04), bev=0.004)
+    for k in range(4):
+        tz = -11.95 + k * 0.1
+        kit.cylinder(f"check_torch{k}", M["dark"], coll, (26.85, 0.85, tz), (27.07, 0.85, tz + 0.02), 0.022, segments=10)
+        kit.cylinder(f"check_torch{k}_lens", M["bare"], coll, (27.07, 0.85, tz + 0.02), (27.1, 0.85, tz + 0.02), 0.028, segments=10, bev=0)
+    kit.box("check_flare_box", M["plank"], coll, (27.05, 0.9, -11.35), (0.3, 0.14, 0.2), bev=0.01)
+    for k in range(5):
+        kit.cylinder(f"check_flare{k}", M["blanket"], coll, (26.95 + k * 0.05, 0.92, -11.35), (26.95 + k * 0.05, 1.02, -11.35), 0.014, segments=6, bev=0)
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=False, segments=18, radius1=0.15, radius2=0.15, depth=0.06)
+    bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=0.05)
+    kit.mesh_obj("check_rope_coil", bm, M["canvas"], coll, kit.g2b(27.0, 0.86, -11.08))["uv"] = "box"
+    for k in range(4):
+        kit.cylinder(f"check_ration{k}", M["steel"], coll, (26.4 + (k % 2) * 0.16, 0.0 + (k // 2) * 0.13, -11.2), (26.4 + (k % 2) * 0.16, 0.12 + (k // 2) * 0.13, -11.2), 0.06, segments=12)
+    board("check_return", P["sign_return_kit"], coll, (28.43, 1.75, -11.55), 0.9, 0.42, (R90, 0, -R90), timber=M["timber"])
+    # a worn rug under the queue, string lights across the roof, a clock over the lockers
+    kit.box("check_rug", M["rug"], coll, (23.75, 0.012, -10.5), (2.6, 0.012, 1.9), rot=(0, 0, 0.04), bev=0.004)
+    string_lights("check_string", M, coll, room, [((19.4, 3.0, -9.0), (28.2, 3.05, -9.0)), ((19.4, 3.05, -12.2), (28.2, 3.0, -12.2))], sag=0.3, every=6, watts=20)
+    kit.cylinder("check_clock", M["bone"], coll, (27.3, 2.4, -14.86), (27.3, 2.4, -14.82), 0.16, segments=24, bev=0.004)
+    kit.cylinder("check_clock_rim", M["dark"], coll, (27.3, 2.4, -14.87), (27.3, 2.4, -14.83), 0.175, segments=24, bev=0.006)
+    kit.box("check_clock_hour", M["dark"], coll, (27.3, 2.44, -14.81), (0.012, 0.09, 0.004), rot=(0, 0, 0.0), bev=0)
+    kit.box("check_clock_min", M["dark"], coll, (27.35, 2.4, -14.81), (0.11, 0.01, 0.004), bev=0)
     return [((23.75, 1.7, -7.4), (23.75, 1.3, -14.0)), ((27.0, 1.7, -8.0), (19.5, 1.5, -11.5)), ((20.6, 1.6, -8.0), (27.5, 1.2, -13.8))]
 
 
@@ -1517,7 +1703,7 @@ def main():
     M_TIMBER, M_DARK = M["timber"], M["dark"]
     M["scorch"] = kit.picture_material("mat_decal_scorch_01", os.path.join(TEX, "decal_scorch_albedo.png"), alpha=True, rough=0.9)
     M["grow"] = kit.pbr("mat_grow_light_01", None, tint=(0.95, 0.6, 0.7), emission=(0.85, 0.34, 0.48), emission_strength=8.0)
-    M["bottle"] = kit.pbr("mat_bottle_amber_01", None, tint=(0.36, 0.2, 0.08), rough=0.12)
+    M["bottle"] = kit.pbr("mat_bottle_amber_01", None, tint=(0.16, 0.075, 0.025), rough=0.12)  # dark brown glass
     M["ice"] = kit.pbr("mat_shield_cell_01", None, tint=(0.62, 0.85, 0.94), rough=0.3, metal=0.6)  # Shield Ice, never glowing
     M["bone"] = kit.pbr("mat_cloth_bone_01", "canvas", tint=(0.93, 0.9, 0.82))
     M["circuit"] = kit.pbr("mat_circuit_board_01", "canvas", tint=(0.2, 0.3, 0.2), rough=0.5)
@@ -1525,13 +1711,13 @@ def main():
     M["teal"] = kit.pbr("mat_lift_teal_01", None, tint=(0.03, 0.2, 0.18), emission=(0.18, 0.9, 0.82), emission_strength=6.0)
     P = {}
     for key in ("sign_rules", "sign_trade_hall", "sign_workshop", "sign_checkout_door", "sign_lift", "sign_quarters", "sign_checkout",
-                "sign_notices", "sign_clinic_rules", "sign_we_buy", *[f"sign_bin_{i}" for i in range(3)], *[f"sign_trader_{i}" for i in range(3)], *[f"sign_bench_{i}" for i in range(7)]):
+                "sign_notices", "sign_clinic_rules", "sign_clinic_prices", "sign_return_kit", "sign_we_buy", *[f"sign_bin_{i}" for i in range(3)], *[f"sign_trader_{i}" for i in range(3)], *[f"sign_bench_{i}" for i in range(7)]):
         P[key] = kit.pbr(f"mat_{key}_01", key)
     for key in ("neon_noodles", "neon_bunks", "neon_clinic", "neon_water", "neon_radio", "neon_market"):
         P[key] = kit.picture_material(f"mat_{key}_01", os.path.join(TEX, f"{key}_albedo.png"), emission_strength=5.0, rough=0.3)
-    for key in ("map_board", "paper_notice_1", "paper_notice_2", "paper_notice_3", "paper_signout", "paper_target"):
+    for key in ("map_board", "paper_notice_1", "paper_notice_2", "paper_notice_3", "paper_signout", "paper_target",
+                "paper_anatomy", "paper_clinic_1", "paper_clinic_2", "chalk_drops"):
         P[key] = kit.picture_material(f"mat_{key}_01", os.path.join(TEX, f"{key}_albedo.png"), rough=0.85)
-    P["paper_drops"] = kit.picture_material("mat_screen_drops_01", os.path.join(TEX, "paper_drops_albedo.png"), emission_strength=1.2, rough=0.2)
     views = {}
     for room in rooms:
         coll = bpy.data.collections.new(f"env_sanctuary_{room}")
