@@ -17,7 +17,7 @@ controller (godot/scripts/raider.gd).
 - Budget (art bible 8.4): Diver LOD0 40k triangles, 3 materials.
 
 Run with the Blender Python module (bpy):
-    python tools/blender/build_diver.py <work dir> [--render] [--sheets] [--export]
+    python tools/blender/build_diver.py <work dir> [--render] [--sheets [--only walk,run]] [--export]
 --export writes godot/models/characters/char_diver_base.glb.
 """
 
@@ -300,8 +300,8 @@ def key_pose(rig, frame, pose, hips_loc=(0, 0, 0)):
         pb.rotation_euler = (math.radians(rx), math.radians(ry), math.radians(rz))
         pb.keyframe_insert("rotation_euler", frame=frame)
     hb = rig.pose.bones["Hips"]
-    # pose-bone location is in the bone's rest frame (y along the bone = game up, z = game back)
-    hb.location = (hips_loc[0], hips_loc[1], -hips_loc[2])
+    # pose-bone location is in the bone's rest frame, which for Hips is the game's (x left, y up, z forward)
+    hb.location = (hips_loc[0], hips_loc[1], hips_loc[2])
     hb.keyframe_insert("location", frame=frame)
 
 
@@ -318,26 +318,38 @@ def arms_down(pose, swing=0.0, bend=12.0, shrug=0.0):
     return pose
 
 
-def cycle(rig, name, frames, stride, knee, arm, bob, lean, crouch=0.0, elbow=15.0, ankle=12.0):
+def cycle(rig, name, frames, stride, knee, arm, bob, lean, crouch=0.0, elbow=15.0, ankle=12.0,
+          yaw=7.0, drop=4.0, sway=0.022, twist=10.0):
     """A walk/run cycle in place: legs swing by `stride`, knees bend by `knee`,
-    arms counter-swing, the hips bob and the body leans forward."""
+    arms counter-swing and the body leans forward. The pelvis turns with the
+    forward leg (`yaw`), dips on the swinging leg's side (`drop`) and shifts
+    over the planted foot (`sway`, metres); the chest twists against it
+    (`twist`) and bends sideways to keep the shoulders level; the neck
+    cancels both so the head keeps looking where the Diver goes. The body
+    is highest passing over the planted foot, lowest as the heel lands."""
     act = bpy.data.actions.new(name)
     rig.animation_data.action = act
     for f in range(0, frames + 1, 2):
         ph = f / frames * 2 * math.pi
         s = math.sin(ph)
         pose = {}
+        swing = {}
         for side, sgn in (("Left", 1), ("Right", -1)):
             leg = s * sgn
             lift = max(0.0, -math.cos(ph + (0 if sgn > 0 else math.pi)))  # the knee folds as the leg swings through
+            swing[side] = lift
             # the ankle: toes up as the heel strikes in front, pushing off through the toes behind
             legs(pose, side, stride * leg + crouch * 1.2, knee * (0.25 + lift) + crouch * 2.0, foot_extra=ankle * leg)
-        arms_down(pose, swing=-arm * s, bend=elbow, shrug=2.5 * abs(math.cos(ph)))  # each arm swings against its own leg
-        pose["Spine"] = (LEAN * (lean + crouch * 0.4), 0, 3 * s)
-        pose["Chest"] = (0, -4 * s, 0)
-        pose["Neck"] = (-LEAN * (lean * 0.6 + crouch * 0.3), 3 * s, 0)  # the head comes back up to look ahead, and holds against the twist
-        y = -bob * abs(math.cos(ph)) - crouch * 0.0052
-        key_pose(rig, f, pose, (0, y, 0))
+        arms_down(pose, swing=-arm * s, bend=elbow, shrug=2.5 * abs(math.sin(ph)))  # each arm swings against its own leg
+        # the pelvis (Hips' axes match the game's: x left, y up, z forward)
+        roll = drop * (swing["Right"] - swing["Left"])  # the swinging leg's hip dips
+        pose["Hips"] = (0, -yaw * s, roll)  # -y turns the left hip forward with the left leg
+        pose["Spine"] = (LEAN * (lean + crouch * 0.4), twist * 0.6 * s, -roll * 0.8)  # twist back against the pelvis, level the shoulders
+        pose["Chest"] = (0, twist * 0.4 * s, -roll * 0.3)
+        pose["Neck"] = (-LEAN * (lean * 0.6 + crouch * 0.3), (yaw - twist) * s, roll * 0.1)  # the head looks ahead through it all
+        x = sway * (swing["Right"] - swing["Left"])  # over the planted foot
+        y = -bob * abs(math.sin(ph)) - crouch * 0.0063  # high passing over the foot, low at heel strike; bent legs lower the hips
+        key_pose(rig, f, pose, (x, y, 0))
     return act
 
 
@@ -356,8 +368,8 @@ def build_actions(rig):
         pose["RightUpperLeg"] = (0, 0, 1.5 * math.sin(ph))
         key_pose(rig, f, pose, (0.006 * math.sin(ph), -0.004 * (1 + math.sin(ph * 2)) / 2, 0))
     acts.append(act)
-    acts.append(cycle(rig, "walk", 32, stride=24, knee=30, arm=18, bob=0.025, lean=4, elbow=18, ankle=12))
-    acts.append(cycle(rig, "run", 20, stride=38, knee=62, arm=40, bob=0.05, lean=12, elbow=85, ankle=18))
+    acts.append(cycle(rig, "walk", 32, stride=24, knee=30, arm=18, bob=0.025, lean=4, elbow=18, ankle=12, yaw=7, drop=4, sway=0.022, twist=10))
+    acts.append(cycle(rig, "run", 20, stride=38, knee=62, arm=40, bob=0.05, lean=12, elbow=85, ankle=18, yaw=10, drop=5, sway=0.012, twist=16))
     # crouch: hips dropped, knees bent, leaning forward
     act = bpy.data.actions.new("crouch_idle")
     rig.animation_data.action = act
@@ -368,9 +380,9 @@ def build_actions(rig):
             legs(pose, side, 62, 100)
         pose["Spine"] = (LEAN * (24 + 1.5 * math.sin(ph)), 0, 0)
         pose["Neck"] = (-LEAN * 18, 0, 0)
-        key_pose(rig, f, pose, (0, -0.3, 0.0))
+        key_pose(rig, f, pose, (0, -0.318, 0.0))  # as far as the bent legs (thigh 62, knee 100) bring the hips down
     acts.append(act)
-    acts.append(cycle(rig, "crouch_walk", 36, stride=20, knee=22, arm=10, bob=0.015, lean=18, crouch=48, elbow=40, ankle=8))
+    acts.append(cycle(rig, "crouch_walk", 36, stride=20, knee=22, arm=10, bob=0.015, lean=18, crouch=48, elbow=40, ankle=8, yaw=5, drop=3, sway=0.03, twist=7))
     # jump: crouch, launch, tuck, reach for the ground
     act = bpy.data.actions.new("jump")
     rig.animation_data.action = act
@@ -415,17 +427,14 @@ def pose_sheet(rig, act, out_dir, n=6):
     from PIL import Image
     rig.animation_data.action = act
     f0, f1 = act.frame_range
-    paths = []
-    for k in range(n):
-        f = f0 + (f1 - f0) * k / n
-        bpy.context.scene.frame_set(int(round(f)))
-        p = os.path.join(out_dir, f"diver_{act.name}_{k}.png")
-        studio((2.6, 1.3, 1.6), (0, 0.85, 0), p, res=(480, 600), samples=16)
-        paths.append(p)
-    ims = [Image.open(p) for p in paths]
-    sheet = Image.new("RGB", (480 * n, 600))
-    for k, im in enumerate(ims):
-        sheet.paste(im, (480 * k, 0))
+    sheet = Image.new("RGB", (480 * n, 1200))
+    for row, cam in enumerate(((2.6, 1.3, 1.6), (0.0, 1.1, 3.4))):  # three-quarter, then front on (sway, hip drop)
+        for k in range(n):
+            f = f0 + (f1 - f0) * k / n
+            bpy.context.scene.frame_set(int(round(f)))
+            p = os.path.join(out_dir, f"diver_{act.name}_{row}_{k}.png")
+            studio(cam, (0, 0.85, 0), p, res=(480, 600), samples=16)
+            sheet.paste(Image.open(p), (480 * k, 600 * row))
     sheet.save(os.path.join(out_dir, f"sheet_diver_{act.name}.png"))
     rig.animation_data.action = None
 
@@ -457,8 +466,10 @@ def main():
         for k, (cam, look) in enumerate((((2.4, 1.4, 3.4), (0, 0.95, 0)), ((-2.6, 1.5, -3.0), (0, 0.95, 0)), ((0.6, 1.65, 1.1), (0, 1.55, 0)))):
             studio(cam, look, os.path.join(kit.WORK, f"preview_diver_{k}.png"))
     if "--sheets" in sys.argv:
+        only = (arg("--only") or "").split(",")
         for act in acts:
-            pose_sheet(rig, act, kit.WORK)
+            if act.name in only or only == [""]:
+                pose_sheet(rig, act, kit.WORK)
     if "--export" in sys.argv:
         os.makedirs(CMODELS, exist_ok=True)
         bpy.ops.object.select_all(action="DESELECT")
