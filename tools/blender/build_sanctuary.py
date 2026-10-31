@@ -39,7 +39,7 @@ H = kit.H
 R90 = math.pi / 2
 SCENES = os.path.join(ROOT, "godot", "scenes", "sanctuary")
 rng = np.random.default_rng(11)
-ROOMS = ["hallway", "trade_hall", "workshop", "checkout", "lift"]
+ROOMS = ["hallway", "trade_hall", "clinic", "radio", "workshop", "checkout", "lift"]
 WARM = (1.0, 0.66, 0.38)
 LIGHTS = {}  # room -> [(name, kind, pos, colour, watts, extra)]
 
@@ -219,6 +219,12 @@ def make_room_pictures():
                          ("neon_clinic", "CLINIC", (0.94, 0.7, 0.35)), ("neon_water", "WATER · RATION", (0.91, 0.58, 0.23)),
                          ("neon_radio", "RADIO & PARTS", (0.85, 0.34, 0.48)), ("neon_market", "MARKET", (0.91, 0.58, 0.23))):
         neon_texture(key, text, c, px=78 if len(text) < 9 else 56)
+    painted_board("sign_clinic_rules", [("CLEAN HANDS", 0.3, 92, (0.87, 0.81, 0.71)), ("NO HUSK BLOOD", 0.62, 52, (0.78, 0.62, 0.42)),
+                                        ("PAST THE LINE", 0.84, 52, (0.78, 0.62, 0.42))], w=640, h=360, paint=(0.3, 0.33, 0.3), seed=42)
+    painted_board("sign_we_buy", [("WE BUY", 0.24, 96, (0.87, 0.81, 0.71)), ("SCRAP  ·  WIRE  ·  RUBBER", 0.58, 46, (0.82, 0.76, 0.66)),
+                                  ("HUSK PARTS  ·  GOOD PRICES", 0.82, 40, (0.78, 0.62, 0.42))], w=768, h=420, paint=(0.33, 0.29, 0.17), seed=43)
+    for i, word in enumerate(("SCRAP", "WIRE", "RUBBER")):
+        painted_board(f"sign_bin_{i}", [(word, 0.55, 110, (0.87, 0.81, 0.71))], w=512, h=180, paint=(0.24, 0.22, 0.18), seed=44 + i)
     map_board_texture()
     paper_texture("paper_notice_1", "RATIONS", ["Thursday, after shift", "Bring your own tin", "No tin, no ration"], 91)
     paper_texture("paper_notice_2", "LIFT CREW", ["Wanted: 2 hands", "Ask at Checkout", "Pay in scrap"], 92)
@@ -446,6 +452,7 @@ HALL_S = -3.6  # the south wall, against the quarters and the shopfronts
 TRACK_Z = -7.55  # the abandoned rails run along the north side, by the doors
 WALK_N = -6.3  # the boardwalk runs along the south side, by the shops
 ROOM_SHIFT = -2.0  # Trade Hall, Workshop and Checkout sit 2 m further north
+OPEN_SHOPS = (17.8, 27.4)  # shopfronts with rooms behind them: Nia's clinic, Pell's radio & parts
 SET_X = (-4.4, 0.4, 2.6, 6.2, 11.0, 16.4, 21.2, 26.0, 28.6, 32.4)  # timber mine sets down the hallway
 
 
@@ -472,7 +479,7 @@ def build_hallway(M, P, coll):
     floor_ceiling("hall", M, coll, -5, 33, z0, z1, seed=21)
     rock_wall("hall_north", M, coll, "x", z0, -5, 33, +1, doors=((4, 1.8), (14, 1.8), (23.75, 1.8)), seed=22, step=0.07)
     rock_wall("hall_south_w", M, coll, "x", z1, -5, -4, -1, seed=30)
-    rock_wall("hall_south_e", M, coll, "x", z1, 4, 33, -1, seed=31, step=0.07)
+    rock_wall("hall_south_e", M, coll, "x", z1, 4, 33, -1, doors=tuple((x, 1.8) for x in OPEN_SHOPS), seed=31, step=0.07)
     rock_wall("hall_west", M, coll, "z", -5, z0, z1, +1, seed=32)
     rock_wall("hall_east_n", M, coll, "z", 33, z0, -6.6, -1, seed=33)  # the lift opens off the walkway side
     for at in (4, 14, 23.75):
@@ -592,15 +599,23 @@ def build_hallway(M, P, coll):
                                           (17.8, "neon_clinic", (0.94, 0.7, 0.35)), (23.4, "neon_water", (0.91, 0.58, 0.23)),
                                           (27.4, "neon_radio", (0.85, 0.34, 0.48)))):
         z = -3.66
-        kit.box(f"shop{k}_shutter", M["steel"], coll, (x, 1.1, z), (1.7, 2.1, 0.05), bev=0.01)
-        for j, y in enumerate(np.arange(0.17, 2.1, 0.12)):
-            kit.box(f"shop{k}_rib{j}", M["dark"], coll, (x, y, z - 0.03), (1.66, 0.02, 0.012), bev=0)
+        if x in OPEN_SHOPS:  # open for business: the shutter rolled up into its drum under the lintel
+            kit.cylinder(f"shop{k}_drum", M["steel"], coll, (x - 0.86, 2.4, z + 0.02), (x + 0.86, 2.4, z + 0.02), 0.13, segments=16)
+            for s_ in (-1, 1):
+                kit.box(f"shop{k}_drum_bracket{s_}", M["dark"], coll, (x + s_ * 0.88, 2.4, z + 0.02), (0.04, 0.3, 0.3), bev=0.008)
+            kit.box(f"shop{k}_shutter_lip", M["dark"], coll, (x, 2.26, z - 0.1), (1.7, 0.04, 0.03), bev=0.005)
+            kit.box(f"shop{k}_lintel", M["timber"], coll, (x, 2.62, z - 0.06), (2.0, 0.14, 0.14), bev=0.012, grain="long")
+        else:
+            kit.box(f"shop{k}_shutter", M["steel"], coll, (x, 1.1, z), (1.7, 2.1, 0.05), bev=0.01)
+            for j, y in enumerate(np.arange(0.17, 2.1, 0.12)):
+                kit.box(f"shop{k}_rib{j}", M["dark"], coll, (x, y, z - 0.03), (1.66, 0.02, 0.012), bev=0)
         for s in (-1, 1):
             kit.box(f"shop{k}_post{s}", M["timber"], coll, (x + s * 0.92, 1.15, z - 0.06), (0.12, 2.3, 0.12), rot=(0, 0, 0.01 * s), bev=0.012, grain="long")
         kit.box(f"shop{k}_awning", M["blanket"] if k % 2 else M["canvas"], coll, (x, 2.45, z - 0.32), (2.0, 0.05, 0.62), rot=(-0.3, 0, 0), soft=True, puff=0.3)
         kit.box(f"shop{k}_neon_back", M["dark"], coll, (x, 2.88, z - 0.05), (1.75, 0.46, 0.03), bev=0.006)
         kit.plane(f"shop{k}_neon", P[neon], coll, (x, 2.88, z - 0.07), 1.7, 0.42, (R90, 0, math.pi))
-        crate(f"shop{k}_counter", M, coll, (x + 0.45, 0.38, -3.98), (0.55, 0.6, 0.4))
+        if x not in OPEN_SHOPS:
+            crate(f"shop{k}_counter", M, coll, (x + 0.45, 0.38, -3.98), (0.55, 0.6, 0.4))
         light(room, f"shop{k}_neon_light", "POINT", (x, 2.6, -4.3), colour, 18, coll=coll)
 
     # north wall: a grow rack, the notice board, a water tank
@@ -634,7 +649,7 @@ def build_hallway(M, P, coll):
     neon_sign("hall_neon_quarters", "YOUR QUARTERS", (0.91, 0.58, 0.23), coll, room, (-2.0, 2.95, -3.72), math.pi, size=0.2)
     neon_sign("hall_neon_lift", "LIFT", (0.18, 0.9, 0.82), coll, room, (32.6, 2.85, -5.1), -R90, size=0.3)
     # benches on the boardwalk
-    for k, x in enumerate((9, 19)):
+    for k, x in enumerate((9, 20.6)):  # clear of the open shop doors
         kit.box(f"hall_bench{k}_seat", M["timber"], coll, (x, 0.53, -3.95), (2.0, 0.07, 0.42), bev=0.015, grain="long")
         for s in (-0.85, 0.85):
             kit.box(f"hall_bench{k}_leg{s}", M["timber"], coll, (x + s, 0.3, -3.95), (0.08, 0.44, 0.38), bev=0.01)
@@ -642,56 +657,6 @@ def build_hallway(M, P, coll):
             ((11.0, 1.7, -7.6), (14.5, 1.9, -3.6)), ((-0.6, 1.6, -5.6), (-2.4, 1.4, -8.6)),
             ((8.5, 1.55, -4.2), (4.0, 2.4, -8.6)), ((-3.6, 1.6, -7.8), (-1.5, 2.6, -3.6)),
             ((28.0, 1.9, -4.6), (32.5, 2.4, -8.0))]
-
-
-def long_gun(name, M, coll, x, y, z, kind="rifle", facing=1, along="x", lean=0.0, scale=1.0):
-    """A long gun lying flat against a wall or bench, barrel along +x
-    (facing=-1 flips it). Built from its real parts: stock, receiver,
-    barrel, magazine or pump, a sight. Worn wood, rusted steel."""
-    L = {"rifle": 1.05, "carbine": 0.9, "shotgun": 1.1, "marksman": 1.25}[kind] * scale
-
-    def at(dx, dy):
-        dx, dy = dx * scale, dy * scale
-        if along == "x":
-            return (x + facing * dx, y + dy, z)
-        return (x, y + dy, z + facing * dx)
-
-    def sz(lx, ly, lz):
-        lx, ly, lz = lx * scale, ly * scale, lz * scale
-        return (lx, ly, lz) if along == "x" else (lz, ly, lx)
-
-    stock = M["timber"]
-    kit.box(f"{name}_stock", stock, coll, at(0.16, -0.025), sz(0.32, 0.1, 0.045), rot=(lean, 0, 0), bev=0.012, grain="long")
-    kit.box(f"{name}_grip", stock, coll, at(0.36, -0.07), sz(0.07, 0.12, 0.04), rot=(lean, 0, 0), bev=0.01)
-    kit.box(f"{name}_receiver", M["bare"], coll, at(0.48, 0.0), sz(0.26, 0.075, 0.05), rot=(lean, 0, 0), bev=0.008)
-    if kind == "shotgun":
-        kit.box(f"{name}_pump", stock, coll, at(0.72, -0.03), sz(0.2, 0.05, 0.05), rot=(lean, 0, 0), bev=0.012, grain="long")
-    else:
-        kit.box(f"{name}_forend", stock, coll, at(0.7, -0.015), sz(0.22, 0.05, 0.045), rot=(lean, 0, 0), bev=0.01, grain="long")
-    if kind in ("rifle", "carbine"):
-        kit.box(f"{name}_mag", M["dark"], coll, at(0.52, -0.09), sz(0.06, 0.13, 0.03), rot=(lean, 0, 0.2 * facing if along == "x" else 0), bev=0.006)
-    p0, p1 = at(0.6, 0.012), at(L / scale, 0.012)
-    kit.cylinder(f"{name}_barrel", M["bare"], coll, p0, p1, (0.012 if kind != "shotgun" else 0.016) * scale, segments=10)
-    if kind == "marksman":
-        kit.cylinder(f"{name}_scope", M["dark"], coll, at(0.38, 0.07), at(0.68, 0.07), 0.022, segments=12)
-    else:
-        kit.box(f"{name}_sight", M["bare"], coll, at(L - 0.03, 0.03), sz(0.02, 0.025, 0.01), bev=0.003)
-
-
-def pistol(name, M, coll, x, y, z, facing=1, along="x", flat=False):
-    """A pistol or revolver: grip, frame, slide and barrel."""
-    def at(dx, dy):
-        return (x + facing * dx, y + dy, z) if along == "x" else (x, y + dy, z + facing * dx)
-
-    def sz(lx, ly, lz):
-        return (lx, ly, lz) if along == "x" else (lz, ly, lx)
-    if flat:  # lying on its side in a display case: thin in y
-        kit.box(f"{name}_grip", M["timber"], coll, (x, y, z + 0.04), (0.04, 0.025, 0.1), rot=(0, 0, 0.0), bev=0.008)
-        kit.box(f"{name}_slide", M["bare"], coll, (x + 0.06, y + 0.004, z - 0.005), (0.17, 0.028, 0.04), bev=0.006)
-        return
-    kit.box(f"{name}_grip", M["timber"], coll, at(0.0, -0.05), sz(0.045, 0.11, 0.035), rot=(0, 0, -0.25 * facing if along == "x" else 0), bev=0.01)
-    kit.box(f"{name}_slide", M["bare"], coll, at(0.06, 0.02), sz(0.19, 0.04, 0.035), bev=0.007)
-    kit.cylinder(f"{name}_barrel", M["dark"], coll, at(0.15, 0.012), at(0.2, 0.012), 0.009, segments=8)
 
 
 def ammo_can(name, M, coll, x, y, z, yaw=0.0):
@@ -708,6 +673,80 @@ def glass_material(name):
     b.inputs["Roughness"].default_value = 0.08
     b.inputs["Alpha"].default_value = 0.1
     return m
+
+
+# ---------- the real guns on display ----------
+# Shops show the actual weapon models (tools/blender/build_weapons.py,
+# godot/models/weapons/wpn_<gun>.gltf), not stand-ins. Each placement is
+# recorded here; Godot instances the weapon scenes (guns_<room>.tscn) so the
+# shop shares the guns' meshes instead of baking copies into the room.
+DISPLAY = {}  # room -> [(gun, centre (game space), 3x3 rotation (game space))]
+_C = np.array([[1.0, 0, 0], [0, 0, -1.0], [0, 1.0, 0]])  # game -> Blender, as kit.g2b
+
+
+def gun_rot(yaw=0.0, pitch=0.0, roll=0.0):
+    """A game-space rotation for a gun (gun frame: +z muzzle, +y up, +x its
+    right side): roll about the barrel, then pitch, then yaw."""
+    cy, sy, cp, sp, cr, sr = math.cos(yaw), math.sin(yaw), math.cos(pitch), math.sin(pitch), math.cos(roll), math.sin(roll)
+    ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
+    rx = np.array([[1, 0, 0], [0, cp, -sp], [0, sp, cp]])
+    rz = np.array([[cr, -sr, 0], [sr, cr, 0], [0, 0, 1]])
+    return ry @ rx @ rz
+
+
+def show_gun(room, gun, centre, rot):
+    """Puts a real gun in a room, its bounding box centred on `centre`."""
+    DISPLAY.setdefault(room, []).append((gun, centre, rot))
+
+
+def build_display_guns(room):
+    """Builds the room's displayed guns in Blender (for previews; they are not
+    merged into the room export) and returns [(gun, origin, rot)] with each
+    gun's own origin, for the Godot scene."""
+    import build_weapons as bw
+    if not hasattr(build_display_guns, "M"):
+        build_display_guns.M = bw.gun_materials()
+    coll = bpy.data.collections.new(f"{room}_display_guns")
+    bpy.context.scene.collection.children.link(coll)
+    placed = []
+    for k, (gun, centre, rot) in enumerate(DISPLAY.get(room, [])):
+        tmp = bpy.data.collections.new(f"{room}_gun{k}")
+        bpy.context.scene.collection.children.link(tmp)
+        bw.GUNS[gun](build_display_guns.M, tmp)
+        for o in list(tmp.objects):
+            if o.type != "MESH":
+                bpy.data.objects.remove(o)
+                continue
+            kit.finalize(o)
+        pts = np.array([tuple(o.matrix_world @ v.co) for o in tmp.objects for v in o.data.vertices])
+        lo, hi = pts.min(0), pts.max(0)
+        c = _C.T @ ((lo + hi) / 2)  # bounding-box centre in the gun frame
+        origin = np.array(centre) - rot @ c
+        mb = Matrix(((_C @ rot @ _C.T).tolist()))
+        m4 = mb.to_4x4()
+        m4.translation = Vector(kit.g2b(*origin))
+        for o in list(tmp.objects):
+            o.matrix_world = m4 @ o.matrix_world
+            tmp.objects.unlink(o)
+            coll.objects.link(o)
+        bpy.data.collections.remove(tmp)
+        placed.append((gun, origin, rot))
+    return placed
+
+
+def write_guns(room, placed):
+    """Writes godot/scenes/sanctuary/guns_<room>.tscn: one instance of
+    godot/models/weapons/wpn_<gun>.gltf per displayed gun."""
+    guns = sorted({g for g, _, _ in placed})
+    out = [f'[gd_scene load_steps={len(guns) + 1} format=3]', '']
+    for k, g in enumerate(guns):
+        out.append(f'[ext_resource type="PackedScene" path="res://models/weapons/wpn_{g}.gltf" id="{k + 1}_{g}"]')
+    out += ['', f'[node name="Guns_{room}" type="Node3D"]']
+    for k, (g, o, r) in enumerate(placed):
+        t = ", ".join(f"{v:.5g}" for v in r.reshape(-1)) + f", {o[0]:.4f}, {o[1]:.4f}, {o[2]:.4f}"
+        out += ['', f'[node name="{g}_{k}" parent="." instance=ExtResource("{guns.index(g) + 1}_{g}")]', f'transform = Transform3D({t})']
+    with open(os.path.join(SCENES, f"guns_{room}.tscn"), "w") as f:
+        f.write("\n".join(out) + "\n")
 
 
 def build_trade_hall(M, P, coll):
@@ -738,8 +777,11 @@ def build_trade_hall(M, P, coll):
             kit.box(f"gun_case{k}_end{s}", M["timber"], coll, (cx + s * (cw / 2 - 0.03), 0.95, cz), (0.06, 0.06, 0.62), bev=0.01)
         kit.box(f"gun_case{k}_bed", M["canvas"], coll, (cx, 0.9, cz), (cw - 0.1, 0.01, 0.52), bev=0)  # the cloth the guns lie on
         kit.plane(f"gun_case{k}_glass", glass, coll, (cx, 0.975, cz), cw - 0.08, 0.54, (0, 0, 0))
-        for j in range(int(cw / 0.42)):
-            pistol(f"gun_case{k}_pistol{j}", M, coll, ca + 0.25 + j * 0.42, 0.915, cz + rng.uniform(-0.1, 0.1), flat=True)
+        # under the glass, lying on their sides on the cloth: revolvers, and Sparrows in the long case
+        lay = ("hammerhead", "hammerhead", "hammerhead", "hammerhead") if k == 0 else ("sparrow", "hammerhead", "sparrow", "hammerhead")
+        step = cw / len(lay)
+        for j, g in enumerate(lay):
+            show_gun(room, g, (ca + step * (j + 0.5), 0.93, cz + (-1) ** j * 0.04), gun_rot(yaw=R90 + (-1) ** j * 0.12, roll=R90))
         kit.box(f"gun_case{k}_kick", M["rust"], coll, (cx, 0.05, cz + 0.31), (cw, 0.1, 0.02), bev=0.004)
     kit.box("gun_case_flap", M["timber"], coll, (7.75, 0.95, cz), (1.0, 0.05, 0.62), rot=(0, 0.0, 0), bev=0.01, grain="long")  # the hinged flap behind it
     kit.box("gun_case_flap_hinge", M["bare"], coll, (7.22, 0.97, cz), (0.04, 0.03, 0.5), bev=0.005)
@@ -750,15 +792,22 @@ def build_trade_hall(M, P, coll):
     kit.box("gun_wall_board", M["plank"], coll, (4.2, 1.75, z0 + 0.12), (7.2, 2.1, 0.04), bev=0.01)
     for k in range(5):
         kit.box(f"gun_wall_rail{k}", M["timber"], coll, (4.2, 0.95 + k * 0.45, z0 + 0.15), (7.2, 0.05, 0.03), bev=0.006, grain="long")
-    for row, y in enumerate((2.45, 1.95, 1.45)):
-        kinds = (("rifle", "shotgun", "marksman"), ("carbine", "rifle", "shotgun"), ("shotgun", "marksman", "carbine"))[row]
-        for j, kind in enumerate(kinds):
-            gx = 0.95 + j * 2.35 + rng.uniform(-0.08, 0.08)
-            long_gun(f"gun_wall{row}_{j}", M, coll, gx, y, z0 + 0.19, kind=kind, scale=1.25)
-            for hx in (0.25, 0.8):  # the hooks it hangs on
-                kit.box(f"gun_wall{row}_{j}_hook{hx}", M["bare"], coll, (gx + hx, y - 0.04, z0 + 0.17), (0.015, 0.05, 0.06), bev=0.002)
-    for j in range(6):
-        pistol(f"gun_wall_pistol{j}", M, coll, 1.2 + j * 1.1, 1.05, z0 + 0.19)
+    wall = (  # rows of the pegboard, top to bottom: the long guns, the rifles, the cheap stuff
+        (2.42, ("heron", "boar", "heron")),
+        (1.9, ("badger", "mule", "badger", "sparrow")),
+        (1.4, ("mule", "boar", "sparrow", "mule")),
+    )
+    for row, (y, guns) in enumerate(wall):
+        step = 7.0 / len(guns)
+        for j, g in enumerate(guns):
+            gx = 0.7 + step * (j + 0.5) + rng.uniform(-0.05, 0.05)
+            # hung muzzle west with the right side facing the shop
+            show_gun(room, g, (gx, y, z0 + 0.185), gun_rot(yaw=-R90))
+            for hx in (-0.28, 0.28):  # the hooks it hangs on
+                kit.box(f"gun_wall{row}_{j}_hook{hx}", M["bare"], coll, (gx + hx, y - 0.07, z0 + 0.17), (0.015, 0.05, 0.07), bev=0.002)
+    for j in range(5):  # revolvers on pegs along the bottom rail
+        show_gun(room, "hammerhead", (1.3 + j * 1.4, 0.98, z0 + 0.17), gun_rot(yaw=-R90))
+        kit.box(f"gun_wall_peg{j}", M["bare"], coll, (1.3 + j * 1.4 + 0.02, 0.94, z0 + 0.17), (0.012, 0.012, 0.07), bev=0.002)
     board("gun_sign", P["sign_trader_0"], coll, (4.2, 3.0, z0 + 0.14), 1.6, 0.52, (R90, 0, 0), timber=M["timber"])
 
     # --- the work bench along the west wall: vise, grinder, a rifle stripped on a cloth ---
@@ -782,8 +831,9 @@ def build_trade_hall(M, P, coll):
     rx = x1 - 0.35
     kit.box("gun_rack_base", M["timber"], coll, (rx, 0.12, -13.9), (0.4, 0.24, 1.3), bev=0.015)
     kit.box("gun_rack_top", M["timber"], coll, (rx, 1.25, -13.9), (0.25, 0.08, 1.3), bev=0.012, grain="long")
-    for j, kind in enumerate(("rifle", "shotgun", "carbine", "marksman")):
-        long_gun(f"gun_rack{j}", M, coll, rx - 0.02, 0.22, -14.4 + j * 0.3, kind=kind, along="z", facing=1, lean=0.0)
+    for j, g in enumerate(("boar", "badger", "heron", "mule")):  # stood muzzle up, butts on the base, trigger side to the room
+        h = {"boar": 1.18, "badger": 0.97, "heron": 1.46, "mule": 0.97}[g]
+        show_gun(room, g, (rx - 0.02, 0.25 + h / 2, -14.4 + j * 0.3), gun_rot(yaw=math.pi, pitch=-R90))
     cab_z = -12.2
     kit.box("gun_cabinet", M["steel_locker"], coll, (x1 - 0.35, 1.0, cab_z), (0.6, 2.0, 1.1), bev=0.025)
     kit.box("gun_cabinet_seam", M["dark"], coll, (x1 - 0.652, 1.0, cab_z), (0.006, 1.9, 0.01), bev=0)
@@ -802,8 +852,8 @@ def build_trade_hall(M, P, coll):
         kit.cylinder(f"gun_rod{k}", M["bare"], coll, (0.84 + k * 0.03, 0.55, -14.4), (0.82 + k * 0.035, 1.35, -14.42), 0.005, segments=6, bev=0)
 
     # --- customer side: a shot-up paper target, a rifle on a plaque, a stool, a spittoon ---
-    kit.box("gun_plaque", M["timber"], coll, (x0 + 0.08, 1.8, -8.6), (0.04, 0.35, 1.3), bev=0.012)
-    long_gun("gun_plaque_rifle", M, coll, x0 + 0.13, 1.8, -9.15, kind="marksman", along="z")
+    kit.box("gun_plaque", M["timber"], coll, (x0 + 0.08, 1.8, -8.6), (0.04, 0.4, 1.7), bev=0.012)
+    show_gun(room, "heron", (x0 + 0.14, 1.8, -8.6), gun_rot())  # Tobias's best, muzzle to the door
     kit.plane("gun_target", P["paper_target"], coll, (x1 - 0.12, 1.45, -8.3), 0.5, 0.65, (R90, 0, -R90))
     kit.box("gun_stool_seat", M["timber"], coll, (2.6, 0.65, -9.6), (0.4, 0.05, 0.4), bev=0.02)
     for s in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
@@ -816,9 +866,10 @@ def build_trade_hall(M, P, coll):
         kit.box(f"gun_wainscot_{side}", M["plank"], coll, (wx, 0.6, -8.9), (0.04, 1.2, 3.6), bev=0.008)
         kit.box(f"gun_wainscot_{side}_cap", M["timber"], coll, (wx, 1.22, -8.9), (0.08, 0.05, 3.7), bev=0.008, grain="long")
     barrel("gun_umbrella", M, coll, 1.0, -7.6, r=0.25, h=0.75, mat="rust")
-    for j in range(5):
-        a = j / 5 * 2 * math.pi
-        long_gun(f"gun_umbrella{j}", M, coll, 1.0 + 0.1 * math.cos(a), 0.15, -7.6 + 0.1 * math.sin(a), kind="shotgun", along="z", lean=0.1)
+    for j, g in enumerate(("boar", "mule", "boar", "mule")):  # second-hand guns stood muzzle up, leaning out
+        a = j / 4 * 2 * math.pi + 0.4
+        h = {"boar": 1.18, "mule": 0.97}[g]
+        show_gun(room, g, (1.0 + 0.1 * math.cos(a), 0.12 + h / 2, -7.6 + 0.1 * math.sin(a)), gun_rot(yaw=-a + R90, pitch=-R90 + 0.12))
     barrel("gun_testdrum", M, coll, 7.9, -7.7, r=0.32, h=0.95, mat="steel")
     rocks("gun_testdrum_sand", M, coll, (7.9, 0.94, -7.7), 4, (0.12, 0.02, 0.12), size=(0.06, 0.1))
     kit.box("gun_wait_bench", M["timber"], coll, (x0 + 0.35, 0.45, -9.0), (0.4, 0.07, 1.8), bev=0.015, grain="long")
@@ -835,7 +886,273 @@ def build_trade_hall(M, P, coll):
     return [((4.0, 1.65, -7.2), (4.2, 1.5, -14.5)), ((7.6, 1.6, -8.0), (1.5, 1.0, -13.5)), ((1.6, 1.5, -10.2), (0.2, 1.0, -13.5))]
 
 
+def shop_shell(name, M, coll, x0, x1, z0, z1, door_x, seed):
+    """A room dug south of the hallway behind a shopfront: hewn walls, the
+    doorway on the north side, timber beams across the roof."""
+    floor_ceiling(name, M, coll, x0, x1, z0, z1, seed=seed)
+    rock_wall(f"{name}_front", M, coll, "x", z0, x0, x1, +1, doors=((door_x, 1.8),), seed=seed + 1)
+    rock_wall(f"{name}_back", M, coll, "x", z1, x0, x1, -1, seed=seed + 2)
+    rock_wall(f"{name}_west", M, coll, "z", x0, z0, z1, +1, seed=seed + 3)
+    rock_wall(f"{name}_east", M, coll, "z", x1, z0, z1, -1, seed=seed + 4)
+    door_portal(f"{name}_door", M, coll, "x", door_x, z0 + 0.1, 0.25)
+    for k, z in enumerate(np.linspace(z0 + 1.2, z1 - 0.6, 3)):  # roof beams across the room
+        kit.box(f"{name}_beam{k}", M["timber"], coll, ((x0 + x1) / 2, H - 0.15, z), (x1 - x0, 0.22, 0.22),
+                rot=(0, 0, rng.uniform(-0.01, 0.01)), bev=0.02, grain="long")
+
+
+def shop_counter(name, M, coll, x0, x1, z, flap_w=0.7):
+    """A trader's counter across the room: plank front, worn timber top, a
+    lifting flap at the east end."""
+    cx, w = (x0 + x1 - flap_w) / 2, x1 - x0 - flap_w
+    kit.box(f"{name}_body", M["plank"], coll, (cx, 0.47, z), (w, 0.94, 0.6), bev=0.015)
+    kit.box(f"{name}_top", M["timber"], coll, (cx, 0.97, z), (w + 0.08, 0.06, 0.7), bev=0.012, grain="long")
+    kit.box(f"{name}_kick", M["rust"], coll, (cx, 0.06, z - 0.31), (w, 0.12, 0.02), bev=0.004)
+    for j in range(int(w / 0.6)):  # the boards' battens
+        kit.box(f"{name}_batten{j}", M["timber"], coll, (x0 + 0.3 + j * 0.6, 0.47, z - 0.31), (0.07, 0.86, 0.03), bev=0.006)
+    kit.box(f"{name}_flap", M["timber"], coll, (x1 - flap_w / 2, 0.97, z), (flap_w - 0.04, 0.05, 0.66), bev=0.01, grain="long")
+    kit.box(f"{name}_flap_hinge", M["bare"], coll, (x1 - flap_w + 0.02, 0.99, z), (0.03, 0.03, 0.5), bev=0.004)
+
+
+def build_clinic(M, P, coll):
+    """Nia's clinic behind the CLINIC shopfront (author: each trader gets a
+    room of their own). A clean room in a dirty place: a counter of bandages
+    and satchels, two cots behind a curtain, the medicine cabinet, shield
+    packs on the wall. No red cross (art bible 5.2)."""
+    room = "clinic"
+    x0, x1, z0, z1 = 15.55, 20.05, -3.45, 2.6
+    dx = OPEN_SHOPS[0]
+    shop_shell("clinic", M, coll, x0, x1, z0, z1, dx, seed=81)
+    bottle, ice, bone = M["bottle"], M["ice"], M["bone"]
+
+    cz = -0.95
+    # behind the counter she keeps a plank floor, scrubbed
+    for k, x in enumerate(np.arange(x0 + 0.15, x1 - 0.1, 0.3)):
+        kit.box(f"clinic_deck{k}", M["plank"], coll, (x, 0.035, (cz + 0.3 + z1) / 2), (0.28, 0.04, z1 - cz - 0.35), bev=0.006, grain="long")
+    shop_counter("clinic_counter", M, coll, x0 + 0.15, x1 - 0.1, cz)
+    # on the counter: rolled bandages, a tray of instruments, her satchel, a jar of swabs, the ledger
+    for k in range(7):
+        kit.cylinder(f"clinic_bandage{k}", bone, coll, (16.0 + (k % 4) * 0.13, 1.0 + (k // 4) * 0.09, cz + 0.12), (16.0 + (k % 4) * 0.13, 1.08 + (k // 4) * 0.09, cz + 0.12), 0.045, segments=12)
+    kit.box("clinic_tray", M["bare"], coll, (17.1, 1.01, cz + 0.05), (0.42, 0.02, 0.28), bev=0.008)
+    for k in range(4):
+        kit.box(f"clinic_tool{k}", M["bare"], coll, (16.97 + k * 0.08, 1.027, cz + 0.05 + rng.uniform(-0.05, 0.05)), (0.012, 0.008, 0.18), rot=(0, 0, rng.uniform(-0.2, 0.2)), bev=0.002)
+    kit.box("clinic_satchel", M["canvas"], coll, (18.0, 1.12, cz - 0.05), (0.4, 0.26, 0.14), rot=(0, 0, 0.2), soft=True, puff=0.35)
+    kit.box("clinic_satchel_patch", bone, coll, (18.0, 1.14, cz - 0.123), (0.12, 0.12, 0.01), rot=(0, 0, 0.2), bev=0.002)
+    kit.box("clinic_satchel_flap", M["canvas"], coll, (18.0, 1.22, cz - 0.06), (0.41, 0.06, 0.16), rot=(0.25, 0, 0.2), soft=True, puff=0.3)
+    kit.cylinder("clinic_jar", ice, coll, (18.55, 1.0, cz + 0.12), (18.55, 1.2, cz + 0.12), 0.06, segments=16)
+    kit.cylinder("clinic_jar_swabs", bone, coll, (18.55, 1.0, cz + 0.12), (18.55, 1.17, cz + 0.12), 0.05, segments=12)
+    kit.box("clinic_ledger", M["blanket"], coll, (16.6, 1.015, cz - 0.15), (0.32, 0.03, 0.24), rot=(0, 0, -0.15), bev=0.008)
+    board("clinic_sign", P["sign_trader_1"], coll, ((x0 + x1) / 2, 2.45, cz - 0.1), 1.5, 0.48, (R90, 0, math.pi), timber=M["timber"])
+    for s_ in (-1, 1):
+        kit.cylinder(f"clinic_sign_chain{s_}", M["dark"], coll, ((x0 + x1) / 2 + s_ * 0.65, 2.7, cz - 0.1), ((x0 + x1) / 2 + s_ * 0.65, H - 0.26, cz - 0.1), 0.008, segments=5, bev=0)
+    work_lamp("clinic_counter_lamp", M, coll, 17.0, 2.15, cz + 0.2, room, watts=180)
+
+    # the cots behind the counter, a curtain on a rail between them
+    for k, cx in enumerate((16.05, 19.55)):
+        cz_ = 1.45
+        kit.box(f"clinic_cot{k}_frame", M["steel_locker"], coll, (cx, 0.45, cz_), (0.78, 0.06, 1.9), bev=0.015)
+        for s1 in (-1, 1):
+            for s2 in (-1, 1):
+                kit.cylinder(f"clinic_cot{k}_leg{s1}{s2}", M["steel_locker"], coll, (cx + s1 * 0.35, 0, cz_ + s2 * 0.9), (cx + s1 * 0.35, 0.45, cz_ + s2 * 0.9), 0.02, segments=8)
+        kit.box(f"clinic_cot{k}_mattress", M["mattress"], coll, (cx, 0.54, cz_), (0.72, 0.12, 1.84), soft=True, puff=0.25)
+        kit.box(f"clinic_cot{k}_blanket", M["blanket"] if k else bone, coll, (cx, 0.61, cz_ - 0.25 if k else cz_ - 0.35), (0.76, 0.04, 1.1), soft=True, puff=0.4)
+        kit.box(f"clinic_cot{k}_pillow", bone, coll, (cx, 0.63, cz_ + 0.72), (0.5, 0.1, 0.3), soft=True, puff=0.5)
+        kit.box(f"clinic_cot{k}_head", M["steel_locker"], coll, (cx, 0.72, cz_ + 0.95), (0.78, 0.55, 0.04), bev=0.012)
+    kit.cylinder("clinic_curtain_rail", M["bare"], coll, (16.75, 2.3, 0.2), (16.75, 2.3, 2.5), 0.012, segments=8)
+    for k in range(4):  # canvas panels hanging in folds, one pulled back
+        z = 0.45 + k * (0.5 if k < 3 else 0.32)
+        kit.box(f"clinic_curtain{k}", bone, coll, (16.75 + (-1) ** k * 0.03, 1.4, z), (0.03, 1.8, 0.5 if k < 3 else 0.3), rot=(0, 0, 0), soft=True, puff=0.25)
+    # an IV stand by the first cot, a bag hung on it
+    kit.cylinder("clinic_iv_pole", M["bare"], coll, (16.6, 0, 1.0), (16.6, 1.95, 1.0), 0.012, segments=8)
+    kit.cylinder("clinic_iv_base", M["dark"], coll, (16.6, 0, 1.0), (16.6, 0.04, 1.0), 0.2, segments=5, bev=0.004)
+    kit.box("clinic_iv_bag", ice, coll, (16.6, 1.75, 1.04), (0.14, 0.22, 0.04), soft=True, puff=0.5)
+    kit.cylinder("clinic_iv_line", M["canvas"], coll, (16.6, 1.62, 1.05), (16.25, 0.7, 1.2), 0.003, segments=4, bev=0)
+    work_lamp("clinic_surgery_lamp", M, coll, 19.55, 1.95, 1.4, room, watts=320)
+
+    # the medicine cabinet on the back wall: glass doors, brown bottles, bandage boxes
+    mx, mz = 17.8, z1 - 0.32
+    kit.box("clinic_cabinet", M["steel_locker"], coll, (mx, 1.0, mz), (1.3, 2.0, 0.42), bev=0.02)
+    glass = glass_material("mat_glass_cabinet_01")
+    for k, y in enumerate((0.55, 1.0, 1.45)):
+        kit.box(f"clinic_shelf{k}", M["dark"], coll, (mx, y, mz - 0.05), (1.2, 0.02, 0.32), bev=0.003)
+        for j in range(8):
+            if rng.random() < 0.2:
+                continue
+            bx = mx - 0.52 + j * 0.15
+            h = rng.uniform(0.12, 0.24)
+            if (j + k) % 3 == 0:
+                kit.box(f"clinic_box{k}_{j}", bone, coll, (bx, y + 0.08, mz - 0.08), (0.12, 0.14, 0.16), bev=0.006)
+            else:
+                kit.cylinder(f"clinic_bottle{k}_{j}", bottle, coll, (bx, y + 0.01, mz - 0.08), (bx, y + 0.01 + h, mz - 0.08), 0.035, segments=10)
+    for s_ in (-1, 1):  # the doors, one a little open
+        kit.plane(f"clinic_cabinet_glass{s_}", glass, coll, (mx + s_ * 0.31, 1.15, mz - 0.215 - (0.08 if s_ > 0 else 0)), 0.58, 1.4, (R90, 0, math.pi + (0.3 if s_ > 0 else 0)))
+    kit.box("clinic_cabinet_lock", M["bare"], coll, (mx, 1.1, mz - 0.225), (0.04, 0.08, 0.02), bev=0.006)
+    light(room, "clinic_cabinet_light", "POINT", (mx, 2.2, mz - 0.6), WARM, 30, coll=coll)
+    # a wash basin and a jug; the steriliser pot on a burner
+    kit.cylinder("clinic_basin_stand", M["dark"], coll, (x1 - 0.35, 0, 0.1), (x1 - 0.35, 0.8, 0.1), 0.025, segments=8)
+    kit.cylinder("clinic_basin", M["bare"], coll, (x1 - 0.35, 0.8, 0.1), (x1 - 0.35, 0.92, 0.1), 0.22, segments=20)
+    kit.cylinder("clinic_jug", M["steel_locker"], coll, (19.3, 0, 0.15), (19.3, 0.32, 0.15), 0.1, segments=12)
+    kit.box("clinic_burner", M["dark"], coll, (x0 + 0.35, 0.75, 0.05), (0.4, 0.06, 0.4), bev=0.008)
+    for s1 in (-1, 1):
+        kit.box(f"clinic_burner_leg{s1}", M["dark"], coll, (x0 + 0.35 + s1 * 0.16, 0.37, 0.05), (0.04, 0.74, 0.36), bev=0.004)
+    kit.cylinder("clinic_steriliser", M["bare"], coll, (x0 + 0.35, 0.78, 0.05), (x0 + 0.35, 1.0, 0.05), 0.15, segments=16)
+    kit.cylinder("clinic_steriliser_lid", M["bare"], coll, (x0 + 0.35, 1.0, 0.05), (x0 + 0.35, 1.03, 0.05), 0.16, segments=16, bev=0.006)
+    kit.cylinder("clinic_flame", M["bulb"], coll, (x0 + 0.35, 0.69, 0.05), (x0 + 0.35, 0.72, 0.05), 0.07, segments=10, bev=0)
+    light(room, "clinic_burner_glow", "POINT", (x0 + 0.35, 0.6, 0.3), (1.0, 0.55, 0.3), 8, coll=coll)
+
+    # customer side: shield packs and cells on a rack, a bench, the house rule, empty jars for refills
+    sx = x0 + 0.1
+    kit.box("clinic_shield_board", M["plank"], coll, (sx, 1.5, -2.35), (0.04, 1.4, 1.6), bev=0.01)
+    for k, (z, y) in enumerate(((-2.85, 1.75), (-2.3, 1.75), (-1.8, 1.75))):  # shield packs: bevelled metal cases, scratched, never glowing
+        kit.box(f"clinic_shield_pack{k}", M["steel_locker"] if k != 1 else M["steel"], coll, (sx + 0.1, y, z), (0.14, 0.42, 0.34), bev=0.03)
+        kit.box(f"clinic_shield_pack{k}_strap", M["canvas"], coll, (sx + 0.18, y, z), (0.02, 0.48, 0.06), bev=0.004)
+        kit.box(f"clinic_shield_pack{k}_hook", M["bare"], coll, (sx + 0.06, y + 0.25, z), (0.08, 0.02, 0.02), bev=0.003)
+    for k in range(6):  # shield cells: hexagons, the one shape kept for shields (art bible 3)
+        z = -2.95 + (k % 3) * 0.3
+        y = 1.02 + (k // 3) * 0.2
+        kit.cylinder(f"clinic_shield_cell{k}", ice, coll, (sx + 0.03, y, z), (sx + 0.12, y, z), 0.075, segments=6, bev=0.006)
+    kit.box("clinic_cell_shelf", M["timber"], coll, (sx + 0.1, 0.9, -2.65), (0.2, 0.04, 1.0), bev=0.006, grain="long")
+    kit.box("clinic_wait_bench", M["timber"], coll, (x1 - 0.3, 0.45, -2.45), (0.38, 0.06, 1.5), bev=0.015, grain="long")
+    for dz_ in (-0.6, 0.6):
+        kit.box(f"clinic_wait_leg{dz_}", M["rust"], coll, (x1 - 0.3, 0.22, -2.45 + dz_), (0.34, 0.44, 0.05), bev=0.005)
+    board("clinic_rules", P["sign_clinic_rules"], coll, (x1 - 0.07, 1.6, -2.45), 0.9, 0.5, (R90, 0, -R90), timber=M["timber"])
+    kit.box("clinic_line", bone, coll, ((x0 + x1) / 2 - 0.35, 0.012, cz - 0.6), (x1 - x0 - 1.0, 0.004, 0.06), bev=0)  # "the line", painted on the floor
+    crate("clinic_jar_crate", M, coll, (x0 + 0.45, 0.2, -1.55), (0.5, 0.4, 0.4), yaw=0.1)
+    for k in range(4):
+        kit.cylinder(f"clinic_empty_jar{k}", ice, coll, (x0 + 0.33 + (k % 2) * 0.22, 0.4, -1.65 + (k // 2) * 0.18), (x0 + 0.33 + (k % 2) * 0.22, 0.55, -1.65 + (k // 2) * 0.18), 0.05, segments=10)
+    light(room, "clinic_entry_light", "POINT", (dx, 2.6, -2.7), WARM, 50, coll=coll)
+    return [((dx, 1.65, -3.2), (dx, 1.1, 2.4)), ((x1 - 0.4, 1.7, -3.0), (16.4, 0.9, 1.2)), ((16.3, 1.6, 0.0), (19.6, 1.0, 1.8))]
+
+
+def build_radio(M, P, coll):
+    """Pell's radio and parts shop behind the RADIO & PARTS shopfront: the
+    buyer. Crates stacked to the roof (art bible), sorting bins, a spring
+    scale over the counter, the radio desk that keeps the Sanctuary talking."""
+    room = "radio"
+    x0, x1, z0, z1 = 25.05, 29.95, -3.45, 2.4
+    dx = OPEN_SHOPS[1]
+    shop_shell("radio", M, coll, x0, x1, z0, z1, dx, seed=91)
+    board_green = M["circuit"]
+    cz = -0.95
+    shop_counter("radio_counter", M, coll, x0 + 0.15, x1 - 0.1, cz)
+
+    # the spring scale hanging over the counter, a pan of wire on it; the ledger and a cash tin
+    sx_ = 26.9
+    kit.cylinder("radio_scale_chain", M["dark"], coll, (sx_, H - 0.26, cz), (sx_, 1.9, cz), 0.008, segments=5, bev=0)
+    kit.cylinder("radio_scale_body", M["bare"], coll, (sx_, 1.62, cz), (sx_, 1.9, cz), 0.04, segments=14)
+    kit.cylinder("radio_scale_dial", M["mattress"], coll, (sx_, 1.76, cz - 0.04), (sx_, 1.76, cz - 0.045), 0.032, segments=16, bev=0)
+    kit.cylinder("radio_scale_hook", M["dark"], coll, (sx_, 1.48, cz), (sx_, 1.62, cz), 0.006, segments=5, bev=0)
+    for k in range(3):
+        a = k * 2 * math.pi / 3
+        kit.cylinder(f"radio_scale_cord{k}", M["dark"], coll, (sx_, 1.48, cz), (sx_ + 0.16 * math.cos(a), 1.2, cz + 0.16 * math.sin(a)), 0.003, segments=4, bev=0)
+    kit.cylinder("radio_scale_pan", M["bare"], coll, (sx_, 1.17, cz), (sx_, 1.2, cz), 0.19, segments=20, bev=0.006)
+    kit.cylinder("radio_scale_load", M["rust"], coll, (sx_, 1.2, cz), (sx_, 1.25, cz), 0.12, segments=10, bev=0.01)
+    kit.box("radio_ledger", M["blanket"], coll, (27.9, 1.015, cz - 0.1), (0.34, 0.04, 0.26), rot=(0, 0, 0.2), bev=0.01)
+    kit.box("radio_ledger_pencil", M["timber"], coll, (28.15, 1.04, cz - 0.05), (0.015, 0.015, 0.16), rot=(0, 0, 0.6), bev=0.003)
+    kit.box("radio_cashtin", M["steel_locker"], coll, (25.7, 1.04, cz), (0.3, 0.1, 0.22), bev=0.01)
+    board("radio_sign", P["sign_trader_2"], coll, ((x0 + x1) / 2, 2.45, cz - 0.1), 1.5, 0.48, (R90, 0, math.pi), timber=M["timber"])
+    for s_ in (-1, 1):
+        kit.cylinder(f"radio_sign_chain{s_}", M["dark"], coll, ((x0 + x1) / 2 + s_ * 0.65, 2.7, cz - 0.1), ((x0 + x1) / 2 + s_ * 0.65, H - 0.26, cz - 0.1), 0.008, segments=5, bev=0)
+    work_lamp("radio_counter_lamp", M, coll, 26.1, 2.1, cz + 0.15, room, watts=180)
+
+    # the back wall: steel shelving to the roof, radios, parts drawers, wire spools, crates
+    for k, x in enumerate((25.75, 27.1, 28.45)):
+        sx = x + 0.6
+        for s_ in (-1, 1):
+            kit.box(f"radio_shelf{k}_post{s_}", M["steel"], coll, (x + s_ * 0.62, 1.4, z1 - 0.35), (0.04, 2.8, 0.04), bev=0.004)
+        for j, y in enumerate((0.3, 0.95, 1.6, 2.25)):
+            kit.box(f"radio_shelf{k}_{j}", M["steel"], coll, (x, y, z1 - 0.35), (1.3, 0.03, 0.5), bev=0.004)
+            for i in range(3):
+                bx = x - 0.4 + i * 0.4
+                pick = (k * 4 + j * 3 + i) % 5
+                if pick == 0:  # a radio: a case, a speaker grille, a dial
+                    kit.box(f"radio_set{k}_{j}_{i}", M["steel_locker"] if i % 2 else M["timber"], coll, (bx, y + 0.13, z1 - 0.4), (0.34, 0.22, 0.24), bev=0.012)
+                    kit.box(f"radio_set{k}_{j}_{i}_grille", M["dark"], coll, (bx - 0.06, y + 0.13, z1 - 0.525), (0.15, 0.15, 0.01), bev=0.002)
+                    kit.cylinder(f"radio_set{k}_{j}_{i}_dial", M["mattress"], coll, (bx + 0.1, y + 0.14, z1 - 0.52), (bx + 0.1, y + 0.14, z1 - 0.53), 0.035, segments=12, bev=0)
+                elif pick == 1:  # a parts drawer cabinet
+                    kit.box(f"radio_drawers{k}_{j}_{i}", M["steel_locker"], coll, (bx, y + 0.15, z1 - 0.4), (0.34, 0.27, 0.3), bev=0.008)
+                    for d in range(6):
+                        kit.box(f"radio_drawer{k}_{j}_{i}_{d}", M["dark"], coll, (bx - 0.1 + (d % 3) * 0.1, y + 0.08 + (d // 3) * 0.12, z1 - 0.552), (0.08, 0.09, 0.01), bev=0.002)
+                elif pick == 2:  # a spool of wire
+                    kit.cylinder(f"radio_spool{k}_{j}_{i}", M["rust"], coll, (bx - 0.09, y + 0.13, z1 - 0.4), (bx + 0.09, y + 0.13, z1 - 0.4), 0.12, segments=16)
+                    kit.cylinder(f"radio_spool{k}_{j}_{i}_core", M["timber"], coll, (bx - 0.11, y + 0.13, z1 - 0.4), (bx + 0.11, y + 0.13, z1 - 0.4), 0.13, segments=16, bev=0.004)
+                elif pick == 3:  # a stack of circuit boards
+                    for b in range(3):
+                        kit.box(f"radio_boards{k}_{j}_{i}_{b}", board_green, coll, (bx, y + 0.03 + b * 0.025, z1 - 0.4), (0.3, 0.012, 0.22), rot=(0, rng.uniform(-0.2, 0.2), 0), bev=0.002)
+                else:  # a crate
+                    crate(f"radio_crate{k}_{j}_{i}", M, coll, (bx, y + 0.15, z1 - 0.4), (0.34, 0.28, 0.34), yaw=rng.uniform(-0.1, 0.1))
+    # the radio desk on the east side behind the counter: sets stacked up, dials lit, an aerial lead up through the roof
+    rx = x1 - 0.4
+    kit.box("radio_desk", M["timber"], coll, (rx, 0.78, 0.35), (0.7, 0.06, 1.5), bev=0.012, grain="long")
+    for dz_ in (-0.65, 0.65):
+        kit.box(f"radio_desk_leg{dz_}", M["rust"], coll, (rx, 0.38, 0.35 + dz_), (0.6, 0.76, 0.05), bev=0.005)
+    for k, (y, w) in enumerate(((0.95, 1.2), (1.21, 1.0), (1.43, 0.7))):
+        kit.box(f"radio_desk_set{k}", M["dark"] if k != 1 else M["steel_locker"], coll, (rx + 0.1, y, 0.35), (0.42, 0.26 if k < 2 else 0.18, w), bev=0.012)
+        for j in range(int(w / 0.18)):
+            kit.box(f"radio_desk_set{k}_lamp{j}", M["bulb"], coll, (rx - 0.115, y + 0.05, 0.35 - w / 2 + 0.12 + j * 0.18), (0.01, 0.025, 0.035), bev=0)
+            kit.cylinder(f"radio_desk_set{k}_knob{j}", M["bare"], coll, (rx - 0.11, y - 0.05, 0.35 - w / 2 + 0.12 + j * 0.18), (rx - 0.13, y - 0.05, 0.35 - w / 2 + 0.12 + j * 0.18), 0.018, segments=10, bev=0)
+    kit.box("radio_headphones", M["dark"], coll, (rx - 0.25, 0.84, 0.75), (0.18, 0.05, 0.2), rot=(0, 0, 0.4), soft=True, puff=0.4)
+    kit.cylinder("radio_mic", M["bare"], coll, (rx - 0.2, 0.81, 0.0), (rx - 0.22, 1.0, -0.02), 0.012, segments=8)
+    kit.cylinder("radio_mic_head", M["dark"], coll, (rx - 0.22, 1.0, -0.02), (rx - 0.24, 1.06, -0.03), 0.028, segments=12)
+    kit.cylinder("radio_aerial_lead", M["dark"], coll, (rx + 0.25, 1.55, 0.35), (rx + 0.25, H, 0.35), 0.012, segments=6)
+    kit.box("radio_stool", M["timber"], coll, (rx - 0.6, 0.55, 0.35), (0.36, 0.05, 0.36), bev=0.02)
+    for s1 in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+        kit.box(f"radio_stool_leg{s1}", M["rust"], coll, (rx - 0.6 + s1[0] * 0.14, 0.27, 0.35 + s1[1] * 0.14), (0.03, 0.54, 0.03), bev=0.004)
+    light(room, "radio_desk_glow", "POINT", (rx - 0.4, 1.2, 0.35), (1.0, 0.62, 0.32), 20, coll=coll)
+    work_lamp("radio_back_lamp", M, coll, 27.0, 2.2, 1.4, room, watts=150)
+
+    # customer side: sorting bins with painted labels, crates stacked to the roof, a stack of tyres, coils on the wall
+    for k, bx in enumerate((25.45, 26.12)):  # against the front wall, either side clear of the door
+        kit.box(f"radio_bin{k}", M["rust"], coll, (bx, 0.35, -3.05), (0.62, 0.7, 0.6), bev=0.02)
+        board(f"radio_bin{k}_label", P[f"sign_bin_{k}"], coll, (bx, 0.55, -2.74), 0.5, 0.18, (R90, 0, 0), thick=0.02)
+    rocks("radio_bin0_scrap", M, coll, (25.45, 0.62, -3.05), 4, (0.2, 0.04, 0.18), size=(0.06, 0.1))
+    for k in range(4):
+        kit.cylinder(f"radio_bin1_coil{k}", M["rust"], coll, (25.97 + k * 0.1, 0.66, -3.08), (25.97 + k * 0.1, 0.7, -3.08), 0.1, segments=12, bev=0)
+    for k in range(4):  # the RUBBER bin: tyres stacked
+        bm = bmesh.new()
+        bmesh.ops.create_cone(bm, cap_ends=False, segments=20, radius1=0.3, radius2=0.3, depth=0.16)
+        bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=0.12)
+        kit.mesh_obj(f"radio_tyre{k}", bm, M["dark"], coll, kit.g2b(28.75 + rng.uniform(-0.03, 0.03), 0.08 + k * 0.17, -3.0), (0, 0, rng.uniform(0, 3)))["uv"] = "box"
+    board("radio_bin2_label", P["sign_bin_2"], coll, (28.75, 0.95, -2.66), 0.5, 0.18, (R90, 0, 0), thick=0.02)
+    for k in range(4):  # crates up the west wall, nearly to the roof
+        crate(f"radio_stack{k}", M, coll, (x0 + 0.4 + rng.uniform(-0.03, 0.03), 0.34 + k * 0.69, -2.0), yaw=rng.uniform(-0.08, 0.08))
+    board("radio_we_buy", P["sign_we_buy"], coll, (x1 - 0.07, 1.65, -2.4), 1.1, 0.6, (R90, 0, -R90), timber=M["timber"])
+    for k in range(3):  # coils of cable hung on pegs by the sign
+        bm = bmesh.new()
+        bmesh.ops.create_cone(bm, cap_ends=False, segments=16, radius1=0.16, radius2=0.16, depth=0.05)
+        bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=0.03)
+        kit.mesh_obj(f"radio_cable_coil{k}", bm, M["dark"] if k % 2 else M["rust"], coll, kit.g2b(x1 - 0.1, 1.1 + k * 0.02, -3.0 + k * 0.38), (0, R90, 0))["uv"] = "box"
+    light(room, "radio_entry_light", "POINT", (dx, 2.6, -2.6), WARM, 50, coll=coll)
+    return [((dx, 1.65, -3.2), (dx, 1.1, 2.2)), ((25.4, 1.7, -3.1), (29.2, 1.0, 0.8)), ((29.5, 1.6, -2.0), (25.8, 1.2, 1.6))]
+
+
+def tool_board(name, M, coll, pos, w, facing_rot, seed):
+    """A pegboard over a bench with its tools hung on it: hammers, spanners,
+    files, a saw. pos is the board's centre; facing_rot as for board()."""
+    x, y, z = pos
+    rz = facing_rot[2]
+    along_x = abs(rz) < 0.01 or abs(abs(rz) - math.pi) < 0.01
+    kit.box(f"{name}_board", M["plank"], coll, pos, (w, 0.7, 0.03) if along_x else (0.03, 0.7, w), bev=0.008)
+    r = np.random.default_rng(seed)
+    n = int(w / 0.16)
+    off = 0.03 if abs(rz) < 0.01 else -0.03 if abs(abs(rz) - math.pi) < 0.01 else (0.03 if rz > 0 else -0.03)
+    for k in range(n):
+        t = -w / 2 + 0.1 + k * (w - 0.2) / max(1, n - 1)
+        kind = r.integers(0, 4)
+        size = ((0.03, 0.26, 0.012), (0.025, 0.2, 0.01), (0.015, 0.24, 0.008), (0.1, 0.3, 0.006))[kind]
+        mat = (M["timber"], M["bare"], M["dark"], M["bare"])[kind]
+        px, pz = (x + t, z + off) if along_x else (x + off, z + t)
+        sz = size if along_x else (size[2], size[1], size[0])
+        kit.box(f"{name}_tool{k}", mat, coll, (px, y + r.uniform(-0.1, 0.1), pz), sz, rot=(0, 0, r.uniform(-0.15, 0.15)), bev=0.003)
+        if kind == 0:  # a hammer head
+            hx, hz = (px, pz) if along_x else (px, pz)
+            kit.box(f"{name}_tool{k}_head", M["dark"], coll, (hx, y + 0.14, hz), (0.1, 0.035, 0.03) if along_x else (0.03, 0.035, 0.1), bev=0.006)
+
+
 def build_workshop(M, P, coll):
+    """The Workshop: seven benches, each with its own tools and its work in
+    progress; the salvage bench among broken gear; a chain hoist with an
+    engine on it down the middle (art bible: dense, but clear in front of
+    each bench)."""
     room = "workshop"
     x0, x1, z0, z1 = 9.13, 18.87, -15, -6.85
     floor_ceiling("work", M, coll, x0, x1, z0, z1, seed=51)
@@ -843,38 +1160,141 @@ def build_workshop(M, P, coll):
     rock_wall("work_east", M, coll, "z", x1, z0, z1, -1, seed=53)
     rock_wall("work_back", M, coll, "x", z0, x0, x1, +1, seed=54)
     rock_wall("work_front", M, coll, "x", z1, x0, x1, -1, doors=((14, 1.8),), seed=55)
-    # overhead beams, a steel rail and a chain hoist
+    door_portal("work_door", M, coll, "x", 14, z1 - 0.1, 0.25)
+    for k, z in enumerate((-8.0, -12.5)):  # old steel arch ribs, as in the Trade Hall
+        pts = [(14 + 4.7 * math.cos(a), -1.25 + 4.65 * math.sin(a), z) for a in np.linspace(0.12, math.pi - 0.12, 25)]
+        for j in range(len(pts) - 1):
+            kit.cylinder(f"work_rib{k}_{j}", M["dark"], coll, pts[j], pts[j + 1], 0.06, segments=8, bev=0)
+    # overhead beams, a steel rail and a chain hoist with an engine block on its hook
     for k, x in enumerate((11.6, 14, 16.4)):
         kit.box(f"work_beam{k}", M["timber"], coll, (x, H - 0.14, -10.9), (0.22, 0.24, 8.2), bev=0.025, grain="long")
     kit.box("work_rail", M["dark"], coll, (14, H - 0.42, -10.9), (0.12, 0.14, 8.2), bev=0.01)
-    for i in range(10):
-        kit.cylinder(f"work_chain{i}", M["dark"], coll, (14, H - 0.5 - i * 0.07, -10.8), (14, H - 0.56 - i * 0.07, -10.8), 0.012, segments=6, bev=0)
-    kit.box("work_hook", M["bare"], coll, (14, H - 1.25, -10.8), (0.06, 0.16, 0.04), bev=0.01)
-    barrel("work_drum", M, coll, 12.6, -7.25, r=0.3, h=0.9, mat="steel_locker")
-    work_lamp("work_lamp", M, coll, 14, H - 0.8, -10.8, room, watts=380)
-    # the seven benches: top, frame, a vise, a toolbox, a board saying what it's for
+    kit.box("work_trolley", M["rust"], coll, (14, H - 0.55, -10.8), (0.24, 0.14, 0.3), bev=0.015)
+    for i in range(12):
+        kit.cylinder(f"work_chain{i}", M["dark"], coll, (14, H - 0.6 - i * 0.07, -10.8), (14, H - 0.66 - i * 0.07, -10.8), 0.012, segments=6, bev=0)
+    kit.box("work_hook", M["bare"], coll, (14, H - 1.5, -10.8), (0.06, 0.16, 0.04), bev=0.01)
+    ey = 1.25
+    kit.box("work_engine", M["rust"], coll, (14, ey, -10.8), (0.62, 0.48, 0.42), bev=0.04)
+    kit.box("work_engine_head", M["dark"], coll, (14, ey + 0.3, -10.8), (0.56, 0.14, 0.32), bev=0.02)
+    for k in range(4):
+        kit.cylinder(f"work_engine_stud{k}", M["bare"], coll, (13.79 + k * 0.14, ey + 0.37, -10.8), (13.79 + k * 0.14, ey + 0.41, -10.8), 0.02, segments=6, bev=0)
+    for s_ in (-1, 1):
+        kit.cylinder(f"work_engine_sling{s_}", M["dark"], coll, (14, H - 1.58, -10.8), (14 + s_ * 0.25, ey + 0.38, -10.8), 0.008, segments=5, bev=0)
+    kit.box("work_engine_stand", M["timber"], coll, (14, 0.45, -10.8), (0.8, 0.12, 0.5), bev=0.015)  # the trestle it will come down onto
+    for s_ in (-1, 1):
+        kit.box(f"work_engine_trestle{s_}", M["timber"], coll, (14 + s_ * 0.32, 0.2, -10.8), (0.08, 0.4, 0.45), bev=0.01)
+    work_lamp("work_lamp", M, coll, 14, H - 0.8, -9.6, room, watts=380)
+
+    # the seven benches: top, legs, a shelf under, a pegboard of tools over the wall ones, the board saying what it is for
     spots = ((11, -14.3, 0), (14, -14.3, 0), (17, -14.3, 0), (9.85, -11.0, R90), (18.15, -11.0, -R90), (18.15, -8.4, -R90), (9.85, -8.4, R90))
     for i, (x, z, r) in enumerate(spots):
         along = r == 0
         w, d = (2.2, 0.9) if along else (0.9, 2.2)
-        kit.box(f"bench{i}_top", M["timber"], coll, (x, 0.87, z), (w, 0.08, d), bev=0.015, grain="long")
-        kit.box(f"bench{i}_frame", M["steel"], coll, (x, 0.42, z), (w * 0.92, 0.82, d * 0.9), bev=0.02)
-        vx, vz = (x - 0.6, z) if along else (x, z - 0.6)
-        kit.box(f"bench{i}_vise", M["dark"], coll, (vx, 1.0, vz), (0.22, 0.18, 0.2), bev=0.015)
-        tx, tz = (x + 0.55, z) if along else (x, z + 0.55)
+        kit.box(f"bench{i}_top", M["timber"], coll, (x, 0.88, z), (w, 0.07, d), bev=0.015, grain="long")
+        kit.box(f"bench{i}_shelf", M["plank"], coll, (x, 0.2, z), (w - 0.12, 0.04, d - 0.12), bev=0.008)
+        for s1 in (-1, 1):
+            for s2 in (-1, 1):
+                lx_, lz_ = (x + s1 * (w / 2 - 0.08), z + s2 * (d / 2 - 0.08))
+                kit.box(f"bench{i}_leg{s1}{s2}", M["steel"], coll, (lx_, 0.42, lz_), (0.06, 0.84, 0.06), bev=0.006)
+        vx, vz = (x - 0.75, z + 0.25) if along else (x + (0.25 if r > 0 else -0.25), z - 0.75)
+        kit.box(f"bench{i}_vise", M["dark"], coll, (vx, 1.0, vz), (0.2, 0.17, 0.18), bev=0.015)
+        kit.cylinder(f"bench{i}_vise_bar", M["bare"], coll, (vx - 0.13, 1.0, vz) if along else (vx, 1.0, vz - 0.13), (vx + 0.13, 1.0, vz) if along else (vx, 1.0, vz + 0.13), 0.008, segments=6, bev=0)
+        tx, tz = (x + 0.75, z - 0.2) if along else (x - (0.2 if r > 0 else -0.2), z + 0.75)
         kit.box(f"bench{i}_toolbox", M["blanket"] if i >= 5 else M["steel_locker"], coll, (tx, 0.99, tz), (0.36, 0.16, 0.2), rot=(0, 0, rng.uniform(-0.3, 0.3)), bev=0.012)
         if along:
-            board(f"bench{i}_sign", P[f"sign_bench_{i}"], coll, (x, 1.8, z - 0.4), 1.3, 0.4, (R90, 0, 0), timber=M["timber"])
+            board(f"bench{i}_sign", P[f"sign_bench_{i}"], coll, (x, 2.05, z - 0.4), 1.3, 0.4, (R90, 0, 0), timber=M["timber"])
+            tool_board(f"bench{i}_tools", M, coll, (x, 1.45, z - 0.42), 2.0, (R90, 0, 0), seed=60 + i)
         else:
             bx = x - 0.4 if r > 0 else x + 0.4
-            board(f"bench{i}_sign", P[f"sign_bench_{i}"], coll, (bx, 1.8, z), 1.3, 0.4, (R90, 0, r), timber=M["timber"])
+            board(f"bench{i}_sign", P[f"sign_bench_{i}"], coll, (bx, 2.05, z), 1.3, 0.4, (R90, 0, r), timber=M["timber"])
+            tool_board(f"bench{i}_tools", M, coll, (bx - (0.02 if r > 0 else -0.02), 1.45, z), 2.0, (R90, 0, r), seed=60 + i)
         lx, lz = (x, z + 0.1) if along else (x + (0.2 if r > 0 else -0.2), z)
         light(room, f"bench{i}_light", "POINT", (lx, 2.2, lz), WARM, 45, coll=coll)
-    # the salvage bench sits among heaps of broken gear
-    rocks("work_scrap", M, coll, (18.3, 0.0, -9.6), 6, (0.3, 0.1, 0.4))
+
+    # the work on each bench
+    y = 0.915
+    # 0 WEAPONS: a Mule in the vise, being cleaned; rods and a rag
+    show_gun(room, "mule", (11.1, y + 0.13, -14.1), gun_rot(yaw=-R90, roll=R90))
+    for k in range(3):
+        kit.cylinder(f"bench0_rod{k}", M["bare"], coll, (10.3 + k * 0.03, y + 0.01, -14.5), (11.0 + k * 0.03, y + 0.01, -14.55), 0.004, segments=5, bev=0)
+    kit.box("bench0_rag", M["canvas"], coll, (11.7, y + 0.015, -14.05), (0.25, 0.02, 0.2), rot=(0, 0, 0.4), soft=True, puff=0.4)
+    # 1 AMMO: a reloading press, bowls of brass, ammo cans under
+    kit.box("bench1_press_base", M["dark"], coll, (13.6, y + 0.03, -14.35), (0.2, 0.06, 0.2), bev=0.01)
+    kit.cylinder("bench1_press_post", M["bare"], coll, (13.6, y + 0.06, -14.45), (13.6, y + 0.45, -14.45), 0.025, segments=10)
+    kit.box("bench1_press_head", M["dark"], coll, (13.6, y + 0.45, -14.38), (0.12, 0.1, 0.18), bev=0.01)
+    kit.cylinder("bench1_press_handle", M["bare"], coll, (13.66, y + 0.45, -14.3), (13.9, y + 0.62, -14.1), 0.01, segments=6)
+    for k in range(3):
+        kit.cylinder(f"bench1_bowl{k}", M["steel_locker"], coll, (14.1 + k * 0.22, y, -14.15), (14.1 + k * 0.22, y + 0.06, -14.15), 0.09, segments=14)
+        kit.cylinder(f"bench1_brass{k}", M["hazard"], coll, (14.1 + k * 0.22, y + 0.04, -14.15), (14.1 + k * 0.22, y + 0.065, -14.15), 0.075, segments=10, bev=0.01)
+    for k in range(3):
+        ammo_can(f"bench1_can{k}", M, coll, 13.3 + k * 0.36, 0.22, -14.3)
+    # 2 SHIELDS: a shield pack open on the bench, its hex cells laid out
+    kit.box("bench2_pack", M["steel_locker"], coll, (16.6, y + 0.06, -14.25), (0.36, 0.12, 0.44), bev=0.03)
+    kit.box("bench2_pack_lid", M["steel_locker"], coll, (16.6, y + 0.24, -14.5), (0.36, 0.3, 0.03), rot=(-0.25, 0, 0), bev=0.012)
     for k in range(5):
-        kit.box(f"work_scrap_plate{k}", M["steel"], coll, (18.2 + rng.uniform(-0.2, 0.2), 0.08 + k * 0.05, -9.7 + rng.uniform(-0.3, 0.3)), (0.5, 0.03, 0.35), rot=(rng.uniform(-0.3, 0.3), rng.uniform(-1, 1), rng.uniform(-0.3, 0.3)), bev=0.005)
-    return [((14, 1.7, -7.4), (14, 1.2, -14.0)), ((10.0, 1.8, -7.6), (17.0, 1.0, -13.0))]
+        kit.cylinder(f"bench2_cell{k}", M["ice"], coll, (17.0 + (k % 3) * 0.17, y, -14.2 + (k // 3) * 0.17), (17.0 + (k % 3) * 0.17, y + 0.05, -14.2 + (k // 3) * 0.17), 0.07, segments=6, bev=0.006)
+    kit.cylinder("bench2_meter_lead", M["dark"], coll, (16.75, y + 0.1, -14.2), (17.3, y + 0.02, -14.1), 0.004, segments=4, bev=0)
+    kit.box("bench2_meter", M["dark"], coll, (17.4, y + 0.05, -14.45), (0.16, 0.1, 0.12), bev=0.01)
+    # 3 MEDICAL (west wall): jars, bottles, rolled bandages, a pestle
+    for k in range(5):
+        kit.cylinder(f"bench3_bottle{k}", M["bottle"], coll, (9.75, y, -11.6 + k * 0.12), (9.75, y + rng.uniform(0.12, 0.22), -11.6 + k * 0.12), 0.035, segments=10)
+    for k in range(4):
+        kit.cylinder(f"bench3_bandage{k}", M["bone"], coll, (10.05, y, -11.0 + k * 0.11), (10.05, y + 0.08, -11.0 + k * 0.11), 0.045, segments=12)
+    kit.cylinder("bench3_mortar", M["rock"], coll, (10.0, y, -10.45), (10.0, y + 0.09, -10.45), 0.07, segments=14)
+    kit.cylinder("bench3_pestle", M["rock"], coll, (10.0, y + 0.05, -10.45), (10.07, y + 0.18, -10.4), 0.015, segments=8)
+    # 4 EXPLOSIVES (east wall): a sandbag wall in front, canisters, a coil of fuse, a careful note
+    for k in range(3):
+        kit.box(f"bench4_sandbag{k}", M["canvas"], coll, (17.55, 0.12 + (k // 2) * 0.2, -11.6 + (k % 2) * 0.5 + (k // 2) * 0.25), (0.3, 0.2, 0.5), rot=(0, rng.uniform(-0.1, 0.1), 0), soft=True, puff=0.5)
+    for k in range(4):
+        kit.cylinder(f"bench4_canister{k}", M["steel_locker"], coll, (18.1, y, -11.5 + k * 0.14), (18.1, y + 0.16, -11.5 + k * 0.14), 0.05, segments=12)
+        kit.cylinder(f"bench4_canister{k}_cap", M["dark"], coll, (18.1, y + 0.16, -11.5 + k * 0.14), (18.1, y + 0.18, -11.5 + k * 0.14), 0.03, segments=8, bev=0)
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=False, segments=16, radius1=0.09, radius2=0.09, depth=0.03)
+    bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=0.03)
+    kit.mesh_obj("bench4_fuse", bm, M["canvas"], coll, kit.g2b(18.2, y + 0.02, -10.6))["uv"] = "box"
+    # 5 REPAIR (east wall): a welding cart with two gas bottles, a mask, a grinder
+    kit.box("bench5_cart", M["rust"], coll, (17.45, 0.35, -9.1), (0.5, 0.06, 0.4), bev=0.01)
+    for k, zz in enumerate((-9.2, -9.0)):
+        kit.cylinder(f"bench5_bottle{k}", M["steel_locker"] if k else M["dark"], coll, (17.45, 0.38, zz), (17.45, 1.35, zz), 0.09, segments=16)
+        kit.cylinder(f"bench5_bottle{k}_valve", M["bare"], coll, (17.45, 1.35, zz), (17.45, 1.43, zz), 0.03, segments=8)
+    for s_ in (-1, 1):
+        kit.cylinder(f"bench5_wheel{s_}", M["dark"], coll, (17.45 + s_ * 0.25, 0.12, -9.1), (17.45 + s_ * 0.29, 0.12, -9.1), 0.12, segments=14)
+    kit.cylinder("bench5_hose", M["dark"], coll, (17.45, 1.4, -9.05), (18.0, y + 0.02, -8.6), 0.008, segments=5, bev=0)
+    kit.box("bench5_mask", M["dark"], coll, (18.05, y + 0.08, -8.0), (0.18, 0.15, 0.22), rot=(0, 0, 0.3), bev=0.03)
+    kit.box("bench5_mask_glass", M["glass"], coll, (17.96, y + 0.1, -8.0), (0.01, 0.05, 0.12), rot=(0, 0, 0.3), bev=0.004)
+    kit.cylinder("bench5_grinder", M["steel_locker"], coll, (18.1, y + 0.05, -8.9), (18.1, y + 0.05, -8.6), 0.05, segments=12)
+    kit.cylinder("bench5_grinder_disc", M["dark"], coll, (18.0, y + 0.05, -8.94), (18.2, y + 0.05, -8.94), 0.06, segments=16, bev=0)
+    # 6 SALVAGE (west wall): broken radios, a husk plate, heaps of gear around it
+    for k in range(2):
+        kit.box(f"bench6_radio{k}", M["steel_locker"], coll, (9.9, y + 0.12, -8.9 + k * 0.5), (0.3, 0.22, 0.34), rot=(0, 0, rng.uniform(-0.2, 0.2)), bev=0.012)
+    kit.box("bench6_radio_open", M["circuit"], coll, (9.95, y + 0.01, -7.9), (0.28, 0.012, 0.22), rot=(0, 0, 0.15), bev=0.002)
+    rocks("work_scrap", M, coll, (10.3, 0.0, -7.6), 6, (0.3, 0.1, 0.4))
+    for k in range(6):
+        kit.box(f"work_scrap_plate{k}", M["steel"] if k % 2 else M["rust"], coll, (10.1 + rng.uniform(-0.25, 0.25), 0.08 + k * 0.05, -7.65 + rng.uniform(-0.3, 0.3)), (0.5, 0.03, 0.35), rot=(rng.uniform(-0.3, 0.3), rng.uniform(-1, 1), rng.uniform(-0.3, 0.3)), bev=0.005)
+    for k in range(2):  # tyres and a broken wheel in the heap
+        bm = bmesh.new()
+        bmesh.ops.create_cone(bm, cap_ends=False, segments=20, radius1=0.28, radius2=0.28, depth=0.15)
+        bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=0.11)
+        kit.mesh_obj(f"work_scrap_tyre{k}", bm, M["dark"], coll, kit.g2b(10.6 + k * 0.2, 0.08 + k * 0.15, -7.4 - k * 0.2), (rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), 0))["uv"] = "box"
+
+    # the middle: a rolling tool chest, the drum of oily rags, a parts rack by the door
+    kit.box("work_chest", M["steel_locker"], coll, (12.4, 0.55, -12.4), (0.75, 1.0, 0.5), bev=0.02)
+    for k in range(5):
+        kit.box(f"work_chest_drawer{k}", M["dark"], coll, (12.4, 0.25 + k * 0.17, -12.14), (0.68, 0.13, 0.01), bev=0.004)
+        kit.box(f"work_chest_pull{k}", M["bare"], coll, (12.4, 0.27 + k * 0.17, -12.13), (0.3, 0.015, 0.02), bev=0.003)
+    for s1 in (-1, 1):
+        for s2 in (-1, 1):
+            kit.cylinder(f"work_chest_castor{s1}{s2}", M["dark"], coll, (12.4 + s1 * 0.32 - 0.02, 0.04, -12.4 + s2 * 0.2), (12.4 + s1 * 0.32 + 0.02, 0.04, -12.4 + s2 * 0.2), 0.04, segments=10)
+    barrel("work_drum", M, coll, 12.6, -7.35, r=0.3, h=0.9, mat="steel_locker")
+    kit.box("work_drum_rags", M["blanket"], coll, (12.6, 0.93, -7.35), (0.4, 0.1, 0.4), soft=True, puff=0.5)
+    for k in range(3):
+        kit.box(f"work_rack_shelf{k}", M["steel"], coll, (15.6, 0.35 + k * 0.55, -7.2), (1.2, 0.03, 0.4), bev=0.004)
+        for j in range(3):
+            crate(f"work_rack{k}_{j}", M, coll, (15.2 + j * 0.4, 0.5 + k * 0.55, -7.2), (0.34, 0.26, 0.34), yaw=rng.uniform(-0.1, 0.1))
+    for s1 in (-1, 1):
+        for s2 in (-1, 1):
+            kit.box(f"work_rack_post{s1}{s2}", M["steel"], coll, (15.6 + s1 * 0.58, 0.85, -7.2 + s2 * 0.18), (0.03, 1.7, 0.03), bev=0.003)
+    return [((14, 1.7, -7.4), (14, 1.2, -14.0)), ((10.0, 1.8, -7.6), (17.0, 1.0, -13.0)), ((17.6, 1.7, -7.6), (11.5, 1.0, -13.5))]
 
 
 def build_checkout(M, P, coll):
@@ -907,7 +1327,51 @@ def build_checkout(M, P, coll):
     for i in range(18):
         kit.box(f"check_rack_led{i}", M["bulb"], coll, (27.89, 0.4 + (i % 9) * 0.18, -10.5 + (i // 9) * 0.55), (0.01, 0.025, 0.04), bev=0)
     work_lamp("check_lamp", M, coll, 23.75, H - 0.8, -10.8, room, watts=320)
-    return [((23.75, 1.7, -7.4), (23.75, 1.3, -14.0)), ((27.0, 1.7, -8.0), (19.5, 1.5, -11.5))]
+    door_portal("check_door", M, coll, "x", 23.75, z1 - 0.1, 0.25)
+
+    # a queue to the desk: posts and a sagging rope
+    for k, (x, z) in enumerate(((22.2, -9.0), (22.2, -11.2), (25.3, -9.0), (25.3, -11.2))):
+        kit.cylinder(f"check_post{k}", M["bare"], coll, (x, 0, z), (x, 0.95, z), 0.025, segments=10)
+        kit.cylinder(f"check_post{k}_foot", M["dark"], coll, (x, 0, z), (x, 0.04, z), 0.14, segments=14, bev=0.006)
+    for k, (a_, b_) in enumerate((((22.2, -9.0), (22.2, -11.2)), ((25.3, -9.0), (25.3, -11.2)))):
+        pts = [(a_[0], 0.92 - 0.12 * math.sin(t * math.pi), a_[1] + (b_[1] - a_[1]) * t) for t in np.linspace(0, 1, 7)]
+        for j in range(6):
+            kit.cylinder(f"check_rope{k}_{j}", M["canvas"], coll, pts[j], pts[j + 1], 0.012, segments=6, bev=0)
+    # gear lockers down the east wall, south of the radio rack; one hangs open with a jacket inside
+    for k in range(5):
+        lz = -14.55 + k * 0.52
+        kit.box(f"check_locker{k}", M["steel_locker"], coll, (28.2, 0.95, lz), (0.5, 1.9, 0.5), bev=0.015)
+        for v in range(3):
+            kit.box(f"check_locker{k}_vent{v}", M["dark"], coll, (27.945, 1.65 + v * 0.05, lz), (0.01, 0.015, 0.3), bev=0)
+        kit.box(f"check_locker{k}_handle", M["bare"], coll, (27.94, 1.0, lz + 0.18), (0.02, 0.12, 0.02), bev=0.004)
+        if k == 2:
+            kit.box(f"check_locker{k}_door", M["steel_locker"], coll, (27.75, 0.95, lz - 0.36), (0.02, 1.86, 0.48), rot=(0, 0, -0.9), bev=0.008)
+            kit.box(f"check_locker{k}_jacket", M["blanket"], coll, (28.1, 1.25, lz), (0.12, 0.8, 0.4), soft=True, puff=0.4)
+    kit.box("check_locker_bench", M["timber"], coll, (27.45, 0.45, -13.5), (0.36, 0.06, 2.0), bev=0.015, grain="long")
+    for dz_ in (-0.85, 0.85):
+        kit.box(f"check_locker_bench_leg{dz_}", M["rust"], coll, (27.45, 0.22, -13.5 + dz_), (0.32, 0.44, 0.05), bev=0.005)
+    kit.box("check_boots", M["dark"], coll, (27.5, 0.07, -12.8), (0.14, 0.14, 0.3), rot=(0, 0, 0.2), bev=0.03)
+    # the remembering wall (art bible: everything remembers): photos of Divers who did not come back, tallies, candles
+    kit.box("check_memory_board", M["plank"], coll, (19.24, 1.55, -13.6), (0.04, 1.1, 1.6), bev=0.01)
+    for k in range(9):
+        kit.plane(f"check_memory_photo{k}", M["photo"], coll, (19.27, 1.25 + (k // 3) * 0.32, -14.15 + (k % 3) * 0.5 + rng.uniform(-0.05, 0.05)), 0.2, 0.26, (R90, 0, R90 + rng.uniform(-0.1, 0.1)))
+    kit.plane("check_memory_tally", M["tally"], coll, (19.272, 1.9, -13.0), 0.5, 0.25, (R90, 0, R90))
+    kit.box("check_memory_shelf", M["timber"], coll, (19.35, 0.95, -13.6), (0.22, 0.04, 1.4), bev=0.006, grain="long")
+    for k in range(6):
+        cz_ = -14.15 + k * 0.22
+        kit.cylinder(f"check_candle{k}", M["bone"], coll, (19.35, 0.97, cz_), (19.35, 0.97 + rng.uniform(0.05, 0.14), cz_), 0.02, segments=8)
+    light(room, "check_candles", "POINT", (19.6, 1.2, -13.6), (1.0, 0.6, 0.3), 10, coll=coll)
+    # coats on hooks by the door, supply crates and a water barrel
+    for k in range(4):
+        kit.box(f"check_hook{k}", M["bare"], coll, (20.0 + k * 0.35, 1.75, z1 - 0.08), (0.02, 0.02, 0.08), bev=0.002)
+        if k != 2:
+            kit.box(f"check_coat{k}", M["canvas"] if k % 2 else M["blanket"], coll, (20.0 + k * 0.35, 1.3, z1 - 0.14), (0.3, 0.85, 0.1), soft=True, puff=0.35)
+    for k in range(3):
+        crate(f"check_supply{k}", M, coll, (26.9 + (k % 2) * 0.72, 0.34 + (k // 2) * 0.68, -7.4), yaw=rng.uniform(-0.08, 0.08))
+    barrel("check_water", M, coll, 21.6, -7.4, r=0.3, h=1.0, mat="steel_locker")
+    kit.cylinder("check_water_tap", M["bare"], coll, (21.6, 0.25, -7.7), (21.6, 0.25, -7.78), 0.015, segments=6)
+    kit.cylinder("check_cup", M["steel"], coll, (21.6, 1.0, -7.45), (21.6, 1.08, -7.45), 0.035, segments=10)
+    return [((23.75, 1.7, -7.4), (23.75, 1.3, -14.0)), ((27.0, 1.7, -8.0), (19.5, 1.5, -11.5)), ((20.6, 1.6, -8.0), (27.5, 1.2, -13.8))]
 
 
 def build_lift(M, P, coll):
@@ -924,7 +1388,7 @@ def build_lift(M, P, coll):
     kit.box("lift_back", M["steel"], coll, (x1 - 0.05, H / 2, (z0 + z1) / 2), (0.1, H, z1 - z0), bev=0.01)
     for k, x in enumerate((x0, x1 - 0.1)):
         kit.box(f"lift_frame_top{k}", M["dark"], coll, (x, H - 0.1, (z0 + z1) / 2), (0.16, 0.2, z1 - z0), bev=0.015)
-    kit.cylinder("lift_cable", M["dark"], coll, (34.8, H - 0.3, -5.1), (34.8, H + 6, -5.1), 0.025)
+    kit.cylinder("lift_cable", M["dark"], coll, (34.8, H - 0.3, -5.1), (34.8, H + 4.6, -5.5), 0.025)
     kit.box("lift_threshold", M["bulb"], coll, (x0 + 0.05, 0.012, -5.1), (0.1, 0.02, 3.0), bev=0)
     # Lift Teal beacon on the back wall: the way out (art bible 4)
     kit.box("lift_beacon", M["teal"], coll, (x1 - 0.11, 1.3, -5.1), (0.04, 0.6, 0.8), bev=0.01)
@@ -934,10 +1398,55 @@ def build_lift(M, P, coll):
           spot_size=math.radians(22), spot_blend=0.4)
     rock_wall("lift_south", M, coll, "x", z1 + 0.15, x0, x1, -1, depth=0.1, seed=71)
     rock_wall("lift_north", M, coll, "x", z0 - 0.15, x0, x1, +1, depth=0.1, seed=72)
-    return [((31.0, 1.7, -5.1), (36.0, 1.2, -5.1))]
+    # the shaft above the cage: rock up to where the daylight comes in, a timber collar at the roof line
+    top = H + 6.0
+    for k, (pos, w, rot) in enumerate((((34.75, (H + top) / 2, z1 + 0.15), x1 - x0 + 0.3, (R90, 0, math.pi)),
+                                      ((34.75, (H + top) / 2, z0 - 0.15), x1 - x0 + 0.3, (R90, 0, 0)),
+                                      ((x1 + 0.05, (H + top) / 2, -5.1), z1 - z0 + 0.3, (R90, 0, -R90)),
+                                      ((x0 - 0.05, (H + top) / 2, -5.1), z1 - z0 + 0.3, (R90, 0, R90)))):
+        kit.displaced_panel(f"lift_shaft{k}", M["rock"], coll, pos, w, top - H, rot, step=0.08, depth=0.12, seed=73 + k)
+    for k, z in enumerate((z0 - 0.05, z1 + 0.05)):
+        kit.box(f"lift_collar{k}", M["timber"], coll, (34.75, H + 0.1, z), (x1 - x0 + 0.4, 0.26, 0.22), bev=0.02, grain="long")
+    # the sheave wheel the cable runs over, on a steel beam across the shaft
+    sy = H + 4.6
+    kit.box("lift_sheave_beam", M["dark"], coll, (34.8, sy + 0.45, -5.1), (0.2, 0.2, 3.3), bev=0.015)
+    ring_pts = [(34.8, sy + 0.4 * math.sin(a), -5.1 + 0.4 * math.cos(a)) for a in np.linspace(0, 2 * math.pi, 25)]
+    for j in range(24):
+        kit.cylinder(f"lift_sheave_rim{j}", M["rust"], coll, ring_pts[j], ring_pts[j + 1], 0.04, segments=8, bev=0)
+    for j in range(6):
+        a = j * math.pi / 3
+        kit.cylinder(f"lift_sheave_spoke{j}", M["rust"], coll, (34.8, sy, -5.1), (34.8, sy + 0.38 * math.sin(a), -5.1 + 0.38 * math.cos(a)), 0.025, segments=6, bev=0)
+    kit.cylinder("lift_sheave_hub", M["dark"], coll, (34.7, sy, -5.1), (34.9, sy, -5.1), 0.08, segments=12)
+    kit.cylinder("lift_cable_down", M["dark"], coll, (34.8, sy + 0.4, -4.7), (34.8, 0.4, -4.7), 0.018, segments=6)  # to the counterweight side
+    # counterweight guides on the back wall, the weight hanging high
+    for s_ in (-1, 1):
+        kit.box(f"lift_guide{s_}", M["dark"], coll, (x1 - 0.18, top / 2, -4.7 + s_ * 0.3), (0.08, top, 0.06), bev=0.006)
+    kit.box("lift_counterweight", M["rust"], coll, (x1 - 0.2, H + 1.2, -4.7), (0.2, 0.9, 0.5), bev=0.02)
+    # the folding gate, pushed open against the north side
+    for k in range(7):
+        zz = z0 + 0.22 + (k % 2) * 0.06
+        kit.box(f"lift_gate_bar{k}", M["bare"], coll, (x0 + 0.08 + k * 0.035, 1.1, zz), (0.015, 2.1, 0.015), bev=0.003)
+    for k in range(6):
+        kit.box(f"lift_gate_x{k}", M["dark"], coll, (x0 + 0.13 + k * 0.035, 1.1, z0 + 0.25), (0.01, 2.2, 0.01), rot=(0.0, 0, 0.12 if k % 2 else -0.12), bev=0)
+    # the control post: a pedestal, a brass-handled lever, two lamps (teal go, amber wait), a bell
+    px, pz = x0 + 0.35, z1 - 0.35
+    kit.box("lift_control", M["steel_locker"], coll, (px, 0.55, pz), (0.32, 1.1, 0.26), bev=0.02)
+    kit.box("lift_control_top", M["dark"], coll, (px, 1.12, pz), (0.36, 0.05, 0.3), rot=(0, 0, 0.15), bev=0.01)
+    kit.cylinder("lift_lever", M["bare"], coll, (px, 1.14, pz), (px - 0.12, 1.45, pz), 0.012, segments=8)
+    kit.cylinder("lift_lever_knob", M["hazard"], coll, (px - 0.12, 1.45, pz), (px - 0.14, 1.5, pz), 0.025, segments=10)
+    kit.cylinder("lift_lamp_go", M["teal"], coll, (px + 0.08, 1.14, pz - 0.08), (px + 0.08, 1.19, pz - 0.08), 0.025, segments=10, bev=0)
+    kit.cylinder("lift_lamp_wait", M["bulb"], coll, (px + 0.08, 1.14, pz + 0.06), (px + 0.08, 1.19, pz + 0.06), 0.025, segments=10, bev=0)
+    kit.cylinder("lift_bell", M["hazard"], coll, (px, 2.2, z1 - 0.13), (px, 2.32, z1 - 0.13), 0.09, segments=14, bev=0.01)
+    # faded hazard stripes on the threshold and the frame: worn paint over rusted steel
+    for k in range(10):
+        kit.box(f"lift_stripe{k}", M["hazard"] if k % 2 == 0 else M["dark"], coll, (x0 - 0.3, 0.008, z0 + 0.15 + k * 0.3), (0.5, 0.012, 0.3), rot=(0, 0, 0.0), bev=0)
+    for k in range(10):
+        kit.box(f"lift_frame_stripe{k}", M["hazard"] if k % 2 == 0 else M["dark"], coll, (x0 - 0.085, H - 0.1, z0 + 0.15 + k * 0.3), (0.012, 0.18, 0.3), bev=0)
+    board("lift_sign", P["sign_lift"], coll, (34.75, 2.45, z0 + 0.06), 1.4, 0.36, (R90, 0, 0), timber=M["timber"])
+    return [((31.0, 1.7, -5.1), (36.0, 1.2, -5.1)), ((33.4, 1.4, -4.0), (35.6, 4.5, -5.6))]
 
 
-BUILDERS = {"hallway": build_hallway, "trade_hall": build_trade_hall, "workshop": build_workshop,
+BUILDERS = {"hallway": build_hallway, "trade_hall": build_trade_hall, "clinic": build_clinic, "radio": build_radio, "workshop": build_workshop,
             "checkout": build_checkout, "lift": build_lift}
 
 
@@ -1001,10 +1510,15 @@ def main():
     M_TIMBER, M_DARK = M["timber"], M["dark"]
     M["scorch"] = kit.picture_material("mat_decal_scorch_01", os.path.join(TEX, "decal_scorch_albedo.png"), alpha=True, rough=0.9)
     M["grow"] = kit.pbr("mat_grow_light_01", None, tint=(0.95, 0.6, 0.7), emission=(0.85, 0.34, 0.48), emission_strength=8.0)
+    M["bottle"] = kit.pbr("mat_bottle_amber_01", None, tint=(0.36, 0.2, 0.08), rough=0.12)
+    M["ice"] = kit.pbr("mat_shield_cell_01", None, tint=(0.62, 0.85, 0.94), rough=0.3, metal=0.6)  # Shield Ice, never glowing
+    M["bone"] = kit.pbr("mat_cloth_bone_01", "canvas", tint=(0.93, 0.9, 0.82))
+    M["circuit"] = kit.pbr("mat_circuit_board_01", "canvas", tint=(0.2, 0.3, 0.2), rough=0.5)
+    M["hazard"] = kit.pbr("mat_paint_hazard_01", "steel", tint=(0.86, 0.66, 0.3))  # faded hazard paint, worn to rust
     M["teal"] = kit.pbr("mat_lift_teal_01", None, tint=(0.03, 0.2, 0.18), emission=(0.18, 0.9, 0.82), emission_strength=6.0)
     P = {}
     for key in ("sign_rules", "sign_trade_hall", "sign_workshop", "sign_checkout_door", "sign_lift", "sign_quarters", "sign_checkout",
-                "sign_notices", *[f"sign_trader_{i}" for i in range(3)], *[f"sign_bench_{i}" for i in range(7)]):
+                "sign_notices", "sign_clinic_rules", "sign_we_buy", *[f"sign_bin_{i}" for i in range(3)], *[f"sign_trader_{i}" for i in range(3)], *[f"sign_bench_{i}" for i in range(7)]):
         P[key] = kit.pbr(f"mat_{key}_01", key)
     for key in ("neon_noodles", "neon_bunks", "neon_clinic", "neon_water", "neon_radio", "neon_market"):
         P[key] = kit.picture_material(f"mat_{key}_01", os.path.join(TEX, f"{key}_albedo.png"), emission_strength=5.0, rough=0.3)
@@ -1021,8 +1535,15 @@ def main():
                 o.location.y -= ROOM_SHIFT  # game z -> Blender -y
             LIGHTS[room] = [(n, k, (p[0], p[1], p[2] + ROOM_SHIFT), c, w, kw) for n, k, p, c, w, kw in LIGHTS.get(room, [])]
             views[room] = [((c[0], c[1], c[2] + ROOM_SHIFT), (l[0], l[1], l[2] + ROOM_SHIFT)) for c, l in views[room]]
+        if room in ("trade_hall", "workshop", "checkout"):
+            DISPLAY[room] = [(g, (c[0], c[1], c[2] + ROOM_SHIFT), r) for g, c, r in DISPLAY.get(room, [])]
         for o in list(coll.objects):
             kit.finalize(o)
+        if DISPLAY.get(room):
+            placed = build_display_guns(room)
+            if "--export" in sys.argv:
+                write_guns(room, placed)
+            print(f"{room}: displayed guns {len(placed)}")
         if room == "hallway":
             clashes = check_clearance(coll)
             print(f"hallway clearance: {len(clashes)} clashes" + "".join(f"\n  {a} x {b}" for a, b in clashes[:20]))

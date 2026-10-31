@@ -106,14 +106,18 @@ async function run() {
       { name: 'quarters', x: [-4.3, 4.3], z: [-3.56, 3.75] },
       { name: 'hallway', x: [-5.2, 33.0], z: [-6.7, -3.56] },
       { name: 'trade_hall', x: [-0.6, 9.0], z: [-15.1, -6.7] },
+      { name: 'workshop', x: [9.0, 19.0], z: [-15.1, -6.7] },
+      { name: 'checkout', x: [19.0, 28.7], z: [-15.1, -6.7] },
+      { name: 'lift', x: [32.9, 36.7], z: [-6.7, -3.5] },
     ];
     // Each trader gets a room of their own (author request). The Trade Hall
-    // is now Tobias's gun shop: he stands behind his new counter. Nia and
-    // Pell are left out until their shopfront rooms are built.
+    // is Tobias's gun shop; Nia and Pell have the rooms behind the CLINIC and
+    // RADIO & PARTS shopfronts, south of the hallway, where they face north
+    // across their counters (rot: turned to face -z).
     const TRADERS_NOW = [
       { x: 1.6, z: -13.0, to: [3.2, 0, -11.7] }, // Tobias
-      { x: 4.25, z: -13.0, to: null }, // Nia: the CLINIC shopfront, not built yet
-      { x: 6.9, z: -13.0, to: null }, // Pell: the RADIO & PARTS shopfront, not built yet
+      { x: 4.25, z: -13.0, to: [17.4, 0, -0.35], rot: Math.PI }, // Nia, in her clinic
+      { x: 6.9, z: -13.0, to: [27.0, 0, -0.35], rot: Math.PI }, // Pell, in his radio and parts shop
     ];
     // In Godot the hallway is 5 m wide, so everything north of it (the Trade
     // Hall, Workshop, Checkout and their traders) sits 2 m further north.
@@ -129,7 +133,10 @@ async function run() {
           s.scene.remove(c);
           continue;
         }
-        if (t) c.position.set(...t.to);
+        if (t) {
+          c.position.set(...t.to);
+          if (t.rot !== undefined) c.rotation.y = t.rot;
+        }
       }
       if (c.isLight) c.getWorldPosition(centre);
       else if (box.setFromObject(c).isEmpty()) continue;
