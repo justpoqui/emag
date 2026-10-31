@@ -269,20 +269,67 @@ def make_pictures():
     # the banner: painted canvas with a swallowtail, hung on a rod
     BW, BH = 768, 1024
     cloth = np.asarray(Image.open(os.path.join(TEX, "canvas_albedo.png")).convert("RGB").resize((BW, BH))).astype(float)
-    painted = Image.new("RGB", (BW, BH), (0, 0, 0))
-    mask = Image.new("L", (BW, BH), 0)
-    for im_, fill in ((painted, None), (mask, 255)):
-        d = ImageDraw.Draw(im_)
-        if fill:
-            insignia(d, BW / 2, 470, 2.6, amber=fill, bone=fill, field=fill)
-            d.text((BW / 2, 120), "DIVERS", font=font(118), fill=fill, anchor="mm")
-            d.text((BW / 2, 840), "WE COME BACK", font=font(62), fill=fill, anchor="mm")
-        else:
-            insignia(d, BW / 2, 470, 2.6)
-            d.text((BW / 2, 120), "DIVERS", font=font(118), fill=(222, 210, 186), anchor="mm")
-            d.text((BW / 2, 840), "WE COME BACK", font=font(62), fill=(198, 140, 74), anchor="mm")
-    m = np.asarray(mask).astype(float) / 255 * (1 - chip(mask, 41, 0.55))
-    col = cloth * 0.8 * (1 - m[..., None]) + np.asarray(painted).astype(float) * m[..., None]
+    # Everything on the banner is painted by hand: letters drawn one by one,
+    # slightly off the line and turned; brush edges ragged; the paint soaks
+    # into the weave (the cloth shows through it) and skips in dry streaks.
+    rr = np.random.default_rng(44)
+    yy, xx = np.mgrid[0:BH, 0:BW]
+
+    def lowfreq(cells, seed):
+        g = np.random.default_rng(seed).random((cells, cells))
+        return np.asarray(Image.fromarray((g * 255).astype(np.uint8)).resize((BW, BH), Image.BICUBIC)).astype(float) / 255
+
+    def hand_text(text, cx, cy, size, seed):
+        """A mask of `text`, each letter hand-placed: its own small turn,
+        lift and size, with uneven spacing."""
+        r_ = np.random.default_rng(seed)
+        f = font(size)
+        widths = [f.getlength(ch) for ch in text]
+        track = size * 0.06
+        x = cx - (sum(widths) + track * (len(text) - 1)) / 2
+        m_ = Image.new("L", (BW, BH), 0)
+        for ch, w in zip(text, widths):
+            if ch != " ":
+                g = Image.new("L", (int(size * 1.6), int(size * 1.6)), 0)
+                ImageDraw.Draw(g).text((g.width / 2, g.height / 2), ch, font=font(int(size * r_.uniform(0.95, 1.05))), fill=255, anchor="mm")
+                g = g.rotate(r_.uniform(-3.5, 3.5), resample=Image.BICUBIC)
+                m_.paste(g, (int(x + w / 2 - g.width / 2 + r_.uniform(-2, 2)), int(cy - g.height / 2 + r_.uniform(-4, 4))), g)
+            x += w + track * r_.uniform(0.6, 1.4)
+        return np.asarray(m_).astype(float) / 255
+
+    def brush(m_, seed, edge=0.25, dry=0.35):
+        """Ragged brush edges, a slight wobble, and dry-brush streaks."""
+        wob_x = (lowfreq(14, seed) - 0.5) * 5
+        wob_y = (lowfreq(14, seed + 1) - 0.5) * 5
+        sy = np.clip(yy + wob_y, 0, BH - 1).astype(int)
+        sx = np.clip(xx + wob_x, 0, BW - 1).astype(int)
+        m_ = m_[sy, sx]
+        soft = np.asarray(Image.fromarray((m_ * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.6))).astype(float) / 255
+        n = np.random.default_rng(seed + 2).random((BH, BW))
+        n = np.asarray(Image.fromarray((n * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.2))).astype(float) / 255
+        m_ = np.clip((soft - 0.5 + edge * (n - 0.5)) * 5 + 0.5, 0, 1)
+        # dry patches where the brush ran out: irregular, slightly elongated blobs
+        blobs = np.random.default_rng(seed + 3).random((BH // 10, BW // 22))
+        blobs = np.asarray(Image.fromarray((blobs * 255).astype(np.uint8)).resize((BW, BH), Image.BICUBIC)).astype(float) / 255
+        grit = np.random.default_rng(seed + 4).random((BH, BW))
+        return m_ * (1 - dry * np.clip((blobs - 0.5) * 3 + 0.3 * (grit - 0.5), 0, 1))
+
+    lum = cloth.mean(-1)
+    lum = (lum - lum.min()) / max(np.ptp(lum), 1e-6)
+    layers = []  # (mask, colour) painted in order
+    emblem_c = Image.new("RGB", (BW, BH), (0, 0, 0))
+    emblem_m = Image.new("L", (BW, BH), 0)
+    insignia(ImageDraw.Draw(emblem_c), BW / 2, 486, 2.45, amber=(186, 134, 78), bone=(200, 190, 166))
+    insignia(ImageDraw.Draw(emblem_m), BW / 2, 486, 2.45, amber=255, bone=255, field=255)
+    layers.append((brush(np.asarray(emblem_m).astype(float) / 255, 50, edge=0.15, dry=0.2), np.asarray(emblem_c).astype(float)))
+    layers.append((brush(hand_text("DIVERS", BW / 2, 92, 100, 51), 52, edge=0.35, dry=0.4), np.array([192, 180, 154], float)))
+    layers.append((brush(hand_text("WE COME BACK", BW / 2, 850, 56, 53), 54, edge=0.35, dry=0.45), np.array([176, 128, 76], float)))
+    wear = chip(Image.new("L", (BW, BH)), 41, 0.55)
+    col = cloth * 0.8
+    for m_, c_ in layers:
+        a_ = m_ * (1 - wear) * 0.85  # paint never fully covers the cloth
+        paint_ = c_ * (0.7 + 0.4 * lum)[..., None]  # the weave shows through the paint
+        col = col * (1 - a_[..., None]) + paint_ * a_[..., None]
     col = np.asarray(grime(Image.fromarray(np.clip(col, 0, 255).astype(np.uint8)), 0.45, 42)).astype(float)
     alpha = np.full((BH, BW), 255, np.uint8)
     yy, xx = np.mgrid[0:BH, 0:BW]
