@@ -1,0 +1,27 @@
+[gd_scene format=3]
+
+[node name="Lights_radio" type="Node3D"]
+
+[node name="radio_counter_lamp_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 26.1, 2.02, -0.7999999999999999)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 1.342
+omni_range = 4.7
+
+[node name="radio_desk_glow" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 29.150000000000002, 1.2, 0.35)
+light_color = Color(1.000, 0.620, 0.320, 1)
+light_energy = 0.447
+omni_range = 2.5
+
+[node name="radio_back_lamp_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 27.0, 2.12, 1.4)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 1.225
+omni_range = 4.29
+
+[node name="radio_entry_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 27.4, 2.6, -2.6)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.707
+omni_range = 2.5
