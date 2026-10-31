@@ -67,7 +67,7 @@ def make_item_atlas():
         "herb": ("#56603a", "#7d6b40", fine_, 0.8, 0.0),
         "glass_amber": ("#24110a", "#3a1e0e", mid * 0.2, 0.18, 0.0),
         "cork": ("#a98458", "#7a5c38", fine_, 0.9, 0.0),
-        "steel_rust": ("#4b3a30", "#33281f", fine_ * 0.3 + mid * 0.1, 0.8, 0.4),  # rust kept under 35% saturation (art bible 6.2)
+        "steel_rust": ("#3f342c", "#2c241e", fine_ * 0.3 + mid * 0.1, 0.8, 0.4),  # rust kept under 35% saturation (art bible 6.2)
         "steel_bare": ("#7d7b76", "#4c4a46", mid * 0.12, 0.45, 0.9),
         "brass": ("#9c7c3c", "#5c4a28", mid * 0.3, 0.4, 1.0),
         "leather": ("#4e3626", "#76563c", mid, 0.65, 0.0),
@@ -440,7 +440,64 @@ def build_shield(M, coll, tier):
     return {"views": [((0.5, 0.4, 0.6), (0, H * 0.62, 0)), ((-0.52, 0.32, -0.42), (0, H * 0.62, 0)), ((0.16, H + 0.12, 0.22), (0, H, 0))]}
 
 
-ITEMS = {"bandage": build_bandage, "med_kit": build_med_kit, "shield_cell": build_shield_cell,
+def build_frag(M, coll):
+    """The Frag Grenade, homemade (author: not a real grenade, a homemade
+    one): a food tin wrapped in cloth tape with rusty nuts and washers
+    packed round it under the tape; on top a scrap-metal striker with a
+    lever cut from a strip of tin, held down by the tape, and a brass pull
+    ring on a bent nail. Stood on its base. ~11 cm tall."""
+    A = M["atlas"]
+    rr_ = np.random.default_rng(13)
+    r, h = 0.032, 0.088  # tin radius, height
+    tin = kit.cylinder("frag_tin", A, coll, (0, 0, 0), (0, h, 0), r, segments=24, bev=0.002)
+    for poly in tin.data.polygons:
+        poly.use_smooth = True
+    cell(fine(tin), "steel_bare")
+    for k, y in enumerate((0.012, h - 0.012)):  # the tin's rolled rims
+        bm = bmesh.new()
+        bmesh.ops.create_cone(bm, cap_ends=False, segments=24, radius1=r + 0.0012, radius2=r + 0.0012, depth=0.003)
+        o = kit.mesh_obj(f"frag_rim{k}", bm, A, coll, kit.g2b(0, y, 0), (0, 0, 0))
+        o["uv"] = "box"
+        cell(fine(o), "steel_bare")
+    # rusty nuts and washers packed round the middle, held on by the tape
+    for k in range(18):
+        a = k / 18 * 2 * math.pi + rr_.uniform(-0.08, 0.08)
+        y = 0.03 + (k % 3) * 0.014 + rr_.uniform(-0.002, 0.002)
+        cx, cz = (r + 0.002) * math.cos(a), (r + 0.002) * math.sin(a)
+        ox, oz = math.cos(a) * 0.004, math.sin(a) * 0.004
+        if k % 4 == 3:  # a washer
+            cell(fine(kit.cylinder(f"frag_washer{k}", A, coll, (cx, y, cz), (cx + ox * 0.4, y, cz + oz * 0.4), 0.0055, segments=10, bev=0)), "steel_rust")
+        else:  # a hex nut
+            cell(fine(kit.cylinder(f"frag_nut{k}", A, coll, (cx, y, cz), (cx + ox, y, cz + oz), 0.0048, segments=6, bev=0.0005)), "steel_rust")
+    # cloth tape wound round over them, three bands, the ends left loose
+    for k, (y, w) in enumerate(((0.024, 0.014), (0.045, 0.02), (0.068, 0.014))):
+        bm = bmesh.new()
+        bmesh.ops.create_cone(bm, cap_ends=False, segments=24, radius1=r + 0.006, radius2=r + 0.006, depth=w)
+        bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=0.0015)
+        o = kit.mesh_obj(f"frag_tape{k}", bm, A, coll, kit.g2b(0, y, 0), (rr_.uniform(-0.04, 0.04), rr_.uniform(-0.04, 0.04), 0))
+        o["uv"] = "box"
+        cell(fine(o), "canvas_bone")
+    cell(strip("frag_tape_end", A, coll, [(r + 0.006, 0.045, 0.0), (r + 0.01, 0.042, 0.012), (r + 0.012, 0.036, 0.02)], 0.018, thick=0.0012,
+               side=(0.0, 1.0, 0.0), ragged=0.0008, seed=81), "canvas_bone")
+    # on the lid: a striker housing knocked up from a pipe end, its lever a bent strip of tin taped down the side
+    cell(fine(kit.cylinder("frag_striker", A, coll, (0.004, h, 0), (0.004, h + 0.02, 0), 0.0085, segments=12, bev=0.0015)), "steel_rust")
+    cell(fine(kit.cylinder("frag_striker_cap", A, coll, (0.004, h + 0.02, 0), (0.004, h + 0.024, 0), 0.0065, segments=10, bev=0.001)), "steel_bare")
+    lever = [(0.004, h + 0.026, -0.006), (0.004, h + 0.026, 0.006), (0.004, h + 0.02, 0.016), (0.004, h + 0.004, r + 0.004), (0.004, h - 0.018, r + 0.007), (0.004, 0.05, r + 0.0075)]
+    pts = []
+    for a_, b_ in zip(lever, lever[1:]):
+        for t in np.linspace(0, 1, 3)[:-1]:
+            pts.append(tuple(a_[i] + (b_[i] - a_[i]) * t for i in range(3)))
+    pts.append(lever[-1])
+    cell(strip("frag_lever", A, coll, pts, 0.01, thick=0.0012, ragged=0.0004, seed=82), "steel_bare")
+    # the pin: a bent nail through the striker, a brass ring on it
+    cell(fine(kit.cylinder("frag_nail", A, coll, (-0.012, h + 0.013, 0), (0.02, h + 0.013, 0), 0.0011, segments=6, bev=0)), "steel_bare")
+    cell(fine(kit.cylinder("frag_nail_head", A, coll, (-0.013, h + 0.013, 0), (-0.012, h + 0.013, 0), 0.0024, segments=8, bev=0)), "steel_bare")
+    ring = [(0.02 + 0.01 * (1 - math.cos(a)), h + 0.013 - 0.01 * math.sin(a) * 0.5, 0.01 * math.sin(a) * 0.85) for a in np.linspace(0, 2 * math.pi, 19)]
+    cell(wire("frag_ring", A, coll, ring, 0.0013), "brass")
+    return {"views": [((0.26, 0.17, 0.26), (0, 0.055, 0)), ((-0.24, 0.11, -0.19), (0, 0.055, 0)), ((0.16, 0.22, 0.12), (0, 0.075, 0))]}
+
+
+ITEMS = {"frag": build_frag, "bandage": build_bandage, "med_kit": build_med_kit, "shield_cell": build_shield_cell,
          "shield_light": lambda M, c: build_shield(M, c, "light"), "shield_medium": lambda M, c: build_shield(M, c, "medium"),
          "shield_heavy": lambda M, c: build_shield(M, c, "heavy")}
 
