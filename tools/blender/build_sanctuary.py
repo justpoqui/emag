@@ -208,7 +208,7 @@ def make_room_pictures():
 
 # ---------- building blocks ----------
 
-def rock_wall(name, M, coll, axis, coord, a0, a1, facing, doors=(), door_h=2.6, depth=0.12, seed=1):
+def rock_wall(name, M, coll, axis, coord, a0, a1, facing, doors=(), door_h=2.6, depth=0.12, seed=1, step=0.05):
     """A hewn rock wall from a0 to a1 along `axis` ('x' or 'z') at `coord`,
     facing +1/-1 along the other axis, with door openings [(centre, width)]."""
     pieces = []
@@ -228,7 +228,7 @@ def rock_wall(name, M, coll, axis, coord, a0, a1, facing, doors=(), door_h=2.6, 
         else:
             pos = (coord, cy, mid)
             rot = (R90, 0, R90) if facing > 0 else (R90, 0, -R90)
-        kit.displaced_panel(f"{name}_{k}", M["rock"], coll, pos, w + 0.1, hgt, rot, depth=depth, seed=seed + k)
+        kit.displaced_panel(f"{name}_{k}", M["rock"], coll, pos, w + 0.1, hgt, rot, step=step, depth=depth, seed=seed + k)
 
 
 def floor_ceiling(name, M, coll, x0, x1, z0, z1, floor_mat="earth", seed=1):
@@ -429,9 +429,9 @@ def build_hallway(M, P, coll):
     room = "hallway"
     z0, z1 = HALL_N, HALL_S
     floor_ceiling("hall", M, coll, -5, 33, z0, z1, seed=21)
-    rock_wall("hall_north", M, coll, "x", z0, -5, 33, +1, doors=((4, 1.8), (14, 1.8), (23.75, 1.8)), seed=22)
+    rock_wall("hall_north", M, coll, "x", z0, -5, 33, +1, doors=((4, 1.8), (14, 1.8), (23.75, 1.8)), seed=22, step=0.07)
     rock_wall("hall_south_w", M, coll, "x", z1, -5, -4, -1, seed=30)
-    rock_wall("hall_south_e", M, coll, "x", z1, 4, 33, -1, seed=31)
+    rock_wall("hall_south_e", M, coll, "x", z1, 4, 33, -1, seed=31, step=0.07)
     rock_wall("hall_west", M, coll, "z", -5, z0, z1, +1, seed=32)
     rock_wall("hall_east_n", M, coll, "z", 33, z0, -6.6, -1, seed=33)  # the lift opens off the walkway side
     for at in (4, 14, 23.75):
@@ -536,7 +536,7 @@ def build_hallway(M, P, coll):
     # lamps over the walkway, string lights down the middle
     for k, x in enumerate((0, 9, 18.5, 28)):
         work_lamp(f"hall_lamp{k}", M, coll, x, H - 0.75, -5.2, room, watts=260)
-    for k, x in enumerate((4.5, 23.0)):
+    for k, x in enumerate((9.0, 19.0, 29.0)):  # between the doors, clear of the neon
         work_lamp(f"hall_track_lamp{k}", M, coll, x, H - 0.8, TRACK_Z + 0.3, room, watts=160)
     string_lights("hall_string", M, coll, room, [((x, H - 0.35, -6.2), (x + 4.6, H - 0.35, -6.2)) for x in np.arange(-4.2, 32, 4.6)], sag=0.35, every=6, watts=25)
 
