@@ -51,8 +51,10 @@ Blender, stop re-exporting those files, or the export will overwrite the edits.
 Rooms are rebuilt one at a time. `sanctuary.glb` (the web-game export)
 leaves out the finished rooms (the `FINISHED` list in
 `tools/export-glb/export.js`) and keeps the rest, plus the three traders
-until the characters are reworked. Finished so far: the quarters and the
-hallway.
+until the characters are reworked. Finished so far: the quarters, the
+hallway and Tobias's gun shop (the old Trade Hall). Each trader gets a room
+of their own: Nia and Pell will take the CLINIC and RADIO & PARTS
+shopfronts, and are left out of the scene until those are built.
 The quarters' lamps are hand-placed in `scenes/sanctuary.tscn`
 (`QuartersLights`, `QuartersProbe`); the other rooms' lamps are written by
 `build_sanctuary.py --export` from the lights placed in Blender, with

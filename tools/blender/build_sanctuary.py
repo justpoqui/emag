@@ -211,6 +211,9 @@ def make_room_pictures():
     benches = ("WEAPONS", "AMMO", "SHIELDS", "MEDICAL", "EXPLOSIVES", "REPAIR", "SALVAGE")
     for i, b in enumerate(benches):
         painted_board(f"sign_bench_{i}", [(b, 0.55, 100 if len(b) < 9 else 84, (0.87, 0.81, 0.71))], w=640, h=200, seed=30 + i)
+    painted_board("sign_rules", [("HOUSE RULES", 0.18, 64, (0.87, 0.81, 0.71)), ("NO LOADED GUNS", 0.42, 44, (0.82, 0.76, 0.66)),
+                                 ("TRY BEFORE YOU BUY", 0.62, 44, (0.82, 0.76, 0.66)), ("NO CREDIT. EVER.", 0.82, 44, (0.78, 0.62, 0.42))],
+                  w=768, h=480, seed=41)
     painted_board("sign_notices", [("NOTICES", 0.5, 120, (0.87, 0.81, 0.71))], w=768, h=200, paint=(0.24, 0.18, 0.13), seed=40)
     for key, text, c in (("neon_noodles", "NOODLES", (0.85, 0.34, 0.48)), ("neon_bunks", "BUNKS", (0.91, 0.58, 0.23)),
                          ("neon_clinic", "CLINIC", (0.94, 0.7, 0.35)), ("neon_water", "WATER · RATION", (0.91, 0.58, 0.23)),
@@ -641,32 +644,34 @@ def build_hallway(M, P, coll):
             ((28.0, 1.9, -4.6), (32.5, 2.4, -8.0))]
 
 
-def long_gun(name, M, coll, x, y, z, kind="rifle", facing=1, along="x", lean=0.0):
+def long_gun(name, M, coll, x, y, z, kind="rifle", facing=1, along="x", lean=0.0, scale=1.0):
     """A long gun lying flat against a wall or bench, barrel along +x
     (facing=-1 flips it). Built from its real parts: stock, receiver,
     barrel, magazine or pump, a sight. Worn wood, rusted steel."""
-    L = {"rifle": 1.05, "carbine": 0.9, "shotgun": 1.1, "marksman": 1.25}[kind]
+    L = {"rifle": 1.05, "carbine": 0.9, "shotgun": 1.1, "marksman": 1.25}[kind] * scale
 
     def at(dx, dy):
+        dx, dy = dx * scale, dy * scale
         if along == "x":
             return (x + facing * dx, y + dy, z)
         return (x, y + dy, z + facing * dx)
 
     def sz(lx, ly, lz):
+        lx, ly, lz = lx * scale, ly * scale, lz * scale
         return (lx, ly, lz) if along == "x" else (lz, ly, lx)
 
     stock = M["timber"]
     kit.box(f"{name}_stock", stock, coll, at(0.16, -0.025), sz(0.32, 0.1, 0.045), rot=(lean, 0, 0), bev=0.012, grain="long")
     kit.box(f"{name}_grip", stock, coll, at(0.36, -0.07), sz(0.07, 0.12, 0.04), rot=(lean, 0, 0), bev=0.01)
-    kit.box(f"{name}_receiver", M["dark"], coll, at(0.48, 0.0), sz(0.26, 0.075, 0.05), rot=(lean, 0, 0), bev=0.008)
+    kit.box(f"{name}_receiver", M["bare"], coll, at(0.48, 0.0), sz(0.26, 0.075, 0.05), rot=(lean, 0, 0), bev=0.008)
     if kind == "shotgun":
         kit.box(f"{name}_pump", stock, coll, at(0.72, -0.03), sz(0.2, 0.05, 0.05), rot=(lean, 0, 0), bev=0.012, grain="long")
     else:
         kit.box(f"{name}_forend", stock, coll, at(0.7, -0.015), sz(0.22, 0.05, 0.045), rot=(lean, 0, 0), bev=0.01, grain="long")
     if kind in ("rifle", "carbine"):
         kit.box(f"{name}_mag", M["dark"], coll, at(0.52, -0.09), sz(0.06, 0.13, 0.03), rot=(lean, 0, 0.2 * facing if along == "x" else 0), bev=0.006)
-    p0, p1 = at(0.6, 0.012), at(L, 0.012)
-    kit.cylinder(f"{name}_barrel", M["dark"], coll, p0, p1, 0.012 if kind != "shotgun" else 0.016, segments=10)
+    p0, p1 = at(0.6, 0.012), at(L / scale, 0.012)
+    kit.cylinder(f"{name}_barrel", M["bare"], coll, p0, p1, (0.012 if kind != "shotgun" else 0.016) * scale, segments=10)
     if kind == "marksman":
         kit.cylinder(f"{name}_scope", M["dark"], coll, at(0.38, 0.07), at(0.68, 0.07), 0.022, segments=12)
     else:
@@ -682,10 +687,10 @@ def pistol(name, M, coll, x, y, z, facing=1, along="x", flat=False):
         return (lx, ly, lz) if along == "x" else (lz, ly, lx)
     if flat:  # lying on its side in a display case: thin in y
         kit.box(f"{name}_grip", M["timber"], coll, (x, y, z + 0.04), (0.04, 0.025, 0.1), rot=(0, 0, 0.0), bev=0.008)
-        kit.box(f"{name}_slide", M["dark"], coll, (x + 0.06, y + 0.004, z - 0.005), (0.17, 0.028, 0.04), bev=0.006)
+        kit.box(f"{name}_slide", M["bare"], coll, (x + 0.06, y + 0.004, z - 0.005), (0.17, 0.028, 0.04), bev=0.006)
         return
     kit.box(f"{name}_grip", M["timber"], coll, at(0.0, -0.05), sz(0.045, 0.11, 0.035), rot=(0, 0, -0.25 * facing if along == "x" else 0), bev=0.01)
-    kit.box(f"{name}_slide", M["dark"], coll, at(0.06, 0.02), sz(0.19, 0.04, 0.035), bev=0.007)
+    kit.box(f"{name}_slide", M["bare"], coll, at(0.06, 0.02), sz(0.19, 0.04, 0.035), bev=0.007)
     kit.cylinder(f"{name}_barrel", M["dark"], coll, at(0.15, 0.012), at(0.2, 0.012), 0.009, segments=8)
 
 
@@ -701,7 +706,7 @@ def glass_material(name):
     b = m.node_tree.nodes["Principled BSDF"]
     b.inputs["Base Color"].default_value = (0.55, 0.6, 0.56, 1)
     b.inputs["Roughness"].default_value = 0.08
-    b.inputs["Alpha"].default_value = 0.22
+    b.inputs["Alpha"].default_value = 0.1
     return m
 
 
@@ -716,7 +721,7 @@ def build_trade_hall(M, P, coll):
     rock_wall("trade_east", M, coll, "z", x1, z0, z1, -1, seed=43)
     rock_wall("trade_back", M, coll, "x", z0, x0, x1, +1, seed=44)
     rock_wall("trade_front", M, coll, "x", z1, x0, x1, -1, doors=((4, 1.8),), seed=45)
-    for k, z in enumerate((-8.6, -12.4)):  # old steel arch ribs
+    for k, z in enumerate((-8.4, -10.0)):  # old steel arch ribs, clear of the counter and bench
         pts = [(4.2 + 4.6 * math.cos(a), -1.2 + 4.6 * math.sin(a), z) for a in np.linspace(0.12, math.pi - 0.12, 25)]
         for j in range(len(pts) - 1):
             kit.cylinder(f"trade_rib{k}_{j}", M["dark"], coll, pts[j], pts[j + 1], 0.06, segments=8, bev=0)
@@ -731,8 +736,8 @@ def build_trade_hall(M, P, coll):
         kit.box(f"gun_case{k}_rail_b", M["timber"], coll, (cx, 0.95, cz - 0.29), (cw, 0.06, 0.05), bev=0.01, grain="long")
         for s in (-1, 1):
             kit.box(f"gun_case{k}_end{s}", M["timber"], coll, (cx + s * (cw / 2 - 0.03), 0.95, cz), (0.06, 0.06, 0.62), bev=0.01)
-        kit.box(f"gun_case{k}_bed", M["blanket"], coll, (cx, 0.9, cz), (cw - 0.1, 0.01, 0.52), bev=0)  # the cloth the guns lie on
-        kit.box(f"gun_case{k}_glass", glass, coll, (cx, 0.975, cz), (cw - 0.08, 0.008, 0.54), bev=0)
+        kit.box(f"gun_case{k}_bed", M["canvas"], coll, (cx, 0.9, cz), (cw - 0.1, 0.01, 0.52), bev=0)  # the cloth the guns lie on
+        kit.plane(f"gun_case{k}_glass", glass, coll, (cx, 0.975, cz), cw - 0.08, 0.54, (0, 0, 0))
         for j in range(int(cw / 0.42)):
             pistol(f"gun_case{k}_pistol{j}", M, coll, ca + 0.25 + j * 0.42, 0.915, cz + rng.uniform(-0.1, 0.1), flat=True)
         kit.box(f"gun_case{k}_kick", M["rust"], coll, (cx, 0.05, cz + 0.31), (cw, 0.1, 0.02), bev=0.004)
@@ -745,15 +750,15 @@ def build_trade_hall(M, P, coll):
     kit.box("gun_wall_board", M["plank"], coll, (4.2, 1.75, z0 + 0.12), (7.2, 2.1, 0.04), bev=0.01)
     for k in range(5):
         kit.box(f"gun_wall_rail{k}", M["timber"], coll, (4.2, 0.95 + k * 0.45, z0 + 0.15), (7.2, 0.05, 0.03), bev=0.006, grain="long")
-    for row, y in enumerate((2.45, 2.0, 1.55)):
-        kinds = (("rifle", "shotgun", "carbine", "marksman"), ("carbine", "rifle", "rifle", "shotgun"), ("shotgun", "marksman", "carbine", "rifle"))[row]
+    for row, y in enumerate((2.45, 1.95, 1.45)):
+        kinds = (("rifle", "shotgun", "marksman"), ("carbine", "rifle", "shotgun"), ("shotgun", "marksman", "carbine"))[row]
         for j, kind in enumerate(kinds):
-            gx = 1.0 + j * 1.75 + rng.uniform(-0.08, 0.08)
-            long_gun(f"gun_wall{row}_{j}", M, coll, gx, y, z0 + 0.19, kind=kind)
+            gx = 0.95 + j * 2.35 + rng.uniform(-0.08, 0.08)
+            long_gun(f"gun_wall{row}_{j}", M, coll, gx, y, z0 + 0.19, kind=kind, scale=1.25)
             for hx in (0.25, 0.8):  # the hooks it hangs on
                 kit.box(f"gun_wall{row}_{j}_hook{hx}", M["bare"], coll, (gx + hx, y - 0.04, z0 + 0.17), (0.015, 0.05, 0.06), bev=0.002)
     for j in range(6):
-        pistol(f"gun_wall_pistol{j}", M, coll, 1.2 + j * 1.1, 1.1, z0 + 0.19)
+        pistol(f"gun_wall_pistol{j}", M, coll, 1.2 + j * 1.1, 1.05, z0 + 0.19)
     board("gun_sign", P["sign_trader_0"], coll, (4.2, 3.0, z0 + 0.14), 1.6, 0.52, (R90, 0, 0), timber=M["timber"])
 
     # --- the work bench along the west wall: vise, grinder, a rifle stripped on a cloth ---
@@ -775,11 +780,11 @@ def build_trade_hall(M, P, coll):
 
     # --- the east wall: a tall gun rack and the locked armoury cabinet ---
     rx = x1 - 0.35
-    kit.box("gun_rack_base", M["timber"], coll, (rx, 0.12, -13.6), (0.4, 0.24, 1.6), bev=0.015)
-    kit.box("gun_rack_top", M["timber"], coll, (rx, 1.25, -13.6), (0.25, 0.08, 1.6), bev=0.012, grain="long")
-    for j, kind in enumerate(("rifle", "shotgun", "carbine", "rifle", "marksman")):
-        long_gun(f"gun_rack{j}", M, coll, rx - 0.02, 0.22, -14.2 + j * 0.3, kind=kind, along="z", facing=1, lean=0.0)
-    cab_z = -9.6
+    kit.box("gun_rack_base", M["timber"], coll, (rx, 0.12, -13.9), (0.4, 0.24, 1.3), bev=0.015)
+    kit.box("gun_rack_top", M["timber"], coll, (rx, 1.25, -13.9), (0.25, 0.08, 1.3), bev=0.012, grain="long")
+    for j, kind in enumerate(("rifle", "shotgun", "carbine", "marksman")):
+        long_gun(f"gun_rack{j}", M, coll, rx - 0.02, 0.22, -14.4 + j * 0.3, kind=kind, along="z", facing=1, lean=0.0)
+    cab_z = -12.2
     kit.box("gun_cabinet", M["steel_locker"], coll, (x1 - 0.35, 1.0, cab_z), (0.6, 2.0, 1.1), bev=0.025)
     kit.box("gun_cabinet_seam", M["dark"], coll, (x1 - 0.652, 1.0, cab_z), (0.006, 1.9, 0.01), bev=0)
     kit.box("gun_cabinet_lockbar", M["rust"], coll, (x1 - 0.67, 1.05, cab_z), (0.03, 0.06, 1.0), bev=0.006)
@@ -799,16 +804,33 @@ def build_trade_hall(M, P, coll):
     # --- customer side: a shot-up paper target, a rifle on a plaque, a stool, a spittoon ---
     kit.box("gun_plaque", M["timber"], coll, (x0 + 0.08, 1.8, -8.6), (0.04, 0.35, 1.3), bev=0.012)
     long_gun("gun_plaque_rifle", M, coll, x0 + 0.13, 1.8, -9.15, kind="marksman", along="z")
-    kit.plane("gun_target", P["paper_target"], coll, (x1 - 0.12, 1.6, -8.2), 0.5, 0.65, (R90, 0, -R90))
+    kit.plane("gun_target", P["paper_target"], coll, (x1 - 0.12, 1.45, -8.3), 0.5, 0.65, (R90, 0, -R90))
     kit.box("gun_stool_seat", M["timber"], coll, (2.6, 0.65, -9.6), (0.4, 0.05, 0.4), bev=0.02)
     for s in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
         kit.box(f"gun_stool_leg{s}", M["rust"], coll, (2.6 + s[0] * 0.15, 0.31, -9.6 + s[1] * 0.15), (0.03, 0.62, 0.03), bev=0.004)
     barrel("gun_spittoon", M, coll, 3.1, -10.4, r=0.12, h=0.2, mat="rust")
 
+    # --- customer side, lived in: plank panelling, second-hand shotguns in a barrel,
+    # a sand-filled test drum, a waiting bench, the house rules ---
+    for side, wx, rot in (("w", x0 + 0.07, R90), ("e", x1 - 0.07, -R90)):
+        kit.box(f"gun_wainscot_{side}", M["plank"], coll, (wx, 0.6, -8.9), (0.04, 1.2, 3.6), bev=0.008)
+        kit.box(f"gun_wainscot_{side}_cap", M["timber"], coll, (wx, 1.22, -8.9), (0.08, 0.05, 3.7), bev=0.008, grain="long")
+    barrel("gun_umbrella", M, coll, 1.0, -7.6, r=0.25, h=0.75, mat="rust")
+    for j in range(5):
+        a = j / 5 * 2 * math.pi
+        long_gun(f"gun_umbrella{j}", M, coll, 1.0 + 0.1 * math.cos(a), 0.15, -7.6 + 0.1 * math.sin(a), kind="shotgun", along="z", lean=0.1)
+    barrel("gun_testdrum", M, coll, 7.9, -7.7, r=0.32, h=0.95, mat="steel")
+    rocks("gun_testdrum_sand", M, coll, (7.9, 0.94, -7.7), 4, (0.12, 0.02, 0.12), size=(0.06, 0.1))
+    kit.box("gun_wait_bench", M["timber"], coll, (x0 + 0.35, 0.45, -9.0), (0.4, 0.07, 1.8), bev=0.015, grain="long")
+    for dz_ in (-0.75, 0.75):
+        kit.box(f"gun_wait_bench_leg{dz_}", M["rust"], coll, (x0 + 0.35, 0.22, -9.0 + dz_), (0.36, 0.44, 0.06), bev=0.006)
+    board("gun_rules", P["sign_rules"], coll, (x1 - 0.1, 2.0, -9.6), 1.1, 0.7, (R90, 0, -R90), timber=M["timber"])
+
     # --- light: lamps over the counter, one on the gun wall, the bench lamp above ---
     for k, x in enumerate((2.0, 5.6)):
         work_lamp(f"gun_counter_lamp{k}", M, coll, x, 2.2, cz - 0.1, room, watts=200)
-    light(room, "gun_wall_light", "POINT", (4.2, 2.9, z0 + 1.2), WARM, 120, coll=coll)
+    for k, x in enumerate((1.8, 6.6)):  # lamps washing the gun wall
+        light(room, f"gun_wall_light{k}", "POINT", (x, 2.9, z0 + 0.9), WARM, 110, coll=coll)
     light(room, "gun_entry_light", "POINT", (4.0, 2.7, -8.0), WARM, 60, coll=coll)
     return [((4.0, 1.65, -7.2), (4.2, 1.5, -14.5)), ((7.6, 1.6, -8.0), (1.5, 1.0, -13.5)), ((1.6, 1.5, -10.2), (0.2, 1.0, -13.5))]
 
@@ -981,7 +1003,7 @@ def main():
     M["grow"] = kit.pbr("mat_grow_light_01", None, tint=(0.95, 0.6, 0.7), emission=(0.85, 0.34, 0.48), emission_strength=8.0)
     M["teal"] = kit.pbr("mat_lift_teal_01", None, tint=(0.03, 0.2, 0.18), emission=(0.18, 0.9, 0.82), emission_strength=6.0)
     P = {}
-    for key in ("sign_trade_hall", "sign_workshop", "sign_checkout_door", "sign_lift", "sign_quarters", "sign_checkout",
+    for key in ("sign_rules", "sign_trade_hall", "sign_workshop", "sign_checkout_door", "sign_lift", "sign_quarters", "sign_checkout",
                 "sign_notices", *[f"sign_trader_{i}" for i in range(3)], *[f"sign_bench_{i}" for i in range(7)]):
         P[key] = kit.pbr(f"mat_{key}_01", key)
     for key in ("neon_noodles", "neon_bunks", "neon_clinic", "neon_water", "neon_radio", "neon_market"):
