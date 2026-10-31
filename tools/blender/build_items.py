@@ -37,7 +37,7 @@ ITEX = os.path.join(ROOT, "godot", "textures", "items")
 ATLAS = ("canvas_olive", "canvas_bone", "twine", "herb",
          "glass_amber", "cork", "steel_rust", "steel_bare",
          "brass", "leather", "paper", "rubber",
-         "copper", "plastic", "husk", "wood_dark")
+         "copper", "plastic", "husk", "shield_ice")
 ITEM_TILE = 0.15  # metres per texture repeat on small items: a fine weave at hand size
 R90 = math.pi / 2
 
@@ -76,7 +76,7 @@ def make_item_atlas():
         "copper": ("#a5603a", "#4a6a58", mid * 0.3, 0.4, 1.0),
         "plastic": ("#8a8a7a", "#5e5c50", fine_ * 0.3, 0.55, 0.0),
         "husk": ("#2a2e30", "#4a4436", mid, 0.5, 0.6),
-        "wood_dark": ("#4a3424", "#6a4c34", (strands * 0.3 + fine_ * 0.7), 0.7, 0.0),
+        "shield_ice": ("#9fd8f0", "#7fa8b8", mid * 0.35, 0.3, 0.2),  # Shield Ice (art bible 4): pale, low saturation, never glowing
     }
     for i, name in enumerate(ATLAS):
         r0, c0 = (i // 4) * c, (i % 4) * c
@@ -325,7 +325,48 @@ def build_med_kit(M, coll):
     return {"views": [((0.24, 0.15, 0.22), (0, 0.03, 0.0)), ((-0.22, 0.1, -0.18), (0.01, 0.03, 0.0)), ((0.3, 0.13, 0.1), (0.07, 0.035, 0.0))]}
 
 
-ITEMS = {"bandage": build_bandage, "med_kit": build_med_kit}
+def hex_prism(name, mat, coll, x0, x1, cy, r, rot=0.0, bev=0.002):
+    """A hexagonal prism lying along x (a flat side down), from x0 to x1."""
+    o = kit.cylinder(name, mat, coll, (x0, cy, 0), (x1, cy, 0), r, segments=6, bev=bev)
+    o.rotation_euler.rotate_axis("Z", rot)  # about its own long axis
+    return fine(o)
+
+
+def build_shield_cell(M, coll):
+    """The Shield Cell: a hexagonal canister that recharges a shield ("restores
+    45 shield charge"). The Shield Ice core shows between the bars of a
+    scuffed steel frame; hex end caps with brass contacts; a rubber grip
+    band and a peeling paper label. Hexagons are for shields only (art
+    bible 3). Doesn't glow. ~13 cm long."""
+    A = M["atlas"]
+    L, r = 0.11, 0.032  # body length, hex radius (corner)
+    cy = r * math.cos(math.pi / 6)  # resting on a flat side
+    turn = math.pi / 6  # turned so a flat side is down
+    # the core: Shield Ice, a hex prism just inside the frame
+    cell(hex_prism("cell_core", A, coll, -L / 2, L / 2, cy, r * 0.9, turn, bev=0.003), "shield_ice")
+    # the frame: a steel bar down each corner of the hexagon
+    for k in range(6):
+        a = k * math.pi / 3  # the corners: one each side, flat sides top and bottom
+        y, z = cy + r * 0.97 * math.sin(a), r * 0.97 * math.cos(a)
+        cell(fine(kit.box(f"cell_bar{k}", A, coll, (0, y, z), (L, 0.0065, 0.0065), rot=(-a, 0, 0), bev=0.0012)), "steel_bare" if k % 3 else "steel_rust")
+    # the end caps: thick hex plates, bevelled, with a brass contact and four screws
+    for s_ in (-1, 1):
+        x = s_ * (L / 2 + 0.006)
+        cell(hex_prism(f"cell_cap{s_}", A, coll, x - 0.008, x + 0.008, cy, r * 1.06, turn, bev=0.003), "steel_bare")
+        cell(fine(kit.cylinder(f"cell_contact{s_}", A, coll, (x + s_ * 0.008, cy, 0), (x + s_ * 0.012, cy, 0), 0.009, segments=16, bev=0.0012)), "brass")
+        for j in range(4):
+            a = j * math.pi / 2 + math.pi / 4
+            cell(fine(kit.cylinder(f"cell_screw{s_}_{j}", A, coll, (x + s_ * 0.008, cy + 0.019 * math.sin(a), 0.019 * math.cos(a)),
+                                    (x + s_ * 0.0092, cy + 0.019 * math.sin(a), 0.019 * math.cos(a)), 0.0022, segments=6, bev=0)), "steel_rust")
+    # a rubber grip band round the middle, and the label, half peeled
+    cell(hex_prism("cell_grip", A, coll, -0.012, 0.012, cy, r * 1.03, turn, bev=0.002), "rubber")
+    label = strip("cell_label", A, coll, [(0.03, cy + r * 0.88, -0.014), (0.03, cy + r * 0.882, 0.004), (0.03, cy + r * 0.885 + 0.0015, 0.011), (0.03, cy + r * 0.885 + 0.004, 0.015)],
+                  0.03, thick=0.0005, ragged=0.0006, seed=61)
+    cell(label, "paper")
+    return {"views": [((0.2, 0.13, 0.18), (0, 0.028, 0.0)), ((-0.18, 0.08, -0.15), (0, 0.028, 0.0)), ((0.23, 0.05, 0.0), (0, 0.028, 0.0))]}
+
+
+ITEMS = {"bandage": build_bandage, "med_kit": build_med_kit, "shield_cell": build_shield_cell}
 
 
 def studio(cam, look, out, fov=30):
