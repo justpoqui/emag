@@ -105,6 +105,15 @@ async function run() {
     const FINISHED = [
       { name: 'quarters', x: [-4.3, 4.3], z: [-3.56, 3.75] },
       { name: 'hallway', x: [-5.2, 33.0], z: [-6.7, -3.56] },
+      { name: 'trade_hall', x: [-0.6, 9.0], z: [-15.1, -6.7] },
+    ];
+    // Each trader gets a room of their own (author request). The Trade Hall
+    // is now Tobias's gun shop: he stands behind his new counter. Nia and
+    // Pell are left out until their shopfront rooms are built.
+    const TRADERS_NOW = [
+      { x: 1.6, z: -13.0, to: [3.2, 0, -11.7] }, // Tobias
+      { x: 4.25, z: -13.0, to: null }, // Nia: the CLINIC shopfront, not built yet
+      { x: 6.9, z: -13.0, to: null }, // Pell: the RADIO & PARTS shopfront, not built yet
     ];
     // In Godot the hallway is 5 m wide, so everything north of it (the Trade
     // Hall, Workshop, Checkout and their traders) sits 2 m further north.
@@ -114,6 +123,14 @@ async function run() {
     for (const c of [...s.scene.children]) {
       let skinned = false;
       c.traverse((o) => { if (o.isSkinnedMesh) skinned = true; });
+      if (skinned) {
+        const t = TRADERS_NOW.find((n) => Math.abs(c.position.x - n.x) < 0.3 && Math.abs(c.position.z - n.z) < 0.3);
+        if (t && !t.to) {
+          s.scene.remove(c);
+          continue;
+        }
+        if (t) c.position.set(...t.to);
+      }
       if (c.isLight) c.getWorldPosition(centre);
       else if (box.setFromObject(c).isEmpty()) continue;
       else box.getCenter(centre);

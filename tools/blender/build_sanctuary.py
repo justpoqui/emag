@@ -180,6 +180,25 @@ def scorch_texture():
     Image.fromarray(rgba, "RGBA").save(os.path.join(TEX, "decal_scorch_albedo.png"))
 
 
+def target_texture():
+    """A paper target pinned up by Tobias, full of holes, most near the middle."""
+    w, h = 384, 512
+    im = Image.new("RGB", (w, h), (214, 204, 182))
+    d = ImageDraw.Draw(im)
+    cx, cy = w // 2, 220
+    for k, r_ in enumerate((150, 115, 80, 45)):
+        d.ellipse((cx - r_, cy - r_, cx + r_, cy + r_), outline=(44, 38, 32), width=6)
+    d.ellipse((cx - 18, cy - 18, cx + 18, cy + 18), fill=(150, 70, 52))
+    r = np.random.default_rng(97)
+    for _ in range(26):
+        rr, a = abs(r.normal(0, 55)), r.uniform(0, 2 * math.pi)
+        x, y = cx + rr * math.cos(a), cy + rr * math.sin(a)
+        d.ellipse((x - 5, y - 5, x + 5, y + 5), fill=(24, 20, 16))
+    d.text((cx, 430), "TOBIAS · 25 M", font=font(30), fill=(44, 38, 32), anchor="mm")
+    a = np.asarray(im).astype(float) / 255 * (0.85 + 0.15 * noise_img(w, h, (6, 8), 98))[..., None]
+    Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8)).save(os.path.join(TEX, "paper_target_albedo.png"))
+
+
 def make_room_pictures():
     painted_board("sign_trade_hall", [("TRADE HALL", 0.55, 120, (0.87, 0.81, 0.71))], seed=11)
     painted_board("sign_workshop", [("WORKSHOP", 0.55, 120, (0.87, 0.81, 0.71))], seed=12)
@@ -204,6 +223,7 @@ def make_room_pictures():
     paper_texture("paper_signout", "SIGNED OUT", ["M. Okoro   GOLDEN", "~ R. Vance   NIGHT", "T. Hale    STORM", "~ J. Ash    NIGHT", "D. Mori    GOLDEN", "~ K. Bell   STORM"], 94)
     paper_texture("paper_drops", "TODAY'S DROPS", ["GOLDEN HOUR  standard", "NIGHT RAID   rich, crowded", "DUST STORM   short sight"], 95, colour=(0.2, 0.19, 0.16))
     scorch_texture()
+    target_texture()
 
 
 # ---------- building blocks ----------
@@ -606,7 +626,7 @@ def build_hallway(M, P, coll):
         p = [a[i] + (b[i] - a[i]) * t for i in range(3)]
         kit.box(f"laundry{k}", M[tint], coll, (p[0], p[1] - 0.22, p[2]), (0.34, 0.4, 0.02), rot=(0, 0, -math.atan2(b[0] - a[0], b[2] - a[2]) + R90), soft=True, puff=0.3)
     # handmade neon over each doorway, hung from the ceiling on chains
-    for at, text, colour in ((4, "TRADE HALL", (0.91, 0.58, 0.23)), (14, "WORKSHOP", (0.94, 0.7, 0.35)), (23.75, "CHECKOUT", (0.85, 0.34, 0.48))):
+    for at, text, colour in ((4, "GUNSMITH", (0.91, 0.58, 0.23)), (14, "WORKSHOP", (0.94, 0.7, 0.35)), (23.75, "CHECKOUT", (0.85, 0.34, 0.48))):
         neon_sign(f"hall_neon_{int(at)}", text, colour, coll, room, (at, 2.62, dz + 0.5), 0.0, size=0.38)
     neon_sign("hall_neon_quarters", "YOUR QUARTERS", (0.91, 0.58, 0.23), coll, room, (-2.0, 2.95, -3.72), math.pi, size=0.2)
     neon_sign("hall_neon_lift", "LIFT", (0.18, 0.9, 0.82), coll, room, (32.6, 2.85, -5.1), -R90, size=0.3)
@@ -621,7 +641,74 @@ def build_hallway(M, P, coll):
             ((28.0, 1.9, -4.6), (32.5, 2.4, -8.0))]
 
 
+def long_gun(name, M, coll, x, y, z, kind="rifle", facing=1, along="x", lean=0.0):
+    """A long gun lying flat against a wall or bench, barrel along +x
+    (facing=-1 flips it). Built from its real parts: stock, receiver,
+    barrel, magazine or pump, a sight. Worn wood, rusted steel."""
+    L = {"rifle": 1.05, "carbine": 0.9, "shotgun": 1.1, "marksman": 1.25}[kind]
+
+    def at(dx, dy):
+        if along == "x":
+            return (x + facing * dx, y + dy, z)
+        return (x, y + dy, z + facing * dx)
+
+    def sz(lx, ly, lz):
+        return (lx, ly, lz) if along == "x" else (lz, ly, lx)
+
+    stock = M["timber"]
+    kit.box(f"{name}_stock", stock, coll, at(0.16, -0.025), sz(0.32, 0.1, 0.045), rot=(lean, 0, 0), bev=0.012, grain="long")
+    kit.box(f"{name}_grip", stock, coll, at(0.36, -0.07), sz(0.07, 0.12, 0.04), rot=(lean, 0, 0), bev=0.01)
+    kit.box(f"{name}_receiver", M["dark"], coll, at(0.48, 0.0), sz(0.26, 0.075, 0.05), rot=(lean, 0, 0), bev=0.008)
+    if kind == "shotgun":
+        kit.box(f"{name}_pump", stock, coll, at(0.72, -0.03), sz(0.2, 0.05, 0.05), rot=(lean, 0, 0), bev=0.012, grain="long")
+    else:
+        kit.box(f"{name}_forend", stock, coll, at(0.7, -0.015), sz(0.22, 0.05, 0.045), rot=(lean, 0, 0), bev=0.01, grain="long")
+    if kind in ("rifle", "carbine"):
+        kit.box(f"{name}_mag", M["dark"], coll, at(0.52, -0.09), sz(0.06, 0.13, 0.03), rot=(lean, 0, 0.2 * facing if along == "x" else 0), bev=0.006)
+    p0, p1 = at(0.6, 0.012), at(L, 0.012)
+    kit.cylinder(f"{name}_barrel", M["dark"], coll, p0, p1, 0.012 if kind != "shotgun" else 0.016, segments=10)
+    if kind == "marksman":
+        kit.cylinder(f"{name}_scope", M["dark"], coll, at(0.38, 0.07), at(0.68, 0.07), 0.022, segments=12)
+    else:
+        kit.box(f"{name}_sight", M["bare"], coll, at(L - 0.03, 0.03), sz(0.02, 0.025, 0.01), bev=0.003)
+
+
+def pistol(name, M, coll, x, y, z, facing=1, along="x", flat=False):
+    """A pistol or revolver: grip, frame, slide and barrel."""
+    def at(dx, dy):
+        return (x + facing * dx, y + dy, z) if along == "x" else (x, y + dy, z + facing * dx)
+
+    def sz(lx, ly, lz):
+        return (lx, ly, lz) if along == "x" else (lz, ly, lx)
+    if flat:  # lying on its side in a display case: thin in y
+        kit.box(f"{name}_grip", M["timber"], coll, (x, y, z + 0.04), (0.04, 0.025, 0.1), rot=(0, 0, 0.0), bev=0.008)
+        kit.box(f"{name}_slide", M["dark"], coll, (x + 0.06, y + 0.004, z - 0.005), (0.17, 0.028, 0.04), bev=0.006)
+        return
+    kit.box(f"{name}_grip", M["timber"], coll, at(0.0, -0.05), sz(0.045, 0.11, 0.035), rot=(0, 0, -0.25 * facing if along == "x" else 0), bev=0.01)
+    kit.box(f"{name}_slide", M["dark"], coll, at(0.06, 0.02), sz(0.19, 0.04, 0.035), bev=0.007)
+    kit.cylinder(f"{name}_barrel", M["dark"], coll, at(0.15, 0.012), at(0.2, 0.012), 0.009, segments=8)
+
+
+def ammo_can(name, M, coll, x, y, z, yaw=0.0):
+    kit.box(name, M["steel_locker"], coll, (x, y + 0.09, z), (0.28, 0.18, 0.14), rot=(0, 0, yaw), bev=0.012)
+    kit.box(f"{name}_lid", M["dark"], coll, (x, y + 0.185, z), (0.29, 0.02, 0.15), rot=(0, 0, yaw), bev=0.004)
+    kit.box(f"{name}_handle", M["bare"], coll, (x, y + 0.205, z), (0.12, 0.012, 0.02), rot=(0, 0, yaw), bev=0.003)
+
+
+def glass_material(name):
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    b = m.node_tree.nodes["Principled BSDF"]
+    b.inputs["Base Color"].default_value = (0.55, 0.6, 0.56, 1)
+    b.inputs["Roughness"].default_value = 0.08
+    b.inputs["Alpha"].default_value = 0.22
+    return m
+
+
 def build_trade_hall(M, P, coll):
+    """Tobias's gun shop (author: each trader gets a room of their own; the
+    Trade Hall is Tobias's). Customer side by the door, his workshop behind
+    a glass-topped display counter."""
     room = "trade_hall"
     x0, x1, z0, z1 = -0.5, 8.87, -15, -6.85
     floor_ceiling("trade", M, coll, x0, x1, z0, z1, seed=41)
@@ -629,53 +716,101 @@ def build_trade_hall(M, P, coll):
     rock_wall("trade_east", M, coll, "z", x1, z0, z1, -1, seed=43)
     rock_wall("trade_back", M, coll, "x", z0, x0, x1, +1, seed=44)
     rock_wall("trade_front", M, coll, "x", z1, x0, x1, -1, doors=((4, 1.8),), seed=45)
-    # steel arch ribs, and the market neon over the door
-    for k, z in enumerate((-8.6, -10.4, -12.4)):
+    for k, z in enumerate((-8.6, -12.4)):  # old steel arch ribs
         pts = [(4.2 + 4.6 * math.cos(a), -1.2 + 4.6 * math.sin(a), z) for a in np.linspace(0.12, math.pi - 0.12, 25)]
         for j in range(len(pts) - 1):
             kit.cylinder(f"trade_rib{k}_{j}", M["dark"], coll, pts[j], pts[j + 1], 0.06, segments=8, bev=0)
-    kit.box("trade_market_back", M["dark"], coll, (4.25, 3.0, -6.92), (2.5, 0.65, 0.03), bev=0.006)
-    kit.plane("trade_market_neon", P["neon_market"], coll, (4.25, 3.0, -6.94), 2.4, 0.6, (R90, 0, math.pi))
-    light(room, "trade_market_light", "POINT", (4.25, 2.7, -7.4), (0.91, 0.58, 0.23), 30, coll=coll)
-    work_lamp("trade_lamp", M, coll, 4.25, H - 0.8, -10.5, room, watts=380)
-    string_lights("trade_string", M, coll, room, [((-0.3, H - 0.4, -8.0), (8.7, H - 0.4, -8.0)), ((-0.3, H - 0.4, -11.6), (8.7, H - 0.4, -11.6))], sag=0.4, every=5, watts=28)
-    # the three stalls: counter, cloth awning on posts, shelves of stock, name board
-    stalls = ((1.6, "blanket", "gun"), (4.25, "canvas", "med"), (6.9, "mattress", "scrap"))
-    for i, (x, awning, kind) in enumerate(stalls):
-        z = -13.2
-        kit.box(f"stall{i}_counter", M["plank"], coll, (x, 0.55, z + 1.3), (2.2, 1.1, 0.6), bev=0.02)
-        kit.box(f"stall{i}_top", M["timber"], coll, (x, 1.13, z + 1.3), (2.3, 0.06, 0.72), bev=0.012, grain="long")
+    glass = glass_material("mat_glass_case_01")
+
+    # --- the counter: a timber-framed display case with a glass top, pistols under the glass ---
+    cz = -11.0
+    for k, (ca, cb) in enumerate(((0.4, 3.4), (3.6, 7.2))):
+        cx, cw = (ca + cb) / 2, cb - ca
+        kit.box(f"gun_case{k}_body", M["plank"], coll, (cx, 0.45, cz), (cw, 0.9, 0.62), bev=0.015)
+        kit.box(f"gun_case{k}_rail_f", M["timber"], coll, (cx, 0.95, cz + 0.29), (cw, 0.06, 0.05), bev=0.01, grain="long")
+        kit.box(f"gun_case{k}_rail_b", M["timber"], coll, (cx, 0.95, cz - 0.29), (cw, 0.06, 0.05), bev=0.01, grain="long")
         for s in (-1, 1):
-            kit.box(f"stall{i}_pole{s}", M["timber"], coll, (x + s * 1.12, 1.55, z + 1.6), (0.08, 3.1, 0.08), bev=0.01, grain="long")
-        kit.box(f"stall{i}_awning", M[awning], coll, (x, 3.05, z + 0.9), (2.4, 0.04, 1.6), rot=(-0.25, 0, 0), soft=True, puff=0.3)
-        kit.box(f"stall{i}_shelves", M["timber"], coll, (x, 1.4, z - 0.85), (2.3, 2.8, 0.3), bev=0.015)
-        for k in range(3):
-            kit.box(f"stall{i}_shelf{k}", M["plank"], coll, (x, 1.59 + k * 0.42, z - 0.6), (2.2, 0.04, 0.32), bev=0.006)
-        board(f"stall{i}_sign", P[f"sign_trader_{i}"], coll, (x, 2.55, z + 1.66), 1.45, 0.48, (R90, 0, 0), timber=M["timber"], tilt=-0.12)
-        light(room, f"stall{i}_light", "POINT", (x, 2.45, z + 0.6), WARM, 70, coll=coll)
-        for k in range(3):  # stock on the shelves, by trade
-            y = 1.7 + k * 0.42
-            for j in range(5):
-                px = x - 0.85 + j * 0.42 + rng.uniform(-0.04, 0.04)
-                if kind == "gun":  # ammo tins and long gun cases
-                    kit.box(f"stall{i}_tin{k}_{j}", M["steel"], coll, (px, y, z - 0.6), (0.24, 0.16, 0.18), bev=0.01)
-                elif kind == "med":  # bandage rolls and bottles
-                    kit.cylinder(f"stall{i}_roll{k}_{j}", M["mattress"], coll, (px - 0.08, y, z - 0.6), (px + 0.08, y, z - 0.6), 0.06, segments=12)
-                else:  # boxes of junk
-                    kit.box(f"stall{i}_junk{k}_{j}", M["canvas"], coll, (px, y - 0.02, z - 0.6), (0.3, 0.14 + 0.06 * rng.random(), 0.22), rot=(0, 0, rng.uniform(-0.2, 0.2)), bev=0.02)
-        if kind == "gun":
-            for j in range(2):
-                kit.box(f"stall{i}_case{j}", M["dark"], coll, (x - 0.5 + j * 1.0, 1.2, z + 1.25), (0.9, 0.12, 0.28), rot=(0, 0, 0.1 - 0.2 * j), bev=0.02)
-        elif kind == "med":
-            kit.box(f"stall{i}_satchel", M["canvas"], coll, (x + 0.6, 1.3, z + 1.25), (0.42, 0.28, 0.16), soft=True, puff=0.3)
-        else:  # Pell's hanging spring scale and ledger
-            kit.cylinder(f"stall{i}_scale_chain", M["dark"], coll, (x - 0.6, 2.25, z + 1.3), (x - 0.6, 1.75, z + 1.3), 0.006)
-            kit.cylinder(f"stall{i}_scale", M["bare"], coll, (x - 0.6, 1.75, z + 1.3), (x - 0.6, 1.55, z + 1.3), 0.04, segments=14)
-            kit.box(f"stall{i}_ledger", M["blanket"], coll, (x + 0.5, 1.18, z + 1.3), (0.34, 0.04, 0.26), rot=(0, 0, 0.2), bev=0.01)
-    for k, (x, z, n) in enumerate(((0.3, -7.4, 2), (8.3, -7.4, 1), (0.3, -8.2, 1))):
-        for j in range(n):
-            crate(f"trade_crate{k}_{j}", M, coll, (x, 0.35 + j * 0.7, z), yaw=rng.uniform(-0.2, 0.2))
-    return [((4.25, 1.7, -7.4), (4.25, 1.3, -14.0)), ((0.6, 1.8, -8.0), (7.0, 1.2, -13.0))]
+            kit.box(f"gun_case{k}_end{s}", M["timber"], coll, (cx + s * (cw / 2 - 0.03), 0.95, cz), (0.06, 0.06, 0.62), bev=0.01)
+        kit.box(f"gun_case{k}_bed", M["blanket"], coll, (cx, 0.9, cz), (cw - 0.1, 0.01, 0.52), bev=0)  # the cloth the guns lie on
+        kit.box(f"gun_case{k}_glass", glass, coll, (cx, 0.975, cz), (cw - 0.08, 0.008, 0.54), bev=0)
+        for j in range(int(cw / 0.42)):
+            pistol(f"gun_case{k}_pistol{j}", M, coll, ca + 0.25 + j * 0.42, 0.915, cz + rng.uniform(-0.1, 0.1), flat=True)
+        kit.box(f"gun_case{k}_kick", M["rust"], coll, (cx, 0.05, cz + 0.31), (cw, 0.1, 0.02), bev=0.004)
+    kit.box("gun_case_flap", M["timber"], coll, (7.75, 0.95, cz), (1.0, 0.05, 0.62), rot=(0, 0.0, 0), bev=0.01, grain="long")  # the hinged flap behind it
+    kit.box("gun_case_flap_hinge", M["bare"], coll, (7.22, 0.97, cz), (0.04, 0.03, 0.5), bev=0.005)
+    kit.box("gun_bell", M["bare"], coll, (2.0, 1.01, cz + 0.15), (0.08, 0.04, 0.08), bev=0.02)
+    kit.box("gun_ledger", M["blanket"], coll, (5.2, 1.0, cz + 0.05), (0.34, 0.03, 0.26), rot=(0, 0, 0.25), bev=0.008)
+
+    # --- the gun wall: pegboard across the back, long guns and pistols on hooks ---
+    kit.box("gun_wall_board", M["plank"], coll, (4.2, 1.75, z0 + 0.12), (7.2, 2.1, 0.04), bev=0.01)
+    for k in range(5):
+        kit.box(f"gun_wall_rail{k}", M["timber"], coll, (4.2, 0.95 + k * 0.45, z0 + 0.15), (7.2, 0.05, 0.03), bev=0.006, grain="long")
+    for row, y in enumerate((2.45, 2.0, 1.55)):
+        kinds = (("rifle", "shotgun", "carbine", "marksman"), ("carbine", "rifle", "rifle", "shotgun"), ("shotgun", "marksman", "carbine", "rifle"))[row]
+        for j, kind in enumerate(kinds):
+            gx = 1.0 + j * 1.75 + rng.uniform(-0.08, 0.08)
+            long_gun(f"gun_wall{row}_{j}", M, coll, gx, y, z0 + 0.19, kind=kind)
+            for hx in (0.25, 0.8):  # the hooks it hangs on
+                kit.box(f"gun_wall{row}_{j}_hook{hx}", M["bare"], coll, (gx + hx, y - 0.04, z0 + 0.17), (0.015, 0.05, 0.06), bev=0.002)
+    for j in range(6):
+        pistol(f"gun_wall_pistol{j}", M, coll, 1.2 + j * 1.1, 1.1, z0 + 0.19)
+    board("gun_sign", P["sign_trader_0"], coll, (4.2, 3.0, z0 + 0.14), 1.6, 0.52, (R90, 0, 0), timber=M["timber"])
+
+    # --- the work bench along the west wall: vise, grinder, a rifle stripped on a cloth ---
+    bx, bz = x0 + 0.55, -13.4
+    kit.box("gun_bench_top", M["timber"], coll, (bx, 0.9, bz), (0.8, 0.07, 2.6), bev=0.015, grain="long")
+    kit.box("gun_bench_frame", M["rust"], coll, (bx, 0.43, bz), (0.72, 0.86, 2.5), bev=0.02)
+    kit.box("gun_bench_vise", M["dark"], coll, (bx + 0.25, 1.02, bz - 1.0), (0.2, 0.16, 0.22), bev=0.015)
+    kit.box("gun_bench_vise_jaw", M["bare"], coll, (bx + 0.37, 1.04, bz - 1.0), (0.04, 0.12, 0.2), bev=0.005)
+    kit.cylinder("gun_bench_grinder", M["steel_locker"], coll, (bx - 0.05, 1.04, bz + 1.05), (bx + 0.15, 1.04, bz + 1.05), 0.09, segments=16)
+    kit.cylinder("gun_bench_grinder_wheel", M["rock"], coll, (bx + 0.15, 1.04, bz + 1.05), (bx + 0.2, 1.04, bz + 1.05), 0.08, segments=16)
+    kit.box("gun_bench_cloth", M["canvas"], coll, (bx, 0.94, bz), (0.6, 0.01, 1.0), rot=(0, 0, 0.05), bev=0)
+    parts = (("rust", (0.25, 0.04, 0.05)), ("timber", (0.3, 0.06, 0.05)), ("dark", (0.2, 0.05, 0.05)), ("dark", (0.06, 0.1, 0.03)), ("bare", (0.05, 0.02, 0.02)), ("bare", (0.08, 0.015, 0.015)))
+    for k, (mat, size) in enumerate(parts):
+        kit.box(f"gun_bench_part{k}", M[mat], coll, (bx + rng.uniform(-0.2, 0.2), 0.96, bz + rng.uniform(-0.4, 0.4)), (size[2], size[1], size[0]), rot=(0, 0, rng.uniform(-0.6, 0.6)), bev=0.005)
+    kit.cylinder("gun_bench_barrel_loose", M["dark"], coll, (bx - 0.15, 0.96, bz - 0.45), (bx - 0.1, 0.96, bz + 0.25), 0.012)
+    for k in range(3):  # oil tins
+        kit.cylinder(f"gun_bench_oil{k}", M["steel_locker" if k else "rust"], coll, (bx - 0.25 + k * 0.1, 0.94, bz + 0.6), (bx - 0.25 + k * 0.1, 1.06, bz + 0.6), 0.035, segments=12)
+    work_lamp("gun_bench_lamp", M, coll, bx + 0.1, 1.9, bz, room, watts=110)
+
+    # --- the east wall: a tall gun rack and the locked armoury cabinet ---
+    rx = x1 - 0.35
+    kit.box("gun_rack_base", M["timber"], coll, (rx, 0.12, -13.6), (0.4, 0.24, 1.6), bev=0.015)
+    kit.box("gun_rack_top", M["timber"], coll, (rx, 1.25, -13.6), (0.25, 0.08, 1.6), bev=0.012, grain="long")
+    for j, kind in enumerate(("rifle", "shotgun", "carbine", "rifle", "marksman")):
+        long_gun(f"gun_rack{j}", M, coll, rx - 0.02, 0.22, -14.2 + j * 0.3, kind=kind, along="z", facing=1, lean=0.0)
+    cab_z = -9.6
+    kit.box("gun_cabinet", M["steel_locker"], coll, (x1 - 0.35, 1.0, cab_z), (0.6, 2.0, 1.1), bev=0.025)
+    kit.box("gun_cabinet_seam", M["dark"], coll, (x1 - 0.652, 1.0, cab_z), (0.006, 1.9, 0.01), bev=0)
+    kit.box("gun_cabinet_lockbar", M["rust"], coll, (x1 - 0.67, 1.05, cab_z), (0.03, 0.06, 1.0), bev=0.006)
+    kit.box("gun_cabinet_padlock", M["bare"], coll, (x1 - 0.69, 1.0, cab_z), (0.03, 0.08, 0.06), bev=0.01)
+
+    # --- stock and clutter behind the counter: ammo cans, drums, cleaning rods ---
+    for k in range(9):
+        ammo_can(f"gun_ammo{k}", M, coll, 2.0 + (k % 3) * 0.32, (k // 3) * 0.2, -14.35, yaw=rng.uniform(-0.1, 0.1))
+    for k in range(5):
+        ammo_can(f"gun_ammo_b{k}", M, coll, 5.6 + (k % 2) * 0.32, (k // 2) * 0.2, -14.3, yaw=rng.uniform(-0.15, 0.15))
+    barrel("gun_drum0", M, coll, 7.3, -14.3, r=0.28, h=0.85, mat="rust")
+    barrel("gun_drum1", M, coll, 7.9, -14.1, r=0.28, h=0.85, mat="steel_locker")
+    kit.box("gun_rods_box", M["plank"], coll, (0.9, 0.3, -14.4), (0.25, 0.6, 0.25), bev=0.012)
+    for k in range(5):
+        kit.cylinder(f"gun_rod{k}", M["bare"], coll, (0.84 + k * 0.03, 0.55, -14.4), (0.82 + k * 0.035, 1.35, -14.42), 0.005, segments=6, bev=0)
+
+    # --- customer side: a shot-up paper target, a rifle on a plaque, a stool, a spittoon ---
+    kit.box("gun_plaque", M["timber"], coll, (x0 + 0.08, 1.8, -8.6), (0.04, 0.35, 1.3), bev=0.012)
+    long_gun("gun_plaque_rifle", M, coll, x0 + 0.13, 1.8, -9.15, kind="marksman", along="z")
+    kit.plane("gun_target", P["paper_target"], coll, (x1 - 0.12, 1.6, -8.2), 0.5, 0.65, (R90, 0, -R90))
+    kit.box("gun_stool_seat", M["timber"], coll, (2.6, 0.65, -9.6), (0.4, 0.05, 0.4), bev=0.02)
+    for s in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+        kit.box(f"gun_stool_leg{s}", M["rust"], coll, (2.6 + s[0] * 0.15, 0.31, -9.6 + s[1] * 0.15), (0.03, 0.62, 0.03), bev=0.004)
+    barrel("gun_spittoon", M, coll, 3.1, -10.4, r=0.12, h=0.2, mat="rust")
+
+    # --- light: lamps over the counter, one on the gun wall, the bench lamp above ---
+    for k, x in enumerate((2.0, 5.6)):
+        work_lamp(f"gun_counter_lamp{k}", M, coll, x, 2.2, cz - 0.1, room, watts=200)
+    light(room, "gun_wall_light", "POINT", (4.2, 2.9, z0 + 1.2), WARM, 120, coll=coll)
+    light(room, "gun_entry_light", "POINT", (4.0, 2.7, -8.0), WARM, 60, coll=coll)
+    return [((4.0, 1.65, -7.2), (4.2, 1.5, -14.5)), ((7.6, 1.6, -8.0), (1.5, 1.0, -13.5)), ((1.6, 1.5, -10.2), (0.2, 1.0, -13.5))]
 
 
 def build_workshop(M, P, coll):
@@ -851,7 +986,7 @@ def main():
         P[key] = kit.pbr(f"mat_{key}_01", key)
     for key in ("neon_noodles", "neon_bunks", "neon_clinic", "neon_water", "neon_radio", "neon_market"):
         P[key] = kit.picture_material(f"mat_{key}_01", os.path.join(TEX, f"{key}_albedo.png"), emission_strength=5.0, rough=0.3)
-    for key in ("map_board", "paper_notice_1", "paper_notice_2", "paper_notice_3", "paper_signout"):
+    for key in ("map_board", "paper_notice_1", "paper_notice_2", "paper_notice_3", "paper_signout", "paper_target"):
         P[key] = kit.picture_material(f"mat_{key}_01", os.path.join(TEX, f"{key}_albedo.png"), rough=0.85)
     P["paper_drops"] = kit.picture_material("mat_screen_drops_01", os.path.join(TEX, "paper_drops_albedo.png"), emission_strength=1.2, rough=0.2)
     views = {}
