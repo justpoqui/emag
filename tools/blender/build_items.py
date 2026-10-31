@@ -611,7 +611,188 @@ def build_ammo_shotgun(M, coll):
     return {"views": [((0.15, 0.12, 0.17), (0, 0.018, 0.012)), ((-0.14, 0.08, -0.12), (0, 0.018, 0.0)), ((0.07, 0.07, -0.13), (0, 0.02, 0.0))]}
 
 
-ITEMS = {"ammo_light": build_ammo_light, "ammo_medium": build_ammo_medium, "ammo_heavy": build_ammo_heavy, "ammo_shotgun": build_ammo_shotgun,
+def bent_plate(name, A, coll, base, length, width, bends, sq, seed):
+    """A scrap of sheet metal bent along its length: bends is a list of
+    (where 0..1, angle) folds; the plate starts flat on the ground."""
+    r = np.random.default_rng(seed)
+    pts, (x, y, z) = [], base
+    ang = 0.0
+    n = 12
+    for k in range(n + 1):
+        t = k / n
+        for w_, a_ in bends:
+            if abs(t - w_) < 0.5 / n:
+                ang += a_
+        pts.append((x, y, z))
+        x += math.cos(ang) * length / n * math.cos(sq)
+        z += math.cos(ang) * length / n * math.sin(sq)
+        y = max(0.0008, y + math.sin(ang) * length / n)
+    return strip(name, A, coll, pts, width, thick=0.0016, side=(-math.sin(sq), 0, math.cos(sq)), ragged=0.0015, seed=seed)
+
+
+def ring_obj(name, A, coll, centre, radius, r_tube, axis="y", n=24):
+    """A ring (seal, coil turn) round the given axis, as a fine swept tube."""
+    cx, cy_, cz = centre
+    pts = []
+    for a in np.linspace(0, 2 * math.pi, n + 1):
+        c, s_ = radius * math.cos(a), radius * math.sin(a)
+        pts.append((cx + c, cy_, cz + s_) if axis == "y" else (cx, cy_ + s_, cz + c) if axis == "x" else (cx + c, cy_ + s_, cz))
+    return wire(name, A, coll, pts, r_tube)
+
+
+def build_scrap(M, coll):
+    """Scrap Metal ("bent metal, used in almost everything"): a small heap of
+    torn and bent plate, a twisted bracket and a rusty bolt. ~13 cm across."""
+    A = M["atlas"]
+    cell(bent_plate("scrap_plate0", A, coll, (-0.05, 0.001, -0.02), 0.11, 0.045, [(0.45, 0.5), (0.75, -0.3)], 0.2, 101), "steel_rust")
+    cell(bent_plate("scrap_plate1", A, coll, (-0.03, 0.004, 0.03), 0.08, 0.03, [(0.3, 0.9), (0.6, -0.9)], -0.6, 102), "steel_bare")
+    cell(bent_plate("scrap_plate2", A, coll, (0.0, 0.012, -0.035), 0.07, 0.05, [(0.5, -0.4)], 1.2, 103), "steel_rust")
+    br = kit.box("scrap_bracket", A, coll, (0.035, 0.012, 0.0), (0.05, 0.004, 0.018), rot=(0.25, 0.4, 0.6), bev=0.0008)  # a twisted bracket
+    cell(fine(br), "steel_bare")
+    cell(bent_plate("scrap_plate3", A, coll, (-0.06, 0.002, 0.045), 0.06, 0.025, [(0.5, 1.4)], -0.2, 104), "steel_bare")
+    cell(bent_plate("scrap_plate4", A, coll, (0.03, 0.002, 0.04), 0.05, 0.035, [(0.35, -0.6), (0.7, 0.8)], 2.4, 105), "steel_rust")
+    cell(fine(kit.cylinder("scrap_bolt", A, coll, (0.012, 0.0045, 0.06), (0.05, 0.0045, 0.072), 0.0038, segments=10, bev=0)), "steel_bare")
+    cell(fine(kit.cylinder("scrap_bolt_head", A, coll, (0.005, 0.0045, 0.058), (0.012, 0.0045, 0.06), 0.0075, segments=6, bev=0.0006)), "steel_bare")
+    cell(fine(kit.cylinder("scrap_nut", A, coll, (0.036, 0.0045, 0.0677), (0.042, 0.0045, 0.0696), 0.0072, segments=6, bev=0.0006)), "steel_rust")
+    return {"views": [((0.15, 0.11, 0.15), (0, 0.008, 0.01)), ((-0.14, 0.09, -0.11), (0, 0.008, 0.01)), ((0.02, 0.17, 0.05), (0, 0.0, 0.01))]}
+
+
+def build_rubber(M, coll):
+    """Rubber Parts ("hoses, tyres and seals"): a coil of cracked hose, two
+    seal rings and a chunk of tyre tread. ~13 cm across."""
+    A = M["atlas"]
+    hose = []
+    for k in range(60):
+        t = k / 59
+        a = t * 2 * math.pi * 1.6
+        rr = 0.045 - 0.01 * t
+        hose.append((rr * math.cos(a), 0.008 + 0.012 * t + 0.003 * math.sin(a * 2), rr * math.sin(a)))
+    cell(wire("rubber_hose", A, coll, hose, 0.0075), "rubber")
+    cell(fine(ring_obj("rubber_seal0", A, coll, (0.055, 0.003, 0.04), 0.014, 0.0028)), "rubber")
+    cell(fine(ring_obj("rubber_seal1", A, coll, (0.065, 0.0075, 0.052), 0.01, 0.0024)), "rubber")
+    tread = kit.box("rubber_tread", A, coll, (-0.01, 0.009, 0.06), (0.06, 0.018, 0.035), rot=(0, 0, 0.3), bev=0)
+    kit.bevel(tread, 0.004, 2)
+    cell(fine(tread), "rubber")
+    for k in range(5):  # the tread blocks on top
+        cell(fine(kit.box(f"rubber_tread_block{k}", A, coll, (-0.034 + k * 0.012, 0.0195, 0.06), (0.008, 0.004, 0.03), rot=(0, 0, 0.3), bev=0.0008)), "rubber")
+    return {"views": [((0.2, 0.15, 0.22), (0.01, 0.01, 0.01)), ((-0.18, 0.12, -0.15), (0.01, 0.01, 0.0)), ((0.04, 0.22, 0.08), (0.01, 0.0, 0.02))]}
+
+
+def build_plastic(M, coll):
+    """Plastic Parts ("brittle but useful"): shards of a cracked casing, a
+    snapped clip and a bottle cap. ~11 cm across."""
+    A = M["atlas"]
+    cell(bent_plate("plastic_shard0", A, coll, (-0.05, 0.001, -0.015), 0.08, 0.05, [(0.55, 1.2)], 0.15, 111), "plastic")
+    cell(bent_plate("plastic_shard1", A, coll, (-0.01, 0.002, 0.025), 0.06, 0.035, [(0.4, 1.4)], -0.9, 112), "plastic")
+    cell(bent_plate("plastic_shard2", A, coll, (0.01, 0.004, -0.04), 0.045, 0.03, [(0.5, -0.5)], 1.0, 113), "plastic")
+    cell(fine(kit.cylinder("plastic_cap", A, coll, (0.045, 0.0, 0.03), (0.045, 0.012, 0.03), 0.013, segments=16, bev=0.0012)), "plastic")
+    for k in range(12):  # the cap's ridges
+        a = k / 12 * 2 * math.pi
+        cell(fine(kit.box(f"plastic_cap_ridge{k}", A, coll, (0.045 + 0.0133 * math.cos(a), 0.006, 0.03 + 0.0133 * math.sin(a)), (0.0012, 0.01, 0.0012), bev=0)), "plastic")
+    clip = kit.box("plastic_clip", A, coll, (0.02, 0.003, -0.005), (0.03, 0.006, 0.01), rot=(0, 0, 0.9), bev=0.0012)
+    cell(fine(clip), "plastic")
+    return {"views": [((0.18, 0.14, 0.2), (0, 0.01, 0.0)), ((-0.17, 0.11, -0.14), (0, 0.01, 0.0)), ((0.02, 0.2, 0.06), (0, 0.0, 0.0))]}
+
+
+def build_fabric(M, coll):
+    """Fabric ("for bandages and padding"): squares of cloth folded in a
+    stack, a torn rag thrown over the top. ~15 x 12 cm."""
+    A = M["atlas"]
+    y = 0.0
+    for k, (w, d, c, rot) in enumerate(((0.15, 0.12, "canvas_olive", 0.05), (0.14, 0.11, "canvas_bone", -0.08), (0.145, 0.115, "canvas_olive", 0.12))):
+        o = kit.box(f"fabric_fold{k}", A, coll, (0.002 * k, y + 0.0045, -0.002 * k), (w, 0.009, d), rot=(0, 0, rot), bev=0)
+        kit.bevel(o, 0.0038, 3)
+        for poly in o.data.polygons:
+            poly.use_smooth = True
+        cell(fine(o), c)
+        y += 0.0088
+    rag = [(-0.07, y + 0.001, -0.02), (-0.03, y + 0.004, -0.01), (0.01, y + 0.002, 0.005), (0.05, y - 0.004, 0.02), (0.075, y - 0.02, 0.03), (0.08, y - 0.035, 0.032)]
+    pts = []
+    for a_, b_ in zip(rag, rag[1:]):
+        for t in np.linspace(0, 1, 3)[:-1]:
+            pts.append(tuple(a_[i] + (b_[i] - a_[i]) * t for i in range(3)))
+    pts.append(rag[-1])
+    cell(strip("fabric_rag", A, coll, pts, 0.06, thick=0.0015, side=(0.3, 0, -0.95), ragged=0.004, seed=121), "canvas_bone")
+    return {"views": [((0.22, 0.18, 0.24), (0, 0.02, 0.0)), ((-0.2, 0.13, -0.17), (0, 0.02, 0.0)), ((0.03, 0.25, 0.07), (0, 0.02, 0.0))]}
+
+
+def build_chemicals(M, coll):
+    """Chemicals ("solvents and powders, handle with care"): a dented
+    plastic bottle with a screw cap, a hand-marked paper label tied on.
+    ~14 cm tall."""
+    A = M["atlas"]
+    r, h = 0.03, 0.11
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, segments=20, radius1=r, radius2=r, depth=h)
+    for v in bm.verts:  # a dent in one side, a shoulder narrowing to the neck
+        z = v.co.z
+        if v.co.xy.length > 1e-6:
+            if z > h / 2 - 0.001:
+                v.co.xy *= 0.95
+            dx, dy = v.co.x, v.co.y
+            if dx > r * 0.6 and abs(z) < h * 0.25:
+                v.co.x -= 0.006 * (1 - abs(z) / (h * 0.25))
+    bottle = kit.mesh_obj("chem_bottle", bm, A, coll, kit.g2b(0, h / 2, 0), (0, 0, 0))
+    kit.bevel(bottle, 0.006, 3)
+    for poly in bottle.data.polygons:
+        poly.use_smooth = True
+    bottle["uv"] = "box"
+    cell(fine(bottle), "plastic")
+    cell(fine(kit.cylinder("chem_shoulder", A, coll, (0, h, 0), (0, h + 0.012, 0), 0.02, segments=16, bev=0.004)), "plastic")
+    cell(fine(kit.cylinder("chem_cap", A, coll, (0, h + 0.012, 0), (0, h + 0.026, 0), 0.0125, segments=16, bev=0.0015)), "rubber")
+    cell(fine(kit.box("chem_label", A, coll, (0, h * 0.5, r + 0.0006), (0.035, 0.04, 0.0006), rot=(0, 0, 0.05), bev=0)), "paper")
+    cell(fine(ring_obj("chem_label_string", A, coll, (0, h * 0.5 + 0.022, 0), r + 0.0012, 0.0008)), "twine")
+    return {"views": [((0.2, 0.16, 0.24), (0, 0.06, 0.0)), ((-0.2, 0.12, -0.16), (0, 0.06, 0.0)), ((0.08, 0.1, 0.14), (0, 0.06, 0.02))]}
+
+
+def build_wires(M, coll):
+    """Wires ("copper, mostly"): a coil of bare copper wire twisted shut with
+    its own tail, a short bundle of cut insulated wire beside it. ~12 cm."""
+    A = M["atlas"]
+    coil = []
+    for k in range(240):
+        t = k / 239
+        a = t * 2 * math.pi * 9
+        rr = 0.035 + 0.003 * math.sin(a * 0.5) + 0.002 * math.sin(t * 40)
+        coil.append((rr * math.cos(a) - 0.015, 0.003 + 0.004 * math.sin(t * 7) + 0.0012 * (k % 3), rr * math.sin(a)))
+    cell(wire("wires_coil", A, coll, coil, 0.0012), "copper")
+    for k in range(3):  # the twist holding it shut
+        a = 0.3 + k * 0.03
+        cell(fine(ring_obj(f"wires_twist{k}", A, coll, (0.022 + k * 0.003, 0.004, 0.003), 0.004, 0.0009, axis="x", n=10)), "copper")
+    for k in range(4):  # cut lengths of insulated wire, the copper showing at the ends
+        z = 0.05 + k * 0.006
+        a, b_ = (-0.05, 0.003, z + 0.004 * k), (0.04, 0.003, z - 0.003 * k)
+        cell(wire(f"wires_cable{k}", A, coll, [a, ((a[0] + b_[0]) / 2, 0.006, (a[2] + b_[2]) / 2 + 0.006), b_], 0.0026), "rubber" if k % 2 else "plastic")
+        cell(fine(kit.cylinder(f"wires_cable{k}_end", A, coll, b_, (b_[0] + 0.008, b_[1], b_[2]), 0.0012, segments=6, bev=0)), "copper")
+    return {"views": [((0.17, 0.14, 0.2), (0, 0.005, 0.02)), ((-0.16, 0.11, -0.12), (0, 0.005, 0.02)), ((0.02, 0.2, 0.06), (0, 0.0, 0.02))]}
+
+
+def build_battery(M, coll):
+    """Battery ("still holds some charge"): a salvaged battery block, its
+    casing cracked and taped, brass and copper terminals on top with a
+    scrap of wire still clamped on, the old label half gone. ~12 x 9 cm."""
+    A = M["atlas"]
+    W, H, D = 0.12, 0.085, 0.07
+    case = kit.box("battery_case", A, coll, (0, H / 2, 0), (W, H, D), bev=0)
+    kit.bevel(case, 0.006, 2)
+    cell(fine(case), "husk")
+    lid = kit.box("battery_lid", A, coll, (0, H + 0.004, 0), (W - 0.004, 0.008, D - 0.004), bev=0)
+    kit.bevel(lid, 0.003, 2)
+    cell(fine(lid), "plastic")
+    for k, (x, c) in enumerate(((-0.035, "brass"), (0.035, "copper"))):
+        cell(fine(kit.cylinder(f"battery_post{k}", A, coll, (x, H + 0.008, 0), (x, H + 0.022, 0), 0.0065, segments=12, bev=0.0012)), c)
+        cell(fine(kit.box(f"battery_clamp{k}", A, coll, (x, H + 0.016, 0), (0.02, 0.008, 0.014), bev=0.0012)), "steel_rust")
+    lead = [(0.035, H + 0.019, 0.004), (0.045, H + 0.03, 0.02), (0.07, H + 0.02, 0.038), (0.085, H * 0.6, 0.05), (0.095, 0.02, 0.055), (0.11, 0.004, 0.06), (0.13, 0.004, 0.05)]
+    cell(wire("battery_lead", A, coll, lead, 0.0028), "rubber")  # a scrap of lead still clamped on, trailing to the ground
+    cell(fine(kit.box("battery_label", A, coll, (-0.022, H * 0.6, D / 2 + 0.0005), (0.04, 0.026, 0.0006), rot=(0, 0, -0.06), bev=0)), "paper")
+    tape = kit.box("battery_tape", A, coll, (0.03, H * 0.45, D / 2 + 0.0008), (0.018, 0.05, 0.001), rot=(0, 0, 0.5), bev=0)  # cloth tape over a crack
+    cell(fine(tape), "canvas_olive")
+    return {"views": [((0.24, 0.2, 0.26), (0, 0.05, 0.0)), ((-0.22, 0.15, -0.18), (0, 0.05, 0.0)), ((0.06, 0.2, 0.12), (0, 0.08, 0.0))]}
+
+
+ITEMS = {"scrap": build_scrap, "rubber": build_rubber, "plastic": build_plastic, "fabric": build_fabric, "chemicals": build_chemicals,
+         "wires": build_wires, "battery": build_battery,
+         "ammo_light": build_ammo_light, "ammo_medium": build_ammo_medium, "ammo_heavy": build_ammo_heavy, "ammo_shotgun": build_ammo_shotgun,
          "frag": build_frag, "bandage": build_bandage, "med_kit": build_med_kit, "shield_cell": build_shield_cell,
          "shield_light": lambda M, c: build_shield(M, c, "light"), "shield_medium": lambda M, c: build_shield(M, c, "medium"),
          "shield_heavy": lambda M, c: build_shield(M, c, "heavy")}
