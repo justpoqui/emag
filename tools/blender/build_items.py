@@ -70,7 +70,7 @@ def make_item_atlas():
         "steel_rust": ("#3f342c", "#2c241e", fine_ * 0.3 + mid * 0.1, 0.8, 0.4),  # rust kept under 35% saturation (art bible 6.2)
         "steel_bare": ("#7d7b76", "#4c4a46", mid * 0.12, 0.45, 0.9),
         "brass": ("#9c7c3c", "#5c4a28", mid * 0.3, 0.4, 1.0),
-        "leather": ("#4e3626", "#76563c", mid, 0.65, 0.0),
+        "leather": ("#3b2c22", "#52402f", mid * 0.6, 0.65, 0.0),  # worn brown, under 35% saturation
         "paper": ("#d6cdb4", "#a89a76", fine_ * 0.4, 0.92, 0.0),
         "rubber": ("#262422", "#3a3632", fine_ * 0.5, 0.85, 0.0),
         "copper": ("#a5603a", "#4a6a58", mid * 0.3, 0.4, 1.0),
@@ -880,7 +880,192 @@ def build_husk_heart(M, coll):
     return {"views": [((0.2, 0.16, 0.22), (0, 0.05, 0.0)), ((-0.2, 0.12, -0.16), (0, 0.05, 0.0)), ((0.09, 0.08, 0.13), (0, 0.05, 0.0))]}
 
 
-ITEMS = {"husk_plating": build_husk_plating, "husk_circuit": build_husk_circuit, "husk_heart": build_husk_heart,
+def extruded(name, A, coll, outline, y0, thick, bev=0.0008):
+    """A flat solid from a closed outline [(x, z)] lying on the ground at
+    height y0, `thick` tall."""
+    bm = bmesh.new()
+    verts = [bm.verts.new(kit.g2b(x, y0, z)) for x, z in outline]
+    face = bm.faces.new(verts)
+    ext = bmesh.ops.extrude_face_region(bm, geom=[face])
+    moved = [e for e in ext["geom"] if isinstance(e, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, vec=kit.g2b(0, thick, 0), verts=moved)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    o = kit.mesh_obj(name, bm, A, coll, (0, 0, 0), (0, 0, 0))
+    if bev:
+        kit.bevel(o, bev, 1)
+    o["uv"] = "box"
+    return fine(o)
+
+
+def build_rusted_gear(M, coll):
+    """Rusted Gear ("sells for a little"): a heavy spur gear from some old
+    machine, rusted through, a few teeth chipped, lying flat. ~10 cm."""
+    A = M["atlas"]
+    rr_ = np.random.default_rng(141)
+    n, r_root, r_tip = 18, 0.042, 0.05
+    pts = []
+    for k in range(n):
+        chipped = k in (3, 11)
+        tip = r_root + (r_tip - r_root) * (0.4 if chipped else 1.0)
+        for f, rad in ((0.0, r_root), (0.18, tip), (0.42, tip), (0.6, r_root)):
+            a = (k + f) / n * 2 * math.pi
+            pts.append((rad * math.cos(a), rad * math.sin(a)))
+    cell(extruded("gear_rim", A, coll, pts, 0.0, 0.012), "steel_rust")
+    cell(fine(kit.cylinder("gear_hub", A, coll, (0, 0.0, 0), (0, 0.018, 0), 0.013, segments=20, bev=0.0015)), "steel_rust")
+    cell(fine(kit.cylinder("gear_bore", A, coll, (0, 0.018, 0), (0, 0.0185, 0), 0.006, segments=12, bev=0)), "rubber")
+    cell(fine(kit.box("gear_key", A, coll, (0.0065, 0.0182, 0), (0.003, 0.0004, 0.003), bev=0)), "rubber")
+    return {"views": [((0.16, 0.14, 0.17), (0, 0.006, 0)), ((-0.15, 0.09, -0.12), (0, 0.006, 0)), ((0.02, 0.18, 0.05), (0, 0.0, 0))]}
+
+
+def build_old_radio(M, coll):
+    """Old Radio ("from before the Husks came"): a portable set in a worn
+    leather case, a steel speaker grille, the tuning dial behind its glass,
+    two knobs, a carry strap and the aerial folded down. ~20 x 13 cm."""
+    A = M["atlas"]
+    W, H, D = 0.2, 0.13, 0.07
+    case = kit.box("radio_case", A, coll, (0, H / 2, 0), (W, H, D), bev=0)
+    kit.bevel(case, 0.012, 3)
+    cell(fine(case), "leather")
+    grille = kit.box("radio_grille", A, coll, (-0.035, H * 0.48, D / 2 + 0.001), (0.1, 0.085, 0.002), bev=0.002)
+    cell(fine(grille), "steel_bare")
+    for k in range(7):
+        cell(fine(kit.box(f"radio_slot{k}", A, coll, (-0.035, H * 0.48 - 0.033 + k * 0.011, D / 2 + 0.0022), (0.088, 0.0035, 0.0008), bev=0)), "rubber")
+    cell(fine(kit.box("radio_dial", A, coll, (0.058, H * 0.62, D / 2 + 0.001), (0.055, 0.03, 0.002), bev=0.002)), "paper")
+    cell(fine(kit.box("radio_dial_glass", A, coll, (0.058, H * 0.62, D / 2 + 0.0025), (0.05, 0.025, 0.001), bev=0.001)), "glass_amber")
+    cell(fine(kit.box("radio_dial_needle", A, coll, (0.05, H * 0.62, D / 2 + 0.0034), (0.0012, 0.022, 0.0005), bev=0)), "rubber")
+    for k, x in enumerate((0.042, 0.074)):
+        cell(fine(kit.cylinder(f"radio_knob{k}", A, coll, (x, H * 0.32, D / 2), (x, H * 0.32, D / 2 + 0.012), 0.009, segments=14, bev=0.0015)), "rubber")
+        cell(fine(kit.cylinder(f"radio_knob{k}_cap", A, coll, (x, H * 0.32, D / 2 + 0.012), (x, H * 0.32, D / 2 + 0.013), 0.006, segments=12, bev=0)), "brass")
+    strap = [(-W / 2 + 0.02, H - 0.002, 0), (-W / 2 + 0.03, H + 0.03, 0), (0, H + 0.04, 0), (W / 2 - 0.03, H + 0.03, 0), (W / 2 - 0.02, H - 0.002, 0)]
+    cell(strip("radio_strap", A, coll, strap, 0.018, thick=0.003, side=(0, 0, 1), seed=142), "leather")
+    for sx in (-1, 1):
+        cell(fine(kit.box(f"radio_strap_lug{sx}", A, coll, (sx * (W / 2 - 0.02), H, 0), (0.012, 0.01, 0.022), bev=0.0015)), "brass")
+    cell(fine(kit.cylinder("radio_aerial", A, coll, (W / 2 - 0.012, H + 0.002, -D / 2 + 0.01), (-W / 2 + 0.03, H + 0.004, -D / 2 + 0.01), 0.0025, segments=8, bev=0)), "steel_bare")
+    cell(fine(kit.cylinder("radio_aerial_tip", A, coll, (-W / 2 + 0.03, H + 0.004, -D / 2 + 0.01), (-W / 2 + 0.024, H + 0.004, -D / 2 + 0.01), 0.0045, segments=10, bev=0.001)), "steel_bare")
+    return {"views": [((0.3, 0.22, 0.34), (0, 0.07, 0)), ((-0.3, 0.17, -0.25), (0, 0.07, 0)), ((0.12, 0.1, 0.2), (0.03, 0.08, 0.03))]}
+
+
+def build_pocket_watch(M, coll):
+    """Pocket Watch ("still ticks, traders love it"): a brass case lying
+    open-faced, the winding crown and bow, a paper-white face with hour
+    marks and two hands, its chain coiled beside it. ~5 cm."""
+    A = M["atlas"]
+    r = 0.024
+    cell(fine(kit.cylinder("watch_case", A, coll, (0, 0, 0), (0, 0.011, 0), r, segments=32, bev=0.003)), "brass")
+    cell(fine(kit.cylinder("watch_bezel", A, coll, (0, 0.011, 0), (0, 0.0128, 0), r * 0.94, segments=32, bev=0.0008)), "brass")
+    cell(fine(kit.cylinder("watch_face", A, coll, (0, 0.0128, 0), (0, 0.0131, 0), r * 0.86, segments=32, bev=0)), "canvas_bone")
+    for k in range(12):
+        a = k / 12 * 2 * math.pi
+        cell(fine(kit.box(f"watch_mark{k}", A, coll, (0.0175 * math.cos(a), 0.01325, 0.0175 * math.sin(a)), (0.0035, 0.0003, 0.0009), rot=(0, 0, -a), bev=0)), "rubber")
+    cell(fine(kit.box("watch_hand_h", A, coll, (0.004, 0.0134, -0.003), (0.0012, 0.0003, 0.011), rot=(0, 0, 0.9), bev=0)), "rubber")
+    cell(fine(kit.box("watch_hand_m", A, coll, (-0.002, 0.0135, -0.007), (0.0009, 0.0003, 0.016), rot=(0, 0, -0.35), bev=0)), "rubber")
+    cell(fine(kit.cylinder("watch_crown", A, coll, (0, 0.0055, -r), (0, 0.0055, -r - 0.006), 0.0035, segments=12, bev=0.0006)), "brass")
+    cell(fine(ring_obj("watch_bow", A, coll, (0, 0.0055, -r - 0.011), 0.006, 0.0011, axis="z", n=16)), "brass")
+    chain = []
+    for k in range(80):
+        t = k / 79
+        a = t * 2 * math.pi * 1.4
+        rr = 0.016 + 0.006 * t
+        chain.append((0.004 + rr * math.sin(a) - 0.01 * t, 0.0012, -r - 0.017 - 0.012 + rr * math.cos(a) * 0.8))
+    cell(wire("watch_chain", A, coll, chain, 0.0011), "brass")
+    return {"views": [((0.09, 0.08, 0.1), (0, 0.005, -0.01)), ((-0.08, 0.06, -0.09), (0, 0.005, -0.015)), ((0.01, 0.11, 0.03), (0, 0.006, -0.008))]}
+
+
+def build_film_camera(M, coll):
+    """Film Camera ("somebody remembered something with this"): a
+    rangefinder body wrapped in leather, a steel top plate with the wind
+    lever, shutter button and viewfinder windows, the lens barrel with its
+    rings, a frayed strap. ~13 x 8 cm."""
+    A = M["atlas"]
+    W, H, D = 0.13, 0.075, 0.035
+    body = kit.box("cam_body", A, coll, (0, H / 2, 0), (W, H * 0.78, D), bev=0)
+    kit.bevel(body, 0.007, 3)
+    cell(fine(body), "leather")
+    top = kit.box("cam_top", A, coll, (0, H * 0.84, 0), (W - 0.002, H * 0.2, D + 0.001), bev=0)
+    kit.bevel(top, 0.005, 2)
+    cell(fine(top), "steel_bare")
+    for k, x in enumerate((-0.045, -0.02)):
+        cell(fine(kit.box(f"cam_window{k}", A, coll, (x, H * 0.85, D / 2 + 0.0008), (0.014, 0.009, 0.001), bev=0.0006)), "glass_amber")
+    lens = [(0, H * 0.45, D / 2), (0, H * 0.45, D / 2 + 0.03)]
+    cell(fine(kit.cylinder("cam_lens_mount", A, coll, lens[0], (0, H * 0.45, D / 2 + 0.006), 0.021, segments=24, bev=0.001)), "steel_bare")
+    cell(fine(kit.cylinder("cam_lens_ring", A, coll, (0, H * 0.45, D / 2 + 0.006), (0, H * 0.45, D / 2 + 0.018), 0.018, segments=24, bev=0.0012)), "rubber")
+    cell(fine(kit.cylinder("cam_lens_barrel", A, coll, (0, H * 0.45, D / 2 + 0.018), (0, H * 0.45, D / 2 + 0.03), 0.016, segments=24, bev=0.0012)), "steel_bare")
+    cell(fine(kit.cylinder("cam_lens_glass", A, coll, (0, H * 0.45, D / 2 + 0.0295), (0, H * 0.45, D / 2 + 0.0302), 0.012, segments=20, bev=0)), "glass_amber")
+    cell(fine(kit.cylinder("cam_shutter", A, coll, (0.045, H * 0.94, 0.004), (0.045, H * 0.94 + 0.005, 0.004), 0.004, segments=10, bev=0.0008)), "steel_bare")
+    cell(fine(kit.box("cam_lever", A, coll, (0.03, H * 0.95, -0.006), (0.024, 0.002, 0.006), rot=(0, 0, 0.5), bev=0.0006)), "steel_bare")
+    cell(fine(kit.cylinder("cam_rewind", A, coll, (-0.05, H * 0.94, 0), (-0.05, H * 0.94 + 0.006, 0), 0.007, segments=12, bev=0.001)), "steel_bare")
+    strap = [(-W / 2, H * 0.8, 0), (-W / 2 - 0.012, H * 0.6, 0.004), (-W / 2 - 0.02, 0.02, 0.02), (-W / 2 - 0.01, 0.002, 0.05), (-0.02, 0.002, 0.06), (W / 2 + 0.005, 0.002, 0.045)]
+    cell(strip("cam_strap", A, coll, strap, 0.012, thick=0.002, side=(0, 1, 0), ragged=0.0005, seed=143), "leather")
+    return {"views": [((0.2, 0.15, 0.24), (0, 0.04, 0.01)), ((-0.2, 0.12, -0.18), (0, 0.04, 0)), ((0.06, 0.06, 0.15), (0, 0.035, 0.02))]}
+
+
+def build_music_box(M, coll):
+    """Music Box ("plays a song nobody knows anymore"): a small box with
+    brass corners, its lid standing open on its hinge; inside, the steel
+    comb and the brass cylinder studded with pins; a winding key in the
+    side. ~11 x 8 cm."""
+    A = M["atlas"]
+    W, H, D, t = 0.11, 0.05, 0.08, 0.005
+    cell(fine(kit.box("mbox_floor", A, coll, (0, t / 2, 0), (W, t, D), bev=0.001)), "leather")
+    for sx in (-1, 1):
+        cell(fine(kit.box(f"mbox_side{sx}", A, coll, (sx * (W / 2 - t / 2), H / 2, 0), (t, H, D), bev=0.0012)), "leather")
+        cell(fine(kit.box(f"mbox_end{sx}", A, coll, (0, H / 2, sx * (D / 2 - t / 2)), (W, H, t), bev=0.0012)), "leather")
+        for sz in (-1, 1):
+            cell(fine(kit.box(f"mbox_corner{sx}{sz}", A, coll, (sx * (W / 2 - 0.004), H / 2, sz * (D / 2 - 0.004)), (0.011, H + 0.002, 0.011), bev=0.0012)), "brass")
+    lid = kit.box("mbox_lid", A, coll, (0, H + 0.035, -D / 2 - 0.004), (W, 0.07, t), rot=(-0.25, 0, 0), bev=0.0012)
+    cell(fine(lid), "leather")
+    cell(fine(kit.box("mbox_lid_inner", A, coll, (0, H + 0.035, -D / 2 + 0.0002), (W - 0.012, 0.06, 0.001), rot=(-0.25, 0, 0), bev=0)), "paper")
+    cell(fine(kit.cylinder("mbox_hinge", A, coll, (-W / 2 + 0.01, H, -D / 2), (W / 2 - 0.01, H, -D / 2), 0.0025, segments=8, bev=0)), "brass")
+    cell(fine(kit.box("mbox_bed", A, coll, (0, 0.012, 0), (W - 0.016, 0.004, D - 0.016), bev=0.0008)), "steel_bare")
+    cy_ = 0.026
+    cell(fine(kit.cylinder("mbox_cylinder", A, coll, (-0.035, cy_, -0.008), (0.035, cy_, -0.008), 0.009, segments=20, bev=0.001)), "brass")
+    rr_ = np.random.default_rng(144)
+    for k in range(26):  # the pins that play the tune
+        x = rr_.uniform(-0.033, 0.033)
+        a = rr_.uniform(0, 2 * math.pi)
+        p0 = (x, cy_ + 0.009 * math.sin(a), -0.008 + 0.009 * math.cos(a))
+        p1 = (x, cy_ + 0.0105 * math.sin(a), -0.008 + 0.0105 * math.cos(a))
+        cell(fine(kit.cylinder(f"mbox_pin{k}", A, coll, p0, p1, 0.0006, segments=4, bev=0)), "steel_bare")
+    for k in range(14):  # the comb's teeth, longest at the bass end
+        x = -0.033 + k * 0.005
+        ln = 0.024 - k * 0.0008
+        cell(fine(kit.box(f"mbox_tooth{k}", A, coll, (x, cy_ + 0.0005, 0.004 + ln / 2), (0.004, 0.0012, ln), bev=0)), "steel_bare")
+    cell(fine(kit.box("mbox_comb_base", A, coll, (0, cy_ - 0.002, 0.024), (0.075, 0.008, 0.012), bev=0.0008)), "steel_bare")
+    cell(fine(kit.cylinder("mbox_key_stem", A, coll, (W / 2, 0.022, 0.01), (W / 2 + 0.012, 0.022, 0.01), 0.002, segments=8, bev=0)), "brass")
+    cell(fine(kit.box("mbox_key_wing", A, coll, (W / 2 + 0.014, 0.022, 0.01), (0.003, 0.016, 0.009), bev=0.001)), "brass")
+    return {"views": [((0.17, 0.17, 0.2), (0, 0.035, 0.0)), ((-0.17, 0.12, 0.15), (0, 0.035, 0.0)), ((0.03, 0.12, 0.09), (0, 0.025, 0.0))]}
+
+
+def build_gilded_relay(M, coll):
+    """Gilded Relay ("a Husk component plated in gold. Why?"): a machined
+    Husk relay, symmetrical and precise (art bible 5.4), its housing, coils
+    and terminals all plated in gold; the slate shows only in the gaps
+    between them. ~10 x 7 cm."""
+    A = M["atlas"]
+    W, H, D = 0.1, 0.03, 0.07
+    base = kit.box("relay_base", A, coll, (0, H / 2, 0), (W, H, D), bev=0)
+    kit.bevel(base, 0.006, 3)
+    cell(fine(base), "brass")
+    cell(fine(kit.box("relay_seam", A, coll, (0, H * 0.5, 0), (W + 0.001, 0.003, D + 0.001), bev=0)), "husk")  # the slate between the plated halves
+    for k, x in enumerate((-0.025, 0.025)):  # two coils on machined cradles
+        cell(fine(kit.box(f"relay_cradle{k}", A, coll, (x, H + 0.004, 0), (0.026, 0.008, 0.05), bev=0.0015)), "brass")
+        coil = kit.cylinder(f"relay_coil{k}", A, coll, (x, H + 0.018, -0.022), (x, H + 0.018, 0.022), 0.012, segments=20, bev=0.0015)
+        cell(fine(coil), "brass")
+        for j in range(5):  # the windings
+            z = -0.016 + j * 0.008
+            cell(fine(ring_obj(f"relay_winding{k}_{j}", A, coll, (x, H + 0.018, z), 0.0125, 0.0012, axis="z", n=20)), "brass")
+    for sx in (-1, 1):  # the Husk chevron raised on the housing's front edge, gilded too
+        cell(wire(f"relay_chevron{sx}", A, coll, [(sx * 0.014, H + 0.0012, D / 2 - 0.004), (0, H + 0.0012, D / 2 - 0.016)], 0.0016), "brass")
+    for k in range(4):  # terminals along the front, slate showing round each
+        x = -0.03 + k * 0.02
+        cell(fine(kit.cylinder(f"relay_term{k}_ring", A, coll, (x, H * 0.5, D / 2), (x, H * 0.5, D / 2 + 0.002), 0.005, segments=12, bev=0)), "husk")
+        cell(fine(kit.cylinder(f"relay_term{k}", A, coll, (x, H * 0.5, D / 2), (x, H * 0.5, D / 2 + 0.008), 0.0028, segments=10, bev=0.0005)), "brass")
+    return {"views": [((0.16, 0.13, 0.17), (0, 0.03, 0.0)), ((-0.15, 0.1, -0.13), (0, 0.03, 0.0)), ((0.05, 0.09, 0.11), (0, 0.03, 0.02))]}
+
+
+ITEMS = {"rusted_gear": build_rusted_gear, "old_radio": build_old_radio, "pocket_watch": build_pocket_watch, "film_camera": build_film_camera,
+         "music_box": build_music_box, "golden_relay": build_gilded_relay,
+         "husk_plating": build_husk_plating, "husk_circuit": build_husk_circuit, "husk_heart": build_husk_heart,
          "scrap": build_scrap, "rubber": build_rubber, "plastic": build_plastic, "fabric": build_fabric, "chemicals": build_chemicals,
          "wires": build_wires, "battery": build_battery,
          "ammo_light": build_ammo_light, "ammo_medium": build_ammo_medium, "ammo_heavy": build_ammo_heavy, "ammo_shotgun": build_ammo_shotgun,
