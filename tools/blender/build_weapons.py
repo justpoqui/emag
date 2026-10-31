@@ -675,7 +675,105 @@ def build_boar(M, coll):
     return {"length": 1.18, "views": [((1.85, 0.06, 0.12), (0, -0.03, 0.12)), ((0.9, 0.4, -0.7), (0, -0.03, 0.1)), ((0.32, 0.1, 0.22), (0, -0.005, 0.12))]}
 
 
-GUNS = {"mule": build_mule, "sparrow": build_sparrow, "badger": build_badger, "hammerhead": build_hammerhead, "boar": build_boar}
+def cone(name, mat, coll, y, z0, z1, r0, r1, seg=24, open_end=False, wall=0.002):
+    """A turned cone along the barrel axis (a scope's bell or eyepiece). An
+    open end is a thin-walled sleeve you can see into."""
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=not open_end, segments=seg, radius1=r0, radius2=r1, depth=abs(z1 - z0))
+    if open_end:
+        bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=wall)
+    # create_cone runs radius1 -> radius2 along +Z; game +z is Blender -Y, so turn it to face the muzzle
+    o = kit.mesh_obj(name, bm, mat, coll, kit.g2b(0, y, (z0 + z1) / 2), (R90 if z1 > z0 else -R90, 0, 0))
+    o["uv"] = "box"
+    return tag(o)
+
+
+def build_heron(M, coll):
+    """The Heron: a break-action marksman rifle ("one shell, one hole"),
+    pre-fall and the best-kept gun in the Sanctuary: worn blued steel and
+    walnut, a long barrel with a baffled muzzle brake, a scope in two rings,
+    a raised walnut cheek rest on posts, a bipod folded under the barrel.
+    One heavy round. ~1.46 m."""
+    D, W = M["steel"], M["wood"]
+    by, sy = 0.02, 0.078  # bore and scope axes
+
+    # the action: a machined block that the barrels hinge from, a top lever behind it
+    profile("heron_action", D, coll, [(-0.075, 0.03), (-0.05, 0.036), (0.1, 0.036), (0.1, -0.018), (0.06, -0.032), (-0.075, -0.03)], 0.04, bev=0.006, grain=False)
+    tube("heron_hinge", D, coll, (-0.0215, -0.012, 0.088), (0.0215, -0.012, 0.088), 0.007, seg=16)
+    profile("heron_lever", D, coll, [(-0.085, 0.036), (-0.055, 0.036), (-0.06, 0.044), (-0.105, 0.047), (-0.112, 0.041)], 0.012, bev=0.002, grain=False)
+    for k, z in enumerate((-0.04, 0.03)):
+        tag(kit.cylinder(f"heron_pin{k}", D, coll, (0.0195, -0.012, z), (0.021, -0.012, z), 0.003, segments=10, bev=0))
+    part("heron_monoblock", D, coll, (0, by, 0.115), (0.036, 0.042, 0.03), bev=0.004)
+
+    # the barrel: heavy at the chamber, slimmer to the muzzle; a baffled brake
+    tube("heron_barrel_chamber", D, coll, (0, by, 0.13), (0, by, 0.3), 0.0165, seg=24)
+    cone("heron_barrel_taper", D, coll, by, 0.3, 0.33, 0.0165, 0.0125)
+    tube("heron_barrel", D, coll, (0, by, 0.33), (0, by, 0.8), 0.0125, seg=24)
+    for k in range(4):
+        part(f"heron_baffle{k}", D, coll, (0, by, 0.805 + k * 0.024), (0.036, 0.032, 0.009), bev=0.002)
+    for s_ in (-1, 1):
+        part(f"heron_brake_strap{s_}", D, coll, (0, by + s_ * 0.0125, 0.84), (0.026, 0.007, 0.08), bev=0.0015)
+    tube("heron_bore", D, coll, (0, by, 0.877), (0, by, 0.8785), 0.0075, seg=12, bev=0)
+
+    # the forend: walnut under the barrel, a steel latch
+    o = profile("heron_forend", W, coll, [(0.12, 0.004), (0.42, 0.004), (0.45, -0.006), (0.43, -0.04), (0.14, -0.043), (0.115, -0.026)], 0.044, bev=0.011)
+    o["tile"] = 0.5
+    o.modifiers.new("WeightedNormal", "WEIGHTED_NORMAL").keep_sharp = True
+    part("heron_forend_latch", D, coll, (0, -0.0435, 0.3), (0.014, 0.004, 0.03), bev=0.001)
+
+    # the bipod, folded forward under the barrel on a clamp
+    tube("heron_bipod_band", D, coll, (0, by, 0.47), (0, by, 0.49), 0.0155, seg=20)
+    part("heron_bipod_block", D, coll, (0, -0.001, 0.48), (0.032, 0.016, 0.026), bev=0.003)
+    for s_ in (-1, 1):
+        tube(f"heron_bipod_leg{s_}", D, coll, (s_ * 0.011, -0.006, 0.49), (s_ * 0.011, -0.006, 0.74), 0.0045, seg=10)
+        tube(f"heron_bipod_inner{s_}", D, coll, (s_ * 0.011, -0.006, 0.74), (s_ * 0.011, -0.006, 0.77), 0.0035, seg=10)
+        tag(kit.cylinder(f"heron_bipod_foot{s_}", D, coll, (s_ * 0.011, -0.006, 0.77), (s_ * 0.011, -0.006, 0.778), 0.007, segments=12, bev=0.001))
+
+    # the scope: two rings on bases, a tube with turrets, a bell and an eyepiece, both open with the lenses set back
+    for k, z in enumerate((-0.045, 0.07)):
+        part(f"heron_scope_base{k}", D, coll, (0, 0.043, z), (0.022, 0.014, 0.02), bev=0.002)
+        part(f"heron_scope_post{k}", D, coll, (0, 0.056, z), (0.012, 0.016, 0.014), bev=0.001)
+        tube(f"heron_scope_ring{k}", D, coll, (0, sy, z - 0.008), (0, sy, z + 0.008), 0.0175, seg=24)
+    tube("heron_scope_tube", D, coll, (0, sy, -0.12), (0, sy, 0.16), 0.0135, seg=24)
+    cone("heron_scope_bell", D, coll, sy, 0.16, 0.2, 0.0135, 0.025)
+    cone("heron_scope_objective", D, coll, sy, 0.2, 0.25, 0.025, 0.025, open_end=True)
+    tube("heron_scope_lens_front", D, coll, (0, sy, 0.232), (0, sy, 0.234), 0.022, seg=24, bev=0)
+    cone("heron_scope_eye_taper", D, coll, sy, -0.12, -0.15, 0.0135, 0.02)
+    cone("heron_scope_eyepiece", D, coll, sy, -0.15, -0.2, 0.02, 0.02, open_end=True)
+    tube("heron_scope_lens_rear", D, coll, (0, sy, -0.17), (0, sy, -0.168), 0.017, seg=20, bev=0)
+    tube("heron_turret_top", D, coll, (0, sy + 0.012, 0.012), (0, sy + 0.03, 0.012), 0.011, seg=16)
+    tube("heron_turret_side", D, coll, (0.012, sy, 0.012), (0.03, sy, 0.012), 0.011, seg=16)
+
+    # trigger guard and trigger
+    profile("heron_guard_plate", D, coll, [(-0.075, -0.028), (0.045, -0.03), (0.045, -0.037), (-0.075, -0.035)], 0.02, bev=0.002, grain=False)
+    ring("heron_guard", D, coll, (0, -0.035, -0.02), 0.03, 0.0035, plane="zy", a0=math.pi, a1=2 * math.pi, n=18)
+    part("heron_trigger", D, coll, (0, -0.049, -0.016), (0.006, 0.026, 0.007), rot=(-0.3, 0, 0), bev=0.0015)
+
+    # the stock: walnut with a pistol grip, a straight comb for the scope, narrow at the wrist
+    def wrist(z, y):
+        t = min(max((z + 0.36) / 0.24, 0.0), 1.0)
+        return 0.72 + 0.28 * abs(2 * t - 1)
+    o = profile("heron_stock", W, coll, [(-0.073, 0.03), (-0.14, 0.024), (-0.56, 0.02), (-0.572, -0.135), (-0.42, -0.104), (-0.27, -0.08),
+                                         (-0.215, -0.078), (-0.19, -0.104), (-0.176, -0.14), (-0.166, -0.156), (-0.136, -0.16), (-0.122, -0.142),
+                                         (-0.105, -0.088), (-0.085, -0.034)], 0.044, bev=0.012, taper=wrist)
+    o["tile"] = 0.5
+    o.modifiers.new("WeightedNormal", "WEIGHTED_NORMAL").keep_sharp = True
+    # the cheek rest: a walnut pad raised on two posts, locked with knurled screws
+    o = profile("heron_cheek", W, coll, [(-0.46, 0.056), (-0.26, 0.056), (-0.225, 0.046), (-0.24, 0.031), (-0.46, 0.03)], 0.042, bev=0.009, taper=lambda z, y: 0.85 + 0.15 * min(max((0.056 - y) / 0.026, 0), 1))
+    o["tile"] = 0.5
+    for k, z in enumerate((-0.29, -0.4)):
+        tube(f"heron_cheek_post{k}", D, coll, (0, 0.018, z), (0, 0.034, z), 0.0045, seg=10)
+        tube(f"heron_cheek_screw{k}", D, coll, (0.022, 0.012, z), (0.03, 0.012, z), 0.0055, seg=10)
+    part("heron_buttplate", D, coll, (0, -0.058, -0.572), (0.042, 0.158, 0.008), rot=(0.035, 0, 0), bev=0.003)
+    ring("heron_rear_swivel", D, coll, (0, -0.128, -0.48), 0.007, 0.0015, plane="zy", n=14)
+
+    marker("muzzle", coll, (0, by, 0.88))
+    marker("grip", coll, (0, -0.11, -0.15))
+    marker("fore", coll, (0, -0.03, 0.3))
+    return {"length": 1.46, "views": [((2.2, 0.06, 0.15), (0, -0.02, 0.15)), ((1.05, 0.45, -0.8), (0, -0.02, 0.12)), ((0.36, 0.17, 0.12), (0, 0.04, 0.0))]}
+
+
+GUNS = {"mule": build_mule, "sparrow": build_sparrow, "badger": build_badger, "hammerhead": build_hammerhead, "boar": build_boar, "heron": build_heron}
 
 
 # ---------- render & export ----------
