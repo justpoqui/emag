@@ -1,0 +1,141 @@
+[gd_scene format=3]
+
+[node name="Lights_hallway" type="Node3D"]
+
+[node name="hall_lamp0_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.57, -5.1)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 1.549
+omni_range = 5.42
+
+[node name="hall_lamp1_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 2.57, -5.1)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 1.549
+omni_range = 5.42
+
+[node name="hall_lamp2_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18.5, 2.57, -5.1)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 1.549
+omni_range = 5.42
+
+[node name="hall_lamp3_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28, 2.57, -5.1)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 1.549
+omni_range = 5.42
+
+[node name="hall_string_light_3" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.7230769230769236, 2.6420710059171597, -5.1)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.5
+omni_range = 2.5
+
+[node name="hall_string_light_9" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.876923076923076, 2.6420710059171597, -5.1)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.5
+omni_range = 2.5
+
+[node name="hall_string_light_15" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.476923076923075, 2.6420710059171597, -5.1)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.5
+omni_range = 2.5
+
+[node name="hall_string_light_21" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.076923076923075, 2.6420710059171597, -5.1)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.5
+omni_range = 2.5
+
+[node name="hall_string_light_27" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16.676923076923075, 2.6420710059171597, -5.1)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.5
+omni_range = 2.5
+
+[node name="hall_string_light_33" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 21.276923076923076, 2.6420710059171597, -5.1)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.5
+omni_range = 2.5
+
+[node name="hall_string_light_39" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25.876923076923077, 2.6420710059171597, -5.1)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.5
+omni_range = 2.5
+
+[node name="hall_string_light_45" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30.47692307692307, 2.6420710059171597, -5.1)
+light_color = Color(1.000, 0.660, 0.380, 1)
+light_energy = 0.5
+omni_range = 2.5
+
+[node name="shop0_neon_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.4, 2.6, -4.2)
+light_color = Color(0.850, 0.340, 0.480, 1)
+light_energy = 0.424
+omni_range = 2.5
+
+[node name="shop1_neon_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13.2, 2.6, -4.2)
+light_color = Color(0.910, 0.580, 0.230, 1)
+light_energy = 0.424
+omni_range = 2.5
+
+[node name="shop2_neon_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.8, 2.6, -4.2)
+light_color = Color(0.940, 0.700, 0.350, 1)
+light_energy = 0.424
+omni_range = 2.5
+
+[node name="shop3_neon_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 23.4, 2.6, -4.2)
+light_color = Color(0.910, 0.580, 0.230, 1)
+light_energy = 0.424
+omni_range = 2.5
+
+[node name="shop4_neon_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 27.4, 2.6, -4.2)
+light_color = Color(0.850, 0.340, 0.480, 1)
+light_energy = 0.424
+omni_range = 2.5
+
+[node name="grow_light" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.2, 1.4, -5.9)
+light_color = Color(0.850, 0.420, 0.550, 1)
+light_energy = 0.469
+omni_range = 2.5
+
+[node name="hall_neon_4_glow" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 2.5300000000000002, -5.52)
+light_color = Color(0.910, 0.580, 0.230, 1)
+light_energy = 0.548
+omni_range = 2.5
+
+[node name="hall_neon_14_glow" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 2.5300000000000002, -5.52)
+light_color = Color(0.940, 0.700, 0.350, 1)
+light_energy = 0.548
+omni_range = 2.5
+
+[node name="hall_neon_23_glow" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 23.75, 2.5300000000000002, -5.52)
+light_color = Color(0.850, 0.340, 0.480, 1)
+light_energy = 0.548
+omni_range = 2.5
+
+[node name="hall_neon_quarters_glow" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.0, 2.8000000000000003, -3.9200000000000004)
+light_color = Color(0.910, 0.580, 0.230, 1)
+light_energy = 0.548
+omni_range = 2.5
+
+[node name="hall_neon_lift_glow" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32.4, 2.7, -5.1)
+light_color = Color(0.180, 0.900, 0.820, 1)
+light_energy = 0.548
+omni_range = 2.5

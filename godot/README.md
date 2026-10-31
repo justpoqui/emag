@@ -46,16 +46,24 @@ Blender, stop re-exporting those files, or the export will overwrite the edits.
 | Room | Built by | Output |
 | --- | --- | --- |
 | The Diver's quarters | `tools/blender/build_quarters.py` (shared textures from `tools/blender/make_textures.py`) | `models/sanctuary/env_sanctuary_quarters.gltf` + `.bin`, textures in `textures/sanctuary/` |
+| Hallway, Trade Hall, Workshop, Checkout, Lift | `tools/blender/build_sanctuary.py` (same kit) | `models/sanctuary/env_sanctuary_<room>.gltf` + `.bin`, lamps in `scenes/sanctuary/lights_<room>.tscn` |
 
-The web-game export leaves the quarters out of `sanctuary.glb`, so the two
-never overlap. The quarters' lamps, reflection probe and glow are set up in
-`scenes/sanctuary.tscn` (`QuartersLights`, `QuartersProbe`), not in Blender.
+Rooms are rebuilt one at a time. `sanctuary.glb` (the web-game export)
+leaves out the finished rooms (the `FINISHED` list in
+`tools/export-glb/export.js`) and keeps the rest, plus the three traders
+until the characters are reworked. Finished so far: the quarters and the
+hallway.
+The quarters' lamps are hand-placed in `scenes/sanctuary.tscn`
+(`QuartersLights`, `QuartersProbe`); the other rooms' lamps are written by
+`build_sanctuary.py --export` from the lights placed in Blender, with
+brightness mapped as energy = 0.1 × √watts.
 
 Run the Blender scripts with Blender's Python module (`pip install bpy`):
 
 ```bash
 python tools/blender/make_textures.py 1024
 python tools/blender/build_quarters.py <work dir> --render --export
+python tools/blender/build_sanctuary.py <work dir> --render --export
 ```
 
 The `.blend` file and preview renders go to `<work dir>`, outside the repo

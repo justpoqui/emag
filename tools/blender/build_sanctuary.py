@@ -170,7 +170,7 @@ def scorch_texture():
     yy, xx = np.mgrid[0:W, 0:W] / W - 0.5
     rad = np.sqrt(xx ** 2 + (yy * 1.2) ** 2) * 2
     n = 0.6 * noise_img(W, W, (8, 8), 81) + 0.4 * noise_img(W, W, (30, 30), 82)
-    a = np.clip((1 - rad) * 1.6 + (n - 0.5) * 1.2, 0, 1) ** 1.5
+    a = np.clip((1 - rad) * 1.8 + (n - 0.5) * 1.2, 0, 1) ** 0.9
     col = np.stack([np.full((W, W), 0.06), np.full((W, W), 0.05), np.full((W, W), 0.04)], -1)
     rgba = np.dstack([(col * 255).astype(np.uint8), (np.clip(a * 1.3, 0, 1) * 255).astype(np.uint8)])
     Image.fromarray(rgba, "RGBA").save(os.path.join(TEX, "decal_scorch_albedo.png"))
@@ -331,7 +331,7 @@ def neon_sign(name, text, colour, coll, room, pos, facing, size=0.26):
     cu.align_x = "CENTER"
     cu.align_y = "CENTER"
     cu.fill_mode = "NONE"
-    cu.bevel_depth = 0.0075
+    cu.bevel_depth = 0.011 if size >= 0.3 else 0.0085
     cu.bevel_resolution = 2
     cu.resolution_u = 6
     tobj = bpy.data.objects.new(f"{name}_tmp", cu)
@@ -427,10 +427,27 @@ def build_hallway(M, P, coll):
     # timber mine sets along the tunnel, and the rails on their sleepers
     for k, x in enumerate((-4.4, 0.4, 2.6, 6.2, 11.0, 16.4, 21.2, 26.0, 28.6, 32.4)):
         mine_set(f"hall_set{k}", M, coll, x, -6.42, -3.78)
-    for k, z in enumerate((-4.85, -5.35)):
-        kit.box(f"hall_rail{k}", M["bare"], coll, (14.1, 0.035, z), (37.6, 0.06, 0.05), bev=0.008)
+    # the old cart rails: abandoned, so rusted, broken up, half buried (author request)
+    x = -4.4
+    seg = 0
+    while x < 32.8:
+        length = min(rng.uniform(2.2, 4.0), 32.8 - x)
+        if not (11.5 < x < 14.5):  # one length has been pulled up and taken
+            for k, z in enumerate((-4.85, -5.35)):
+                kit.box(f"hall_rail{seg}_{k}", M["rust"], coll, (x + length / 2, 0.006 + rng.uniform(-0.012, 0.006), z + rng.uniform(-0.015, 0.015)),
+                        (length - 0.03, 0.06, 0.05), rot=(rng.uniform(-0.01, 0.01), rng.uniform(-0.004, 0.004), rng.uniform(-0.006, 0.006)), bev=0.008)
+        x += length + rng.uniform(0.02, 0.08)
+        seg += 1
     for k, x in enumerate(np.arange(-4.4, 33, 0.6)):
-        kit.box(f"hall_sleeper{k}", M["timber"], coll, (x + rng.uniform(-0.03, 0.03), 0.02, -5.1), (0.13, 0.04, 0.82), rot=(0, 0, rng.uniform(-0.05, 0.05)), bev=0.008, grain="long")
+        roll = rng.random()
+        if roll < 0.2:
+            continue  # missing
+        if roll < 0.35:  # split: a short stub, knocked askew
+            kit.box(f"hall_sleeper{k}", M["timber_rot"], coll, (x + rng.uniform(-0.1, 0.1), 0.005, -5.1 + rng.choice((-0.25, 0.25))), (0.13, 0.035, rng.uniform(0.3, 0.45)),
+                    rot=(0, 0, rng.uniform(-0.6, 0.6)), bev=0.01, grain="long")
+            continue
+        kit.box(f"hall_sleeper{k}", M["timber_rot"], coll, (x + rng.uniform(-0.04, 0.04), -0.004, -5.1 + rng.uniform(-0.04, 0.04)), (0.13, 0.04, 0.82),
+                rot=(rng.uniform(-0.03, 0.03), rng.uniform(-0.03, 0.03), rng.uniform(-0.12, 0.12)), bev=0.01, grain="long")
     # the ore cart at the dead end, barrels beside it
     kit.box("hall_cart", M["steel"], coll, (-4.2, 0.6, -5.1), (0.9, 0.5, 1.1), bev=0.03)
     kit.box("hall_cart_base", M["dark"], coll, (-4.2, 0.28, -5.1), (0.72, 0.1, 0.92), bev=0.01)
@@ -451,7 +468,8 @@ def build_hallway(M, P, coll):
     for k in range(3):
         kit.box(f"hall_sealed_plate{k}", M["steel"], coll, (tx + rng.uniform(-0.45, 0.45), rng.uniform(0.5, 2.0), -6.46), (rng.uniform(0.4, 0.7), rng.uniform(0.3, 0.5), 0.02), rot=(0, 0, rng.uniform(-0.3, 0.3)), bev=0.004)
     kit.box("hall_sealed_brace", M["timber"], coll, (tx, 1.2, -6.44), (0.14, 2.7, 0.08), rot=(0, 0, 0.55), bev=0.01, grain="long")
-    kit.plane("hall_sealed_scorch", M["scorch"], coll, (tx, 1.5, -6.555), 3.4, 3.1, (R90, 0, 0))
+    # soot rises: the scorch spreads up and out around the boarded opening
+    kit.plane("hall_sealed_scorch", M["scorch"], coll, (tx, 2.15, -6.555), 5.0, 3.0, (R90, 0, 0))
     rocks("hall_sealed_rubble", M, coll, (tx, 0.0, -6.25), 9, (0.8, 0.05, 0.2), size=(0.08, 0.2))
     # cables and the vent duct along the ceiling
     kit.box("hall_duct", M["steel"], coll, (14, H - 0.25, -6.12), (37.8, 0.3, 0.45), bev=0.02)
@@ -506,7 +524,7 @@ def build_hallway(M, P, coll):
     # door signs and benches along the hall
     # handmade neon over each doorway, hung from the ceiling on chains
     for at, text, colour in ((4, "TRADE HALL", (0.91, 0.58, 0.23)), (14, "WORKSHOP", (0.94, 0.7, 0.35)), (23.75, "CHECKOUT", (0.85, 0.34, 0.48))):
-        neon_sign(f"hall_neon_{int(at)}", text, colour, coll, room, (at, 2.72, -5.72), 0.0, size=0.3)
+        neon_sign(f"hall_neon_{int(at)}", text, colour, coll, room, (at, 2.68, -5.72), 0.0, size=0.38)
     neon_sign("hall_neon_quarters", "YOUR QUARTERS", (0.91, 0.58, 0.23), coll, room, (-2.0, 2.95, -3.72), math.pi, size=0.2)
     neon_sign("hall_neon_lift", "LIFT", (0.18, 0.9, 0.82), coll, room, (32.6, 2.85, -5.1), -R90, size=0.3)
     for k, x in enumerate((9, 19)):
@@ -735,6 +753,8 @@ def main():
     pics = kit.make_pictures()
     make_room_pictures()
     M = kit.make_materials(pics)
+    M["rust"] = kit.pbr("mat_metal_rust_01", "steel", tint=(0.62, 0.38, 0.24), rough=None)
+    M["timber_rot"] = kit.pbr("mat_timber_rotten_01", "timber", tint=(0.62, 0.58, 0.52))
     global M_TIMBER, M_DARK
     M_TIMBER, M_DARK = M["timber"], M["dark"]
     M["scorch"] = kit.picture_material("mat_decal_scorch_01", os.path.join(TEX, "decal_scorch_albedo.png"), alpha=True, rough=0.9)
@@ -766,7 +786,10 @@ def main():
             kit.finalize(o)
         kit.lights(qcoll, qbulbs)
         for room in rooms:
+            only = arg("--views")
             for k, (cam, look) in enumerate(views[room]):
+                if only and str(k) not in only.split(","):
+                    continue
                 kit.setup_render(os.path.join(kit.WORK, f"preview_{room}_{k}.png"), cam, look, fov=60, res=(1152, 648), samples=48)
     if "--export" in sys.argv:
         os.makedirs(kit.MODELS, exist_ok=True)
