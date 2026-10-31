@@ -98,13 +98,25 @@ async function run() {
     const s = new Sanctuary(QUALITY.high);
     s.frontWall.visible = true; // only hidden for the title-screen camera
     s.scene.remove(s.player.model); // Godot has its own walkable raider
-    // Every Sanctuary room is rebuilt in Blender (tools/blender/build_quarters.py,
-    // build_sanctuary.py). Only the traders, who are characters, still come
-    // from the web game: keep the objects that hold a skinned mesh.
+    // Sanctuary rooms are rebuilt in Blender one at a time (tools/blender/
+    // build_quarters.py, build_sanctuary.py). Leave out everything inside a
+    // finished room's footprint; keep the rest, and always keep the traders
+    // (characters, reworked separately). Add a room here when it's finished.
+    const FINISHED = [
+      { name: 'quarters', x: [-4.3, 4.3], z: [-3.56, 3.75] },
+      { name: 'hallway', x: [-5.2, 33.0], z: [-6.75, -3.56] },
+    ];
+    const box = new THREE.Box3();
+    const centre = new THREE.Vector3();
     for (const c of [...s.scene.children]) {
       let skinned = false;
       c.traverse((o) => { if (o.isSkinnedMesh) skinned = true; });
-      if (!skinned) s.scene.remove(c);
+      if (skinned) continue;
+      if (c.isLight) c.getWorldPosition(centre);
+      else if (box.setFromObject(c).isEmpty()) continue;
+      else box.getCenter(centre);
+      const inside = FINISHED.some((r) => centre.x > r.x[0] && centre.x < r.x[1] && centre.z > r.z[0] && centre.z < r.z[1] && centre.y < 3.7);
+      if (inside) s.scene.remove(c);
     }
     const root = new THREE.Group();
     root.name = 'Sanctuary';
