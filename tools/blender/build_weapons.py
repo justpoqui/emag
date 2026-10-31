@@ -615,7 +615,67 @@ def build_hammerhead(M, coll):
     return {"length": 0.42, "views": [((0.75, 0.02, 0.12), (0, -0.03, 0.12)), ((0.4, 0.18, -0.3), (0, -0.02, 0.12)), ((0.17, 0.08, 0.16), (0, 0.01, 0.04))]}
 
 
-GUNS = {"mule": build_mule, "sparrow": build_sparrow, "badger": build_badger, "hammerhead": build_hammerhead}
+def build_boar(M, coll):
+    """The Boar: a pump shotgun ("devastating up close, useless far away"),
+    pre-fall and kept running: worn blued steel, a ribbed walnut pump on a
+    tube magazine, a walnut stock with a steel butt plate. 5 shells. ~1.17 m."""
+    D, W = M["steel"], M["wood"]
+    by, my = 0.022, -0.011  # bore and magazine-tube axes
+
+    # the receiver: one machined block with a sloped back, an ejection port, two pins
+    profile("boar_receiver", D, coll, [(-0.095, 0.022), (-0.07, 0.038), (0.12, 0.038), (0.12, -0.024), (0.03, -0.032), (-0.095, -0.032)], 0.038, bev=0.005, grain=False)
+    part("boar_port", D, coll, (0.0195, 0.018, 0.045), (0.002, 0.022, 0.07), bev=0.0006)
+    part("boar_bolt_face", D, coll, (0.0205, 0.018, 0.03), (0.002, 0.016, 0.03), bev=0.0006)
+    for k, z in enumerate((-0.03, 0.08)):
+        tag(kit.cylinder(f"boar_pin{k}", D, coll, (0.019, -0.016, z), (0.0205, -0.016, z), 0.003, segments=10, bev=0))
+    part("boar_safety", D, coll, (0, 0.04, -0.075), (0.008, 0.006, 0.012), bev=0.001)
+
+    # the barrel and the magazine tube under it, joined by a clamp band near the muzzle
+    tube("boar_barrel", D, coll, (0, by, 0.12), (0, by, 0.7), 0.0115, seg=24)
+    tube("boar_muzzle", D, coll, (0, by, 0.69), (0, by, 0.705), 0.0125, seg=24, bev=0.001)
+    tube("boar_bore", D, coll, (0, by, 0.704), (0, by, 0.7055), 0.0095, seg=16, bev=0)
+    tag(kit.cylinder("boar_bead", D, coll, (0, by + 0.011, 0.695), (0, by + 0.0145, 0.695), 0.0022, segments=8, bev=0.001))
+    tube("boar_magtube", D, coll, (0, my, 0.12), (0, my, 0.6), 0.0115, seg=20)
+    tube("boar_magcap", D, coll, (0, my, 0.598), (0, my, 0.63), 0.0135, seg=12, bev=0.001)  # faceted: a knurled cap
+    part("boar_band", D, coll, (0, (by + my) / 2, 0.585), (0.02, 0.05, 0.016), bev=0.004)
+    ring("boar_front_swivel", D, coll, (0, my - 0.02, 0.615), 0.007, 0.0015, plane="zy", n=14)
+
+    # the pump: a ribbed walnut forend on two action bars
+    o = profile("boar_pump", W, coll, [(0.24, 0.012), (0.42, 0.012), (0.425, -0.006), (0.42, -0.036), (0.24, -0.036), (0.235, -0.006)], 0.046, bev=0.009)
+    o["tile"] = 0.5
+    for k in range(7):  # turned grooves round the pump
+        part(f"boar_pump_rib{k}", W, coll, (0, -0.012, 0.268 + k * 0.022), (0.049, 0.05, 0.008), bev=0.003)["tile"] = 0.5
+    for s_ in (-1, 1):
+        part(f"boar_action_bar{s_}", D, coll, (s_ * 0.0125, -0.002, 0.18), (0.003, 0.006, 0.12), bev=0.0006)
+
+    # trigger guard and trigger
+    profile("boar_guard_plate", D, coll, [(-0.07, -0.03), (0.04, -0.03), (0.04, -0.038), (-0.07, -0.038)], 0.02, bev=0.002, grain=False)
+    ring("boar_guard", D, coll, (0, -0.036, -0.02), 0.03, 0.0035, plane="zy", a0=math.pi, a1=2 * math.pi, n=18)
+    part("boar_trigger", D, coll, (0, -0.05, -0.016), (0.006, 0.026, 0.007), rot=(-0.3, 0, 0), bev=0.0015)
+
+    # the stock: walnut with a pistol grip and a dropped comb, narrow at the wrist,
+    # a steel butt plate held by two screws
+    def wrist(z, y):
+        t = min(max((z + 0.36) / 0.24, 0.0), 1.0)
+        return 0.72 + 0.28 * abs(2 * t - 1)
+    o = profile("boar_stock", W, coll, [(-0.093, 0.03), (-0.14, 0.022), (-0.3, 0.012), (-0.462, 0.006), (-0.47, -0.14), (-0.36, -0.106),
+                                       (-0.26, -0.08), (-0.21, -0.076), (-0.185, -0.1), (-0.172, -0.135), (-0.162, -0.152), (-0.132, -0.156), (-0.118, -0.138),
+                                       (-0.104, -0.085), (-0.09, -0.036)], 0.044, bev=0.012, taper=wrist)
+    o["tile"] = 0.5
+    wn = o.modifiers.new("WeightedNormal", "WEIGHTED_NORMAL")  # flat sides stay flat: no shading crease across the n-gon
+    wn.keep_sharp = True
+    part("boar_buttplate", D, coll, (0, -0.066, -0.47), (0.042, 0.142, 0.007), rot=(0.03, 0, 0), bev=0.003)
+    for k, y in enumerate((-0.02, -0.11)):
+        tag(kit.cylinder(f"boar_butt_screw{k}", D, coll, (0, y, -0.4735), (0, y, -0.4755), 0.0035, segments=10, bev=0))
+    ring("boar_rear_swivel", D, coll, (0, -0.13, -0.39), 0.007, 0.0015, plane="zy", n=14)
+
+    marker("muzzle", coll, (0, by, 0.706))
+    marker("grip", coll, (0, -0.11, -0.145))
+    marker("fore", coll, (0, -0.03, 0.33))
+    return {"length": 1.18, "views": [((1.85, 0.06, 0.12), (0, -0.03, 0.12)), ((0.9, 0.4, -0.7), (0, -0.03, 0.1)), ((0.32, 0.1, 0.22), (0, -0.005, 0.12))]}
+
+
+GUNS = {"mule": build_mule, "sparrow": build_sparrow, "badger": build_badger, "hammerhead": build_hammerhead, "boar": build_boar}
 
 
 # ---------- render & export ----------
