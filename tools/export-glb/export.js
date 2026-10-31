@@ -104,19 +104,22 @@ async function run() {
     // (characters, reworked separately). Add a room here when it's finished.
     const FINISHED = [
       { name: 'quarters', x: [-4.3, 4.3], z: [-3.56, 3.75] },
-      { name: 'hallway', x: [-5.2, 33.0], z: [-6.75, -3.56] },
+      { name: 'hallway', x: [-5.2, 33.0], z: [-6.7, -3.56] },
     ];
+    // In Godot the hallway is 5 m wide, so everything north of it (the Trade
+    // Hall, Workshop, Checkout and their traders) sits 2 m further north.
+    const ROOM_SHIFT = -2.0;
     const box = new THREE.Box3();
     const centre = new THREE.Vector3();
     for (const c of [...s.scene.children]) {
       let skinned = false;
       c.traverse((o) => { if (o.isSkinnedMesh) skinned = true; });
-      if (skinned) continue;
       if (c.isLight) c.getWorldPosition(centre);
       else if (box.setFromObject(c).isEmpty()) continue;
       else box.getCenter(centre);
       const inside = FINISHED.some((r) => centre.x > r.x[0] && centre.x < r.x[1] && centre.z > r.z[0] && centre.z < r.z[1] && centre.y < 3.7);
-      if (inside) s.scene.remove(c);
+      if (inside && !skinned) s.scene.remove(c);
+      else if (centre.z < -6.7) c.position.z += ROOM_SHIFT;
     }
     const root = new THREE.Group();
     root.name = 'Sanctuary';

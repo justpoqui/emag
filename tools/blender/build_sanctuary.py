@@ -10,6 +10,10 @@ out). Footprints and interaction spots match src/sanctuary.js.
 Run with the Blender Python module (bpy):
     python tools/blender/build_sanctuary.py <work dir> [--rooms a,b] [--render] [--export]
 Rooms: hallway, trade_hall, workshop, checkout, lift (default: all).
+Layout in Godot differs from the web game: the hallway is 5 m wide
+(z -8.6..-3.6: boardwalk by the shops, abandoned rails by the doors), so the
+Trade Hall, Workshop and Checkout are built 2 m further north than in
+src/sanctuary.js. The quarters and the lift don't move.
 --export writes godot/models/sanctuary/env_sanctuary_<room>.gltf (+ .bin)
 and godot/scenes/sanctuary/lights_<room>.tscn (that room's lamps for Godot).
 """
@@ -414,26 +418,47 @@ def rocks(name, M, coll, centre, count, spread, size=(0.12, 0.2)):
 
 # ---------- rooms ----------
 
+HALL_N = -8.6  # the hallway's north wall: widened from 3 m to 5 m (author request)
+HALL_S = -3.6  # the south wall, against the quarters and the shopfronts
+TRACK_Z = -7.55  # the abandoned rails run along the north side, by the doors
+WALK_N = -6.3  # the boardwalk runs along the south side, by the shops
+ROOM_SHIFT = -2.0  # Trade Hall, Workshop and Checkout sit 2 m further north
+
+
 def build_hallway(M, P, coll):
     room = "hallway"
-    z0, z1 = -6.6, -3.6
+    z0, z1 = HALL_N, HALL_S
     floor_ceiling("hall", M, coll, -5, 33, z0, z1, seed=21)
     rock_wall("hall_north", M, coll, "x", z0, -5, 33, +1, doors=((4, 1.8), (14, 1.8), (23.75, 1.8)), seed=22)
     rock_wall("hall_south_w", M, coll, "x", z1, -5, -4, -1, seed=30)
     rock_wall("hall_south_e", M, coll, "x", z1, 4, 33, -1, seed=31)
     rock_wall("hall_west", M, coll, "z", -5, z0, z1, +1, seed=32)
+    rock_wall("hall_east_n", M, coll, "z", 33, z0, -6.6, -1, seed=33)  # the lift opens off the walkway side
     for at in (4, 14, 23.75):
-        door_portal(f"hall_door_{at}", M, coll, "x", at, -6.72, 0.3)
-    # timber mine sets along the tunnel, and the rails on their sleepers
+        door_portal(f"hall_door_{at}", M, coll, "x", at, z0 - 0.12, 0.3)
+    # timber mine sets spanning the wider tunnel
     for k, x in enumerate((-4.4, 0.4, 2.6, 6.2, 11.0, 16.4, 21.2, 26.0, 28.6, 32.4)):
-        mine_set(f"hall_set{k}", M, coll, x, -6.42, -3.78)
+        mine_set(f"hall_set{k}", M, coll, x, z0 + 0.18, z1 - 0.18)
+
+    # the boardwalk: planks laid lengthwise in staggered runs, a kerb beam on its edge
+    for row, z in enumerate(np.arange(z1 - 0.28, WALK_N + 0.1, -0.25)):
+        x = -4.9 + (row % 3) * 0.9
+        k = 0
+        while x < 32.9:
+            length = min(rng.uniform(2.4, 3.8), 32.9 - x)
+            kit.box(f"walk_plank{row}_{k}", M["timber"], coll, (x + length / 2, 0.06, z), (length - 0.02, 0.05, 0.23),
+                    rot=(rng.uniform(-0.004, 0.004), 0, rng.uniform(-0.003, 0.003)), bev=0.008, grain="long")
+            x += length
+            k += 1
+    kit.box("walk_kerb", M["timber"], coll, (14.0, 0.07, WALK_N - 0.06), (37.8, 0.14, 0.14), bev=0.015, grain="long")
+
     # the old cart rails: abandoned, so rusted, broken up, half buried (author request)
     x = -4.4
     seg = 0
     while x < 32.8:
         length = min(rng.uniform(2.2, 4.0), 32.8 - x)
         if not (11.5 < x < 14.5):  # one length has been pulled up and taken
-            for k, z in enumerate((-4.85, -5.35)):
+            for k, z in enumerate((TRACK_Z + 0.25, TRACK_Z - 0.25)):
                 kit.box(f"hall_rail{seg}_{k}", M["rust"], coll, (x + length / 2, 0.006 + rng.uniform(-0.012, 0.006), z + rng.uniform(-0.015, 0.015)),
                         (length - 0.03, 0.06, 0.05), rot=(rng.uniform(-0.01, 0.01), rng.uniform(-0.004, 0.004), rng.uniform(-0.006, 0.006)), bev=0.008)
         x += length + rng.uniform(0.02, 0.08)
@@ -443,97 +468,133 @@ def build_hallway(M, P, coll):
         if roll < 0.2:
             continue  # missing
         if roll < 0.35:  # split: a short stub, knocked askew
-            kit.box(f"hall_sleeper{k}", M["timber_rot"], coll, (x + rng.uniform(-0.1, 0.1), 0.005, -5.1 + rng.choice((-0.25, 0.25))), (0.13, 0.035, rng.uniform(0.3, 0.45)),
+            kit.box(f"hall_sleeper{k}", M["timber_rot"], coll, (x + rng.uniform(-0.1, 0.1), 0.005, TRACK_Z + rng.choice((-0.25, 0.25))), (0.13, 0.035, rng.uniform(0.3, 0.45)),
                     rot=(0, 0, rng.uniform(-0.6, 0.6)), bev=0.01, grain="long")
             continue
-        kit.box(f"hall_sleeper{k}", M["timber_rot"], coll, (x + rng.uniform(-0.04, 0.04), -0.004, -5.1 + rng.uniform(-0.04, 0.04)), (0.13, 0.04, 0.82),
+        kit.box(f"hall_sleeper{k}", M["timber_rot"], coll, (x + rng.uniform(-0.04, 0.04), -0.004, TRACK_Z + rng.uniform(-0.04, 0.04)), (0.13, 0.04, 0.82),
                 rot=(rng.uniform(-0.03, 0.03), rng.uniform(-0.03, 0.03), rng.uniform(-0.12, 0.12)), bev=0.01, grain="long")
-    # the ore cart at the dead end, barrels beside it
-    kit.box("hall_cart", M["steel"], coll, (-4.2, 0.6, -5.1), (0.9, 0.5, 1.1), bev=0.03)
-    kit.box("hall_cart_base", M["dark"], coll, (-4.2, 0.28, -5.1), (0.72, 0.1, 0.92), bev=0.01)
+    # plank crossings from the boardwalk over the rails to each door
+    for at in (4, 14, 23.75):
+        for j in range(5):
+            kit.box(f"walk_cross{int(at)}_{j}", M["timber"], coll, (at - 0.5 + j * 0.25, 0.07, (WALK_N + z0) / 2), (0.23, 0.05, abs(z0 - WALK_N) - 0.1),
+                    rot=(0, 0, rng.uniform(-0.01, 0.01)), bev=0.008, grain="long")
+
+    # the ore cart left on the rails at the dead end, barrels beside it
+    kit.box("hall_cart", M["steel"], coll, (-4.2, 0.6, TRACK_Z), (0.9, 0.5, 1.1), bev=0.03)
+    kit.box("hall_cart_base", M["dark"], coll, (-4.2, 0.28, TRACK_Z), (0.72, 0.1, 0.92), bev=0.01)
     for dx in (-0.3, 0.3):
         for dz in (-0.38, 0.38):
-            kit.cylinder(f"hall_cart_wheel_{dx}_{dz}", M["dark"], coll, (-4.2 + dx - 0.04, 0.13, -5.1 + dz), (-4.2 + dx + 0.04, 0.13, -5.1 + dz), 0.11, segments=16)
-    rocks("hall_cart_ore", M, coll, (-4.2, 0.82, -5.1), 6, (0.25, 0.08, 0.35))
-    for k, (x, z) in enumerate(((-4.6, -6.15), (-4.6, -4.05))):
+            kit.cylinder(f"hall_cart_wheel_{dx}_{dz}", M["dark"], coll, (-4.2 + dx - 0.04, 0.13, TRACK_Z + dz), (-4.2 + dx + 0.04, 0.13, TRACK_Z + dz), 0.11, segments=16)
+    rocks("hall_cart_ore", M, coll, (-4.2, 0.82, TRACK_Z), 6, (0.25, 0.08, 0.35))
+    for k, (x, z) in enumerate(((-4.6, z0 + 0.45), (-4.55, WALK_N + 0.35))):
         barrel(f"hall_barrel{k}", M, coll, x, z)
+
     # the sealed tunnel where the Husks nearly broke in (art bible 6): a mine
     # portal on the north wall, packed with timber and scrap, the rock scorched
     tx = -2.4
-    door_portal("hall_sealed", M, coll, "x", tx, -6.55, 0.22, w=1.6, h=2.4)
-    kit.box("hall_sealed_back", M["dark"], coll, (tx, 1.2, -6.66), (1.62, 2.4, 0.04), bev=0)
+    door_portal("hall_sealed", M, coll, "x", tx, z0 + 0.05, 0.22, w=1.6, h=2.4)
+    kit.box("hall_sealed_back", M["dark"], coll, (tx, 1.2, z0 - 0.06), (1.62, 2.4, 0.04), bev=0)
     for k in range(7):
         y = 0.25 + k * 0.33
-        kit.box(f"hall_sealed_plank{k}", M["timber"], coll, (tx + rng.uniform(-0.05, 0.05), y, -6.5), (1.75, 0.24, 0.05), rot=(0, rng.uniform(-0.05, 0.05), rng.uniform(-0.12, 0.12)), bev=0.01, grain="long")
+        kit.box(f"hall_sealed_plank{k}", M["timber"], coll, (tx + rng.uniform(-0.05, 0.05), y, z0 + 0.1), (1.75, 0.24, 0.05), rot=(0, rng.uniform(-0.05, 0.05), rng.uniform(-0.12, 0.12)), bev=0.01, grain="long")
     for k in range(3):
-        kit.box(f"hall_sealed_plate{k}", M["steel"], coll, (tx + rng.uniform(-0.45, 0.45), rng.uniform(0.5, 2.0), -6.46), (rng.uniform(0.4, 0.7), rng.uniform(0.3, 0.5), 0.02), rot=(0, 0, rng.uniform(-0.3, 0.3)), bev=0.004)
-    kit.box("hall_sealed_brace", M["timber"], coll, (tx, 1.2, -6.44), (0.14, 2.7, 0.08), rot=(0, 0, 0.55), bev=0.01, grain="long")
+        kit.box(f"hall_sealed_plate{k}", M["steel"], coll, (tx + rng.uniform(-0.45, 0.45), rng.uniform(0.5, 2.0), z0 + 0.14), (rng.uniform(0.4, 0.7), rng.uniform(0.3, 0.5), 0.02), rot=(0, 0, rng.uniform(-0.3, 0.3)), bev=0.004)
+    kit.box("hall_sealed_brace", M["timber"], coll, (tx, 1.2, z0 + 0.16), (0.14, 2.7, 0.08), rot=(0, 0, 0.55), bev=0.01, grain="long")
     # soot rises: the scorch spreads up and out around the boarded opening
-    kit.plane("hall_sealed_scorch", M["scorch"], coll, (tx, 2.15, -6.555), 5.0, 3.0, (R90, 0, 0))
-    rocks("hall_sealed_rubble", M, coll, (tx, 0.0, -6.25), 9, (0.8, 0.05, 0.2), size=(0.08, 0.2))
-    # cables and the vent duct along the ceiling
-    kit.box("hall_duct", M["steel"], coll, (14, H - 0.25, -6.12), (37.8, 0.3, 0.45), bev=0.02)
+    kit.plane("hall_sealed_scorch", M["scorch"], coll, (tx, 2.15, z0 + 0.045), 5.0, 3.0, (R90, 0, 0))
+    rocks("hall_sealed_rubble", M, coll, (tx, 0.0, z0 + 0.35), 9, (0.8, 0.05, 0.2), size=(0.08, 0.2))
+
+    # the air: an air handler at the east end feeds the duct along the north
+    # side; vent grilles breathe out of its underside, and shafts rise from it
+    # up through the rock to the surface
+    dz = z0 + 0.55
+    kit.box("hall_duct", M["steel"], coll, (14, H - 0.3, dz), (37.8, 0.34, 0.5), bev=0.02)
     for k, x in enumerate(np.arange(-4, 33, 3)):
-        kit.box(f"hall_duct_band{k}", M["dark"], coll, (x, H - 0.25, -6.12), (0.05, 0.34, 0.49), bev=0.004)
-    for k in range(3):
-        kit.cylinder(f"hall_cable{k}", M["dark"], coll, (-4.9, H - 0.45 - k * 0.05, -6.4 + k * 0.03), (32.9, H - 0.45 - k * 0.05, -6.4 + k * 0.03), 0.016, segments=6, bev=0)
-    # lamps and string lights down the hallway
+        kit.box(f"hall_duct_band{k}", M["dark"], coll, (x, H - 0.3, dz), (0.05, 0.38, 0.54), bev=0.004)
+    for k, x in enumerate(np.arange(-2.5, 32, 4.5)):  # louvred grilles on the underside
+        kit.box(f"hall_grille{k}", M["dark"], coll, (x, H - 0.475, dz), (0.6, 0.02, 0.36), bev=0.004)
+        for j in range(6):
+            kit.box(f"hall_grille{k}_slat{j}", M["bare"], coll, (x - 0.25 + j * 0.1, H - 0.49, dz), (0.025, 0.03, 0.32), rot=(0, 0.5, 0), bev=0.002)
+    for k, x in enumerate((1.5, 10.0, 19.5, 27.3)):  # ventilation shafts up to the surface
+        kit.box(f"hall_shaft{k}", M["steel"], coll, (x, H + 0.2, dz), (0.44, 0.7, 0.44), bev=0.015)
+        kit.box(f"hall_shaft{k}_collar", M["dark"], coll, (x, H - 0.03, dz), (0.66, 0.06, 0.66), bev=0.01)
+        for j in range(4):  # bolts round the collar
+            ox, oz = ((-0.27, -0.27), (0.27, -0.27), (-0.27, 0.27), (0.27, 0.27))[j]
+            kit.cylinder(f"hall_shaft{k}_bolt{j}", M["bare"], coll, (x + ox, H - 0.07, dz + oz), (x + ox, H - 0.05, dz + oz), 0.012, segments=6, bev=0)
+        kit.box(f"hall_shaft{k}_damper", M["dark"], coll, (x + 0.3, H - 0.05, dz), (0.06, 0.08, 0.12), bev=0.01)
+    ax = 32.1
+    kit.box("hall_ac_unit", M["steel_locker"], coll, (ax, 0.75, z0 + 0.6), (1.2, 1.5, 0.9), bev=0.03)
+    bm = bmesh.new()
+    bmesh.ops.create_circle(bm, cap_ends=True, segments=32, radius=0.38)
+    kit.mesh_obj("hall_ac_fan_face", bm, M["dark"], coll, kit.g2b(ax - 0.61, 0.8, z0 + 0.6), (R90, 0, -R90), smooth=False)["uv"] = "box"
+    for j in range(5):  # the fan guard
+        kit.box(f"hall_ac_guard{j}", M["bare"], coll, (ax - 0.63, 0.5 + j * 0.15, z0 + 0.6), (0.02, 0.02, 0.76), bev=0)
+    kit.box("hall_ac_riser", M["steel"], coll, (ax, (1.5 + H - 0.3) / 2, z0 + 0.6), (0.5, H - 1.8, 0.5), bev=0.015)
+    kit.box("hall_ac_panel", M["dark"], coll, (ax + 0.2, 1.1, z0 + 1.06), (0.36, 0.42, 0.02), bev=0.005)
+    light(room, "hall_ac_lamp", "POINT", (ax - 0.4, 1.3, z0 + 1.2), (0.94, 0.7, 0.35), 6, coll=coll)
+
+    # lamps over the walkway, string lights down the middle
     for k, x in enumerate((0, 9, 18.5, 28)):
-        work_lamp(f"hall_lamp{k}", M, coll, x, H - 0.75, -5.1, room, watts=240)
-    string_lights("hall_string", M, coll, room, [((x, H - 0.35, -5.1), (x + 4.6, H - 0.35, -5.1)) for x in np.arange(-4.2, 32, 4.6)], sag=0.35, every=6, watts=25)
+        work_lamp(f"hall_lamp{k}", M, coll, x, H - 0.75, -5.2, room, watts=260)
+    for k, x in enumerate((4.5, 23.0)):
+        work_lamp(f"hall_track_lamp{k}", M, coll, x, H - 0.8, TRACK_Z + 0.3, room, watts=160)
+    string_lights("hall_string", M, coll, room, [((x, H - 0.35, -6.2), (x + 4.6, H - 0.35, -6.2)) for x in np.arange(-4.2, 32, 4.6)], sag=0.35, every=6, watts=25)
+
     # shopfronts cut into the south wall
     for k, (x, neon, colour) in enumerate(((6.4, "neon_noodles", (0.85, 0.34, 0.48)), (13.2, "neon_bunks", (0.91, 0.58, 0.23)),
                                           (17.8, "neon_clinic", (0.94, 0.7, 0.35)), (23.4, "neon_water", (0.91, 0.58, 0.23)),
                                           (27.4, "neon_radio", (0.85, 0.34, 0.48)))):
         z = -3.66
-        kit.box(f"shop{k}_shutter", M["steel"], coll, (x, 1.05, z), (1.7, 2.1, 0.05), bev=0.01)
-        for j, y in enumerate(np.arange(0.12, 2.05, 0.12)):
+        kit.box(f"shop{k}_shutter", M["steel"], coll, (x, 1.1, z), (1.7, 2.1, 0.05), bev=0.01)
+        for j, y in enumerate(np.arange(0.17, 2.1, 0.12)):
             kit.box(f"shop{k}_rib{j}", M["dark"], coll, (x, y, z - 0.03), (1.66, 0.02, 0.012), bev=0)
         for s in (-1, 1):
             kit.box(f"shop{k}_post{s}", M["timber"], coll, (x + s * 0.92, 1.15, z - 0.06), (0.12, 2.3, 0.12), rot=(0, 0, 0.01 * s), bev=0.012, grain="long")
-        kit.box(f"shop{k}_awning", M["blanket"] if k % 2 else M["canvas"], coll, (x, 2.4, z - 0.32), (2.0, 0.05, 0.62), rot=(-0.3, 0, 0), soft=True, puff=0.3)
-        kit.box(f"shop{k}_neon_back", M["dark"], coll, (x, 2.85, z - 0.05), (1.75, 0.46, 0.03), bev=0.006)
-        kit.plane(f"shop{k}_neon", P[neon], coll, (x, 2.85, z - 0.07), 1.7, 0.42, (R90, 0, math.pi))
-        crate(f"shop{k}_counter", M, coll, (x + 0.45, 0.3, -3.98), (0.55, 0.6, 0.4))
-        light(room, f"shop{k}_neon_light", "POINT", (x, 2.6, -4.2), colour, 18, coll=coll)
+        kit.box(f"shop{k}_awning", M["blanket"] if k % 2 else M["canvas"], coll, (x, 2.45, z - 0.32), (2.0, 0.05, 0.62), rot=(-0.3, 0, 0), soft=True, puff=0.3)
+        kit.box(f"shop{k}_neon_back", M["dark"], coll, (x, 2.88, z - 0.05), (1.75, 0.46, 0.03), bev=0.006)
+        kit.plane(f"shop{k}_neon", P[neon], coll, (x, 2.88, z - 0.07), 1.7, 0.42, (R90, 0, math.pi))
+        crate(f"shop{k}_counter", M, coll, (x + 0.45, 0.38, -3.98), (0.55, 0.6, 0.4))
+        light(room, f"shop{k}_neon_light", "POINT", (x, 2.6, -4.3), colour, 18, coll=coll)
+
     # north wall: a grow rack, the notice board, a water tank
-    gx = 9.2
-    kit.box("grow_frame", M["steel"], coll, (gx, 0.95, -6.36), (1.6, 1.9, 0.32), bev=0.02)
+    gx, gz = 9.2, z0 + 0.24
+    kit.box("grow_frame", M["steel"], coll, (gx, 0.95, gz), (1.6, 1.9, 0.32), bev=0.02)
     for k, y in enumerate((0.45, 1.05, 1.65)):
-        kit.box(f"grow_shelf{k}", M["dark"], coll, (gx, y - 0.18, -6.3), (1.5, 0.03, 0.28), bev=0.004)
-        kit.box(f"grow_tray{k}", M["earth"], coll, (gx, y - 0.13, -6.3), (1.4, 0.07, 0.24), bev=0.01)
-        kit.box(f"grow_strip{k}", M["grow"], coll, (gx, y + 0.22, -6.24), (1.4, 0.015, 0.02), bev=0)
+        kit.box(f"grow_shelf{k}", M["dark"], coll, (gx, y - 0.18, gz + 0.06), (1.5, 0.03, 0.28), bev=0.004)
+        kit.box(f"grow_tray{k}", M["earth"], coll, (gx, y - 0.13, gz + 0.06), (1.4, 0.07, 0.24), bev=0.01)
+        kit.box(f"grow_strip{k}", M["grow"], coll, (gx, y + 0.22, gz + 0.12), (1.4, 0.015, 0.02), bev=0)
         for j in range(6):
             bm = bmesh.new()
             bmesh.ops.create_icosphere(bm, subdivisions=1, radius=rng.uniform(0.07, 0.11))
-            kit.mesh_obj(f"grow_leaf{k}_{j}", bm, M["leaf"], coll, kit.g2b(gx - 0.6 + j * 0.24, y - 0.03, -6.28), tuple(rng.uniform(0, 3, 3)))["uv"] = "box"
-    light(room, "grow_light", "POINT", (gx, 1.4, -5.9), (0.85, 0.42, 0.55), 22, coll=coll)
-    board("notices", P["sign_notices"], coll, (18.6, 2.05, -6.42), 1.4, 0.36, (R90, 0, 0), timber=M["timber"])
-    kit.box("notices_cork", M["plank"], coll, (18.6, 1.45, -6.44), (1.5, 0.8, 0.04), bev=0.01)
+            kit.mesh_obj(f"grow_leaf{k}_{j}", bm, M["leaf"], coll, kit.g2b(gx - 0.6 + j * 0.24, y - 0.03, gz + 0.08), tuple(rng.uniform(0, 3, 3)))["uv"] = "box"
+    light(room, "grow_light", "POINT", (gx, 1.4, gz + 0.5), (0.85, 0.42, 0.55), 22, coll=coll)
+    board("notices", P["sign_notices"], coll, (18.6, 2.05, z0 + 0.18), 1.4, 0.36, (R90, 0, 0), timber=M["timber"])
+    kit.box("notices_cork", M["plank"], coll, (18.6, 1.45, z0 + 0.16), (1.5, 0.8, 0.04), bev=0.01)
     for k, (dx, dy, key) in enumerate(((-0.45, 0.05, "paper_notice_1"), (0.05, -0.05, "paper_notice_2"), (0.5, 0.08, "paper_notice_3"))):
-        kit.plane(f"notice_paper{k}", P[key], coll, (18.6 + dx, 1.45 + dy, -6.415), 0.3, 0.38, (R90, 0, rng.uniform(-0.12, 0.12)))
-    barrel("hall_tank", M, coll, 31.2, -6.05, r=0.38, h=1.6)
-    kit.cylinder("hall_tank_pipe", M["steel"], coll, (31.2, 1.6, -6.3), (31.2, H, -6.3), 0.05)
+        kit.plane(f"notice_paper{k}", P[key], coll, (18.6 + dx, 1.45 + dy, z0 + 0.185), 0.3, 0.38, (R90, 0, rng.uniform(-0.12, 0.12)))
+    barrel("hall_tank", M, coll, 30.4, z0 + 0.55, r=0.38, h=1.6)
+    kit.cylinder("hall_tank_pipe", M["steel"], coll, (30.4, 1.6, z0 + 0.3), (30.4, H, z0 + 0.3), 0.05)
     # laundry strung across the west end
-    a, b = (-0.9, 3.0, -6.45), (1.6, 2.95, -3.7)
+    a, b = (-0.9, 3.0, z0 + 0.15), (1.6, 2.95, -3.7)
     kit.cylinder("laundry_line", M["canvas"], coll, a, b, 0.004, segments=5, bev=0)
     for k, tint in enumerate(("blanket", "mattress", "canvas", "blanket")):
         t = (k + 1) / 5
         p = [a[i] + (b[i] - a[i]) * t for i in range(3)]
         kit.box(f"laundry{k}", M[tint], coll, (p[0], p[1] - 0.22, p[2]), (0.34, 0.4, 0.02), rot=(0, 0, -math.atan2(b[0] - a[0], b[2] - a[2]) + R90), soft=True, puff=0.3)
-    # door signs and benches along the hall
     # handmade neon over each doorway, hung from the ceiling on chains
     for at, text, colour in ((4, "TRADE HALL", (0.91, 0.58, 0.23)), (14, "WORKSHOP", (0.94, 0.7, 0.35)), (23.75, "CHECKOUT", (0.85, 0.34, 0.48))):
-        neon_sign(f"hall_neon_{int(at)}", text, colour, coll, room, (at, 2.68, -5.72), 0.0, size=0.38)
+        neon_sign(f"hall_neon_{int(at)}", text, colour, coll, room, (at, 2.68, dz + 0.5), 0.0, size=0.38)
     neon_sign("hall_neon_quarters", "YOUR QUARTERS", (0.91, 0.58, 0.23), coll, room, (-2.0, 2.95, -3.72), math.pi, size=0.2)
     neon_sign("hall_neon_lift", "LIFT", (0.18, 0.9, 0.82), coll, room, (32.6, 2.85, -5.1), -R90, size=0.3)
+    # benches on the boardwalk
     for k, x in enumerate((9, 19)):
-        kit.box(f"hall_bench{k}_seat", M["timber"], coll, (x, 0.45, -3.95), (2.0, 0.07, 0.42), bev=0.015, grain="long")
+        kit.box(f"hall_bench{k}_seat", M["timber"], coll, (x, 0.53, -3.95), (2.0, 0.07, 0.42), bev=0.015, grain="long")
         for s in (-0.85, 0.85):
-            kit.box(f"hall_bench{k}_leg{s}", M["timber"], coll, (x + s, 0.22, -3.95), (0.08, 0.44, 0.38), bev=0.01)
-    return [((-3.8, 1.75, -4.0), (12.0, 1.5, -5.6)),
-            ((11.0, 1.7, -6.2), (14.5, 1.9, -3.6)), ((-1.0, 1.6, -4.2), (-2.4, 1.4, -6.6)),
-            ((8.5, 1.55, -3.9), (4.0, 2.6, -6.6)), ((-3.6, 1.6, -6.2), (-1.5, 2.6, -3.6))]
+            kit.box(f"hall_bench{k}_leg{s}", M["timber"], coll, (x + s, 0.3, -3.95), (0.08, 0.44, 0.38), bev=0.01)
+    return [((-3.8, 1.75, -4.4), (12.0, 1.5, -6.6)),
+            ((11.0, 1.7, -7.6), (14.5, 1.9, -3.6)), ((-0.6, 1.6, -5.6), (-2.4, 1.4, -8.6)),
+            ((8.5, 1.55, -4.2), (4.0, 2.4, -8.6)), ((-3.6, 1.6, -7.8), (-1.5, 2.6, -3.6)),
+            ((28.0, 1.9, -4.6), (32.5, 2.4, -8.0))]
 
 
 def build_trade_hall(M, P, coll):
@@ -774,6 +835,11 @@ def main():
         coll = bpy.data.collections.new(f"env_sanctuary_{room}")
         bpy.context.scene.collection.children.link(coll)
         views[room] = BUILDERS[room](M, P, coll)
+        if room in ("trade_hall", "workshop", "checkout"):  # 2 m further north, behind the wider hallway
+            for o in coll.objects:
+                o.location.y -= ROOM_SHIFT  # game z -> Blender -y
+            LIGHTS[room] = [(n, k, (p[0], p[1], p[2] + ROOM_SHIFT), c, w, kw) for n, k, p, c, w, kw in LIGHTS.get(room, [])]
+            views[room] = [((c[0], c[1], c[2] + ROOM_SHIFT), (l[0], l[1], l[2] + ROOM_SHIFT)) for c, l in views[room]]
         for o in list(coll.objects):
             kit.finalize(o)
         tris = sum(len(p.vertices) - 2 for o in coll.objects if o.type == "MESH" for p in o.data.polygons)
