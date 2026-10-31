@@ -426,7 +426,109 @@ def build_sparrow(M, coll):
     return {"length": 0.83, "views": [((1.25, 0.05, 0.0), (0, -0.04, 0.0)), ((0.6, 0.28, -0.45), (0, -0.04, 0.0)), ((0.2, 0.06, 0.25), (0, -0.01, 0.05))]}
 
 
-GUNS = {"mule": build_mule, "sparrow": build_sparrow}
+def build_badger(M, coll):
+    """The Badger, scrap-built: a full-auto rifle on medium rounds ("a good
+    all-rounder") welded from angle iron and pipe, with a salvaged red-dot
+    sight on a flat-bar rail, a curved magazine built up from welded
+    sections, a handguard of two bolted angle irons, a slotted pipe muzzle
+    brake and a stock sawn from a painted plank. 26 rounds. ~0.9 m."""
+    S, D, Wd = M["scrap"], M["steel"], M["plank"]
+
+    # the receiver: a welded box of rusted plate, a lid of angle iron, a bolted side plate
+    part("badger_receiver", S, coll, (0, 0.0, 0.02), (0.038, 0.06, 0.26), bev=0.002)
+    part("badger_lid", S, coll, (0, 0.034, 0.02), (0.042, 0.008, 0.26), bev=0.0015)
+    part("badger_lid_flange", S, coll, (-0.0185, 0.026, 0.02), (0.005, 0.02, 0.26), bev=0.001)
+    weld("badger_lid_weld", M, coll, (0.019, 0.03, -0.1), (0.019, 0.03, 0.14))
+    part("badger_sideplate", S, coll, (0.0205, -0.004, -0.02), (0.004, 0.04, 0.11), bev=0.001)
+    for k, (z, y) in enumerate(((-0.065, 0.012), (-0.065, -0.02), (0.025, 0.012), (0.025, -0.02))):
+        hex_bolt(f"badger_bolt{k}", M, coll, (0.0225, y, z))
+    part("badger_port", D, coll, (0.0195, 0.014, 0.08), (0.002, 0.016, 0.05), bev=0)  # the hand-cut ejection slot
+    # the charging handle: a rod bent up through a slot in the lid, a nut for a knob
+    part("badger_charge_slot", D, coll, (0.0, 0.0385, -0.03), (0.008, 0.002, 0.09), bev=0)
+    tube("badger_charge_rod", D, coll, (0, 0.034, -0.06), (0, 0.05, -0.06), 0.0035, seg=8)
+    tube("badger_charge_bar", D, coll, (-0.02, 0.05, -0.06), (0.02, 0.05, -0.06), 0.0035, seg=8)
+    hex_bolt("badger_charge_nut", M, coll, (0.02, 0.05, -0.06), axis="x", r=0.006, h=0.008)
+
+    # the rail: a flat bar welded along the lid; the red dot on it
+    part("badger_rail", D, coll, (0, 0.042, 0.0), (0.02, 0.008, 0.2), bev=0.001)
+    for k in range(9):  # short lengths of bar welded across: the rail's teeth
+        part(f"badger_rail_tooth{k}", D, coll, (0, 0.0475, -0.088 + k * 0.022), (0.02, 0.003, 0.009), bev=0.0006)
+    weld("badger_rail_weld", M, coll, (0.0105, 0.039, -0.09), (0.0105, 0.039, 0.09), r=0.0016)
+    # the red dot: a salvaged sight tube on a clamp block, a tape wrap, a knob for the battery cap
+    part("badger_dot_mount", D, coll, (0, 0.056, -0.02), (0.026, 0.014, 0.034), bev=0.0015)
+    hex_bolt("badger_dot_clamp", M, coll, (0.013, 0.054, -0.02), axis="x", r=0.005, h=0.006)
+    tube("badger_dot_body", S, coll, (0, 0.078, -0.055), (0, 0.078, 0.015), 0.017, seg=20)
+    for nm, z0, z1, r in (("hood", 0.012, 0.032, 0.0195), ("eye", -0.067, -0.052, 0.0185)):
+        bm = bmesh.new()  # an open sleeve: you can see into the sight
+        bmesh.ops.create_cone(bm, cap_ends=False, segments=20, radius1=r, radius2=r, depth=z1 - z0)
+        bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=0.0025)
+        o = kit.mesh_obj(f"badger_dot_{nm}", bm, D, coll, kit.g2b(0, 0.078, (z0 + z1) / 2), (R90, 0, 0))
+        o["uv"] = "box"
+        tag(o)
+    for k, z in enumerate((-0.054, 0.013)):  # the lenses, dark and set back inside the tube
+        tube(f"badger_dot_lens{k}", D, coll, (0, 0.078, z), (0, 0.078, z + 0.002), 0.0165, seg=20, bev=0)
+    tube("badger_dot_knob", D, coll, (0.017, 0.078, -0.02), (0.027, 0.078, -0.02), 0.008, seg=10)
+    tape("badger_dot_tape", M, coll, (0, 0.078, -0.035), (0.037, 0.037, 0.018))
+
+    # the barrel: steel pipe with a gas tube clamped above it, a slotted muzzle brake
+    tube("badger_barrel", D, coll, (0, 0.008, 0.15), (0, 0.008, 0.53), 0.011, seg=16)
+    tube("badger_gas", D, coll, (0, 0.03, 0.15), (0, 0.03, 0.38), 0.005, seg=10)
+    tube("badger_gas_block", D, coll, (0, 0.016, 0.375), (0, 0.016, 0.395), 0.02, seg=14)
+    tube("badger_brake", D, coll, (0, 0.008, 0.51), (0, 0.008, 0.575), 0.017, seg=16)
+    for k in range(3):  # slots cut across the top of the brake with a grinder
+        part(f"badger_brake_slot{k}", S, coll, (0, 0.0235, 0.525 + k * 0.016), (0.024, 0.004, 0.006), bev=0)
+    weld("badger_brake_weld", M, coll, (-0.012, 0.022, 0.51), (0.012, 0.022, 0.51), r=0.002)
+
+    # the handguard: two lengths of angle iron either side of the barrel, bolted through
+    for s in (-1, 1):
+        part(f"badger_guard_side{s}", S, coll, (s * 0.024, 0.002, 0.27), (0.004, 0.05, 0.22), bev=0.001)
+        part(f"badger_guard_lip{s}", S, coll, (s * 0.017, -0.021, 0.27), (0.014, 0.004, 0.22), bev=0.001)
+        for k in range(5):  # holes drilled for cooling
+            tag(kit.cylinder(f"badger_guard_hole{s}_{k}", D, coll, (s * 0.0258, 0.008, 0.2 + k * 0.035), (s * 0.0262, 0.008, 0.2 + k * 0.035), 0.0055, segments=10, bev=0))
+    for k, z in enumerate((0.175, 0.365)):
+        tube(f"badger_guard_bolt{k}", D, coll, (-0.03, -0.012, z), (0.03, -0.012, z), 0.003, seg=8)
+        for s in (-1, 1):
+            hex_bolt(f"badger_guard_nut{k}_{s}", M, coll, (s * 0.026, -0.012, z), axis="x", r=0.005, h=s * 0.005)
+    tape("badger_guard_tape", M, coll, (0, 0.002, 0.25), (0.056, 0.058, 0.05))
+
+    # the curved magazine: short welded sections, each tipped a little further forward
+    part("badger_magwell", S, coll, (0, -0.04, 0.08), (0.03, 0.03, 0.062), bev=0.002)
+    weld("badger_magwell_weld", M, coll, (0.0155, -0.03, 0.05), (0.0155, -0.03, 0.11), r=0.0018)
+    y, z, ang = -0.035, 0.08, 0.0
+    for k in range(6):
+        ang = 0.06 + k * 0.075
+        y -= 0.03 * math.cos(ang)
+        z += 0.03 * math.sin(ang)
+        part(f"badger_mag{k}", D, coll, (0, y, z), (0.024, 0.032, 0.054), rot=(-ang, 0, 0), bev=0.004)
+        if k in (1, 4):
+            tape(f"badger_mag_tape{k}", M, coll, (0, y, z), (0.028, 0.02, 0.058), rot=(-ang, 0, 0))
+    part("badger_mag_base", D, coll, (0, y - 0.018 * math.cos(ang), z + 0.018 * math.sin(ang)), (0.028, 0.008, 0.06), rot=(-ang, 0, 0), bev=0.002)
+
+    # the grip: a wooden block, taped; trigger guard and trigger
+    gp = (0, -0.078, -0.06)
+    part("badger_grip", Wd, coll, gp, (0.03, 0.105, 0.038), rot=(0.3, 0, 0), bev=0.004)["tile"] = 1.2
+    for k, dy in enumerate((-0.028, 0.002, 0.03)):
+        tape(f"badger_grip_tape{k}", M, coll, (0, gp[1] + dy * 0.955, gp[2] + dy * 0.296), (0.034, 0.015, 0.042), rot=(0.3, 0, 0))
+    ring("badger_trigger_guard", D, coll, (0, -0.03, -0.02), 0.03, 0.0032, plane="zy", a0=math.pi, a1=2 * math.pi, n=16)
+    part("badger_trigger", D, coll, (0, -0.044, -0.018), (0.005, 0.024, 0.006), rot=(-0.3, 0, 0), bev=0.001)
+
+    # the stock: a painted plank sawn to shape, bolted to a flat-bar tang, a tyre-chunk butt pad
+    part("badger_tang", D, coll, (0, 0.006, -0.135), (0.02, 0.03, 0.06), bev=0.001)
+    o = profile("badger_stock", Wd, coll, [(-0.39, 0.03), (-0.13, 0.02), (-0.13, -0.022), (-0.24, -0.04), (-0.39, -0.11)], 0.03, bev=0.004)
+    o["tile"] = 1.2
+    for k, (zz, yy) in enumerate(((-0.15, 0.01), (-0.15, -0.012))):
+        hex_bolt(f"badger_stock_bolt{k}", M, coll, (0.015, yy, zz))
+    part("badger_buttpad", M["cloth"], coll, (0, -0.04, -0.4), (0.036, 0.15, 0.022), rot=(0.06, 0, 0), bev=0.006)
+    # a cord sling from the gas block to the stock
+    rope("badger_sling", M, coll, [(0.0, -0.005, 0.385), (0.028, -0.06, 0.25), (0.032, -0.11, 0.05), (0.03, -0.11, -0.17), (0.016, -0.06, -0.36)], r=0.0035)
+
+    marker("muzzle", coll, (0, 0.008, 0.575))
+    marker("grip", coll, (0, -0.095, -0.065))
+    marker("fore", coll, (0, -0.01, 0.28))
+    return {"length": 0.97, "views": [((1.55, 0.06, 0.08), (0, -0.03, 0.08)), ((0.75, 0.35, -0.6), (0, -0.03, 0.08)), ((0.25, 0.14, 0.12), (0, 0.05, -0.02))]}
+
+
+GUNS = {"mule": build_mule, "sparrow": build_sparrow, "badger": build_badger}
 
 
 # ---------- render & export ----------
