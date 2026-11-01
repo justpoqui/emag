@@ -16,7 +16,7 @@ controller (godot/scripts/raider.gd).
   importer puts them on the model's AnimationPlayer.
 - Budget (art bible 8.4): Diver LOD0 40k triangles, 3 materials.
 
-Run with the Blender Python module (bpy):
+Run with the Blender Python module (bpy), plus numpy, Pillow and scikit-image (the hands are fused with marching cubes):
     python tools/blender/build_diver.py <work dir> [--render] [--sheets [--only walk,run]] [--export]
 --export writes godot/models/characters/char_diver_base.glb.
 """
@@ -44,6 +44,28 @@ FPS = 30
 
 # ---------- the skeleton (game space: y up, the Diver faces +z, its left is +x) ----------
 # name: (head, tail, parent)
+# The arms are rigged ARM_DROP degrees down from a 35-degree A-pose, so they
+# sit close to the body (about 15 degrees out): standing only lowers them a
+# few degrees more, and the shoulder keeps its shape instead of flaring like a
+# pad. Every arm landmark (elbow, wrist, hand, fingers, cuff) goes through
+# arm_pt / arm_vec, a turn about the shoulder joint in the body's front plane.
+ARM_DROP = 20.0
+SHOULDER_JOINT = (0.17, 1.45, -0.02)  # the left one; the right mirrors it
+
+
+def arm_vec(v, sx):
+    a = math.radians(-sx * ARM_DROP)
+    x, y, z = v
+    return (x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a), z)
+
+
+def arm_pt(p, sx):
+    """An arm landmark given for the 35-degree A-pose, turned down by ARM_DROP."""
+    j = (sx * SHOULDER_JOINT[0], SHOULDER_JOINT[1], SHOULDER_JOINT[2])
+    x, y, z = arm_vec((p[0] - j[0], p[1] - j[1], p[2] - j[2]), sx)
+    return (j[0] + x, j[1] + y, j[2] + z)
+
+
 BONES = {
     "Hips": ((0, 0.96, 0), (0, 1.06, 0), None),
     "Spine": ((0, 1.06, 0), (0, 1.18, 0.0), "Hips"),
@@ -55,9 +77,9 @@ BONES = {
 for side, sx in (("Left", 1), ("Right", -1)):
     BONES.update({
         f"{side}Shoulder": ((sx * 0.03, 1.43, -0.01), (sx * 0.17, 1.45, -0.02), "UpperChest"),
-        f"{side}UpperArm": ((sx * 0.17, 1.45, -0.02), (sx * 0.33, 1.22, -0.02), f"{side}Shoulder"),
-        f"{side}LowerArm": ((sx * 0.33, 1.22, -0.02), (sx * 0.47, 1.02, 0.01), f"{side}UpperArm"),
-        f"{side}Hand": ((sx * 0.465, 1.03, 0.01), (sx * 0.505, 0.955, 0.016), f"{side}LowerArm"),
+        f"{side}UpperArm": ((sx * 0.17, 1.45, -0.02), arm_pt((sx * 0.33, 1.22, -0.02), sx), f"{side}Shoulder"),
+        f"{side}LowerArm": (arm_pt((sx * 0.33, 1.22, -0.02), sx), arm_pt((sx * 0.47, 1.02, 0.01), sx), f"{side}UpperArm"),
+        f"{side}Hand": (arm_pt((sx * 0.465, 1.03, 0.01), sx), arm_pt((sx * 0.505, 0.955, 0.016), sx), f"{side}LowerArm"),
         f"{side}UpperLeg": ((sx * 0.095, 0.95, 0), (sx * 0.105, 0.52, 0.01), "Hips"),
         f"{side}LowerLeg": ((sx * 0.105, 0.52, 0.01), (sx * 0.11, 0.1, -0.01), f"{side}UpperLeg"),
         f"{side}Foot": ((sx * 0.11, 0.1, -0.01), (sx * 0.11, 0.03, 0.125), f"{side}LowerLeg"),
@@ -70,10 +92,10 @@ for side, sx in (("Left", 1), ("Right", -1)):
 # Its frame: d along the hand, e across the knuckles (forward), n out of the palm (inwards).
 
 def hand_frame(sx):
-    w = np.array((sx * 0.465, 1.03, 0.01))
-    d = np.array((sx * 0.065, -0.11, 0.01))
+    w = np.array(arm_pt((sx * 0.465, 1.03, 0.01), sx))
+    d = np.array(arm_vec((sx * 0.065, -0.11, 0.01), sx))
     d /= np.linalg.norm(d)
-    n = np.array((-sx, 0.0, 0.0))
+    n = np.array(arm_vec((-sx, 0.0, 0.0), sx))
     n -= d * (n @ d)
     n /= np.linalg.norm(n)
     e = -np.cross(d, n) * sx  # forward (+z) for both hands: the thumb and index lead
@@ -82,8 +104,9 @@ def hand_frame(sx):
 
 
 # (name, offset across the knuckles, segment lengths, radius at the base)
-FINGERS = (("Index", 0.028, (0.042, 0.026, 0.021), 0.0092), ("Middle", 0.0095, (0.046, 0.029, 0.022), 0.0095),
-           ("Ring", -0.009, (0.043, 0.027, 0.021), 0.009), ("Little", -0.026, (0.034, 0.02, 0.018), 0.0078))
+FINGERS = (("Index", 0.028, (0.042, 0.026, 0.021), 0.0083), ("Middle", 0.0095, (0.046, 0.029, 0.022), 0.0086),
+           ("Ring", -0.009, (0.043, 0.027, 0.021), 0.0081), ("Little", -0.026, (0.034, 0.02, 0.018), 0.007))
+FINGER_FAN = 1.4  # how far the fingers fan apart: enough that neighbours never touch at rest
 FINGER_REST_CURL = (14.0, 22.0, 16.0)  # degrees each joint bends towards the palm at rest: a relaxed hand
 
 
@@ -93,7 +116,7 @@ def finger_chains(sx):
     chains = {}
     for name, off, segs, r in FINGERS:
         knuckle = w + d * (0.088 - 0.004 * abs(off) / 0.028) + e * off
-        pts, dirn = [knuckle], d + e * (off * 0.6)
+        pts, dirn = [knuckle], d + e * (off * FINGER_FAN)
         dirn /= np.linalg.norm(dirn)
         for k, ln in enumerate(segs):
             a = math.radians(FINGER_REST_CURL[k])
@@ -213,35 +236,6 @@ def arg(name, default=None):
 
 # ---------- the body ----------
 # The joint graph the skin modifier wraps: (name, position, (radius across, radius front-back)), and edges.
-NODES = [
-    ("pelvis", (0, 0.93, -0.012), (0.165, 0.125)),
-    ("waist", (0, 1.06, 0.0), (0.15, 0.1)),
-    ("ribs", (0, 1.2, 0.005), (0.165, 0.115)),
-    ("chest", (0, 1.33, 0.012), (0.18, 0.12)),
-    ("collar", (0, 1.44, -0.008), (0.17, 0.097)),
-    ("neck", (0, 1.53, 0.0), (0.06, 0.062)),
-    ("neck_top", (0, 1.61, 0.0), (0.055, 0.058)),  # runs up inside the head, which is modelled on its own
-]
-EDGES = [("pelvis", "waist"), ("waist", "ribs"), ("ribs", "chest"), ("chest", "collar"), ("collar", "neck"), ("neck", "neck_top")]
-for side, sx in (("l", 1), ("r", -1)):
-    NODES += [
-        (f"shoulder_{side}", (sx * 0.195, 1.43, -0.015), (0.08, 0.074)),
-        (f"bicep_{side}", (sx * 0.255, 1.33, -0.02), (0.054, 0.056)),
-        (f"elbow_{side}", (sx * 0.33, 1.22, -0.02), (0.044, 0.044)),
-        (f"forearm_{side}", (sx * 0.39, 1.13, -0.005), (0.046, 0.042)),
-        (f"wrist_{side}", (sx * 0.47, 1.025, 0.011), (0.028, 0.021)),
-        (f"hip_{side}", (sx * 0.1, 0.9, 0.0), (0.098, 0.1)),
-        (f"thigh_{side}", (sx * 0.104, 0.72, 0.008), (0.085, 0.088)),
-        (f"knee_{side}", (sx * 0.106, 0.52, 0.012), (0.058, 0.062)),
-        (f"calf_{side}", (sx * 0.108, 0.37, -0.012), (0.062, 0.066)),
-        (f"ankle_{side}", (sx * 0.11, 0.12, -0.006), (0.045, 0.048)),  # inside the boot shaft
-    ]
-    EDGES += [("collar", f"shoulder_{side}"), (f"shoulder_{side}", f"bicep_{side}"), (f"bicep_{side}", f"elbow_{side}"),
-              (f"elbow_{side}", f"forearm_{side}"), (f"forearm_{side}", f"wrist_{side}"),
-              ("pelvis", f"hip_{side}"), (f"hip_{side}", f"thigh_{side}"), (f"thigh_{side}", f"knee_{side}"),
-              (f"knee_{side}", f"calf_{side}"), (f"calf_{side}", f"ankle_{side}")]
-
-
 SKIN_TEX = os.path.join(ROOT, "godot", "textures", "characters")
 SKIN_UV = (0.25, 0.5)  # every skin face samples the plain skin half of the skin texture
 NAIL_U = (0.55, 0.95)  # nails use the right half, base (v 0) to free edge (v 1)
@@ -308,6 +302,10 @@ def build_head(M, coll):
     return o
 
 
+COLLAR = ((0.0, 1.502, -0.01), (0.0, 1.42, -0.02), (0.0, 1.58, 0.0))  # centre, and the axis it runs along
+CUFF = tuple(arm_pt(p, 1) for p in ((0.455, 1.045, 0.008), (0.39, 1.13, -0.005), (0.47, 1.02, 0.01)))  # the left cuff; the right mirrors it
+
+
 def trims(M, coll):
     """A ribbed collar, cuffs and boot tops: clean edges where the shirt meets
     the skin and the trousers meet the boots."""
@@ -322,9 +320,10 @@ def trims(M, coll):
         for poly in o.data.polygons:
             poly.use_smooth = True
         out.append(o)
-    band("diver_collar", M["cloth"], (0, 1.5, -0.002), 0.064, 0.024, (0, 1.42, -0.01), (0, 1.58, 0.005))
+    band("diver_collar", M["cloth"], COLLAR[0], 0.069, 0.026, COLLAR[1], COLLAR[2])
     for sx in (-1, 1):
-        band(f"diver_cuff{sx}", M["cloth"], (sx * 0.455, 1.045, 0.008), 0.035, 0.026, (sx * 0.39, 1.13, -0.005), (sx * 0.47, 1.02, 0.01))
+        mirror = lambda p: (sx * p[0], p[1], p[2])
+        band(f"diver_cuff{sx}", M["cloth"], mirror(CUFF[0]), 0.035, 0.026, mirror(CUFF[1]), mirror(CUFF[2]))
         band(f"diver_boot_top{sx}", M["boots"], (sx * 0.11, 0.203, -0.004), 0.058, 0.018, (sx * 0.11, 0.0, -0.004), (sx * 0.11, 0.3, -0.004), thick=0.008)
     return out
 
@@ -421,12 +420,12 @@ def build_hands(M, coll):
         palm["falloff"] = 0.016
         # the wrist end of the palm follows the hand bone; the rest, the metacarpals
         palm["segs"] = repr({f"{side}Hand": ([float(c) for c in w - d * 0.03], [float(c) for c in w + d * 0.012])})
-        parts.append(palm)
+        fingers = {}
         for fname, (pts, r) in finger_chains(sx).items():
             start = pts[0] - (pts[1] - pts[0]) / np.linalg.norm(pts[1] - pts[0]) * 0.012  # rooted inside the palm
             # Each joint swells into a knuckle and each segment narrows between
             # them, so the finger reads as three bones, not one tube.
-            knuckle = (1.2, 1.13, 1.07, 0.88)  # at the base knuckle, the two middle joints, the tip
+            knuckle = (1.2, 1.06, 1.02, 0.88)  # at the base knuckle, the two middle joints, the tip
             waist = (0.86, 0.82, 0.8)  # mid-segment
             chain, radii = [start, pts[0]], [r * 1.05, r * knuckle[0]]
             for k in range(3):
@@ -435,18 +434,176 @@ def build_hands(M, coll):
                 radii += [r * waist[k] * (1 - 0.07 * k), r * knuckle[k + 1] * (1 - 0.07 * k)]
             if fname == "Thumb":  # its first bone is wrapped in the thumb's muscle, a mound joining it to the palm
                 radii = [0.017, 0.0175, 0.0155, 0.0128, 0.0112, 0.0118, 0.0106, 0.0094]
-            o = skin_chain(f"diver_{side}{fname}", M["skin"], coll, chain, radii)
+            o = skin_chain(f"diver_{side}{fname}", M["skin"], coll, chain, radii, levels=3)  # fine: only the fused hand keeps its shape
             names = ("Metacarpal", "Proximal", "Distal") if fname == "Thumb" else ("Proximal", "Intermediate", "Distal")
             root = f"{side}Hand" if fname == "Thumb" else f"{side}{fname}Metacarpal"
             o["bones"] = ",".join([root] + [f"{side}{fname}{nm}" for nm in names])
             o["falloff"] = 0.009
-            parts.append(o)
-            parts.append(build_nail(o, side, fname, M, coll))
-        parts.append(build_web(side, sx, palm_point, M, coll))
+            fingers[fname] = o
+        web = build_web(side, sx, palm_point, M, coll)
+        sub = palm.modifiers.new("Subsurf", "SUBSURF")  # smooth the palm's loft for the distance field
+        sub.levels = sub.render_levels = 2
+        for o in (palm, *fingers.values(), web):
+            kit.finalize(o)
+        hand = fuse_hand(side, palm, fingers, web, M, coll)
+        parts.append(hand)
+        for fname, o in fingers.items():
+            parts.append(build_nail(hand, o["bones"], o["falloff"], side, fname, M, coll))
+        for o in (palm, *fingers.values(), web):
+            bpy.data.objects.remove(o)
     return parts
 
 
-def build_nail(finger, side, fname, M, coll):
+def _smin(a, b, k):
+    """Polynomial smooth minimum: the union of two distance fields with a
+    rounded fillet k wide where they meet."""
+    h = np.clip(k - np.abs(a - b), 0.0, None) / k
+    return np.minimum(a, b) - h * h * k * 0.25
+
+
+WEB_HALF = 0.0032  # half the web's thickness
+FUSE_STEP = 0.0009  # metres per voxel when the hand's parts are fused into one skin
+FUSE_TRIS = 5000  # triangles per fused hand
+WEIGHT_RELAX = 4  # passes of weight smoothing over the fused hand
+
+
+def fuse_hand(side, palm, fingers, web, M, coll):
+    """One seamless hand from its parts: each part becomes a signed distance
+    field, the fingers, the thumb and the web are blended into the palm with
+    a rounded fillet (the fingers stay apart from each other), and the
+    surface is rebuilt with marching cubes and reduced to FUSE_TRIS. Its
+    weights blend each part's own bone weights across the fillets."""
+    from skimage.measure import marching_cubes  # build-time only: pip install scikit-image
+    parts = {"palm": palm, "web": web, **fingers}
+    bvh = {k: BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get()) for k, o in parts.items()}
+    boxes = {}
+    for k, o in parts.items():
+        vs = np.array([tuple(v.co) for v in o.data.vertices])
+        boxes[k] = (vs.min(0) - 0.008, vs.max(0) + 0.008)
+    lo = np.min([b[0] for b in boxes.values()], 0)
+    hi = np.max([b[1] for b in boxes.values()], 0)
+    h = FUSE_STEP
+    axes = [np.arange(lo[i], hi[i] + h, h) for i in range(3)]
+    gx, gy, gz = np.meshgrid(*axes, indexing="ij")
+    pts = np.stack([gx.ravel(), gy.ravel(), gz.ravel()], 1)
+    field = {}
+    for k in parts:
+        d = np.full(len(pts), 0.05)
+        b0, b1 = boxes[k]
+        idx = np.nonzero(np.all((pts >= b0) & (pts <= b1), 1))[0]
+        tree = bvh[k]
+        for i in idx:
+            co = Vector(pts[i])
+            loc, nrm, _, dist = tree.find_nearest(co)
+            if k == "web":  # a sheet: thick by WEB_HALF either side, no inside to test
+                d[i] = dist - WEB_HALF
+            else:
+                d[i] = dist if (co - loc).dot(nrm) >= 0 else -dist
+        field[k] = d
+    base = _smin(field["palm"], field["web"], 0.003)
+    sdf = _smin(base, field["Thumb"], 0.006)
+    for f, *_ in FINGERS:
+        sdf = np.minimum(sdf, _smin(base, field[f], 0.0042))
+    vol = sdf.reshape(gx.shape)
+    verts, faces, _, _ = marching_cubes(vol, level=0.0, spacing=(h, h, h))
+    verts += lo
+    bm = bmesh.new()
+    bv = [bm.verts.new(Vector(v)) for v in verts]
+    for f in faces:
+        try:
+            bm.faces.new((bv[f[0]], bv[f[1]], bv[f[2]]))
+        except ValueError:
+            pass
+    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=h * 0.05)
+    # keep only the hand itself: drop any stray bubbles the field leaves
+    islands, seen = [], set()
+    for f0 in bm.faces:
+        if f0 in seen:
+            continue
+        stack, isle = [f0], []
+        seen.add(f0)
+        while stack:
+            f = stack.pop()
+            isle.append(f)
+            for e in f.edges:
+                for g_ in e.link_faces:
+                    if g_ not in seen:
+                        seen.add(g_)
+                        stack.append(g_)
+        islands.append(isle)
+    islands.sort(key=len)
+    for isle in islands[:-1]:
+        bmesh.ops.delete(bm, geom=isle, context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    for _ in range(4):  # even out the voxel ripple; volume-preserving, so fingers keep their size
+        bmesh.ops.smooth_laplacian_vert(bm, verts=bm.verts[:], lambda_factor=0.6, lambda_border=0.0,
+                                        use_x=True, use_y=True, use_z=True, preserve_volume=True)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    o = kit.mesh_obj(f"diver_hand_{side}", bm, M["skin"], coll, (0, 0, 0), (0, 0, 0))
+    dec = o.modifiers.new("Decimate", "DECIMATE")
+    dec.ratio = min(1.0, FUSE_TRIS / max(1, len(faces)))
+    o["uv"] = "box"
+    kit.finalize(o)
+    bm = bmesh.new()  # relax the reduced mesh: evens out the facets the reduction leaves
+    bm.from_mesh(o.data)
+    for _ in range(3):
+        bmesh.ops.smooth_laplacian_vert(bm, verts=bm.verts[:], lambda_factor=0.5, lambda_border=0.0,
+                                        use_x=True, use_y=True, use_z=True, preserve_volume=True)
+    bm.to_mesh(o.data)
+    bm.free()
+    for poly in o.data.polygons:
+        poly.use_smooth = True
+    # weights: each part's own bone weights, blended by how near each part's surface is
+    vs = np.array([tuple(v.co) for v in o.data.vertices])
+    g = np.stack([vs[:, 0], vs[:, 2], -vs[:, 1]], 1)
+    near = np.zeros((len(vs), len(parts)))
+    for j, k in enumerate(parts):
+        tree = bvh[k]
+        for i, v in enumerate(vs):
+            loc, nrm, _, dist = tree.find_nearest(Vector(v))
+            if k == "web":
+                near[i, j] = max(0.0, dist - WEB_HALF)
+            else:
+                near[i, j] = max(0.0, dist) if (Vector(v) - loc).dot(nrm) >= 0 else 0.0
+    blend = np.exp(-(near - near.min(1, keepdims=True)) / 0.0018)
+    blend /= blend.sum(1, keepdims=True)
+    total = {}
+    for j, (k, part) in enumerate(parts.items()):
+        allowed = part["bones"].split(",")
+        segs = ast.literal_eval(part["segs"]) if part.get("segs") else {}
+        w = bone_weights(g, allowed, part["falloff"], segs)
+        for c, n in enumerate(allowed):
+            total[n] = total.get(n, 0) + blend[:, j] * w[:, c]
+    write_weights(o, total, relax=WEIGHT_RELAX)
+    o["weighted"] = True
+    return o
+
+
+def write_weights(o, total, relax):
+    """Vertex groups from {bone: per-vertex weight}: relaxed across the surface
+    (skin stretches evenly over joints instead of tearing where one part's
+    weights meet another's), at most four influences, normalised."""
+    names = list(total)
+    W = np.stack([total[n] for n in names], 1)
+    edges = np.array([tuple(e.vertices) for e in o.data.edges])
+    deg = np.bincount(edges.ravel(), minlength=len(W)).astype(float)[:, None]
+    for _ in range(relax):
+        acc = np.zeros_like(W)
+        np.add.at(acc, edges[:, 0], W[edges[:, 1]])
+        np.add.at(acc, edges[:, 1], W[edges[:, 0]])
+        W = 0.5 * W + 0.5 * acc / np.maximum(deg, 1)
+    keep = np.argsort(-W, 1)[:, :4]
+    mask = np.zeros_like(W, bool)
+    np.put_along_axis(mask, keep, True, 1)
+    W = np.where(mask, W, 0)
+    W /= W.sum(1, keepdims=True)
+    for c, n in enumerate(names):
+        vg = o.vertex_groups.new(name=n)
+        for i in np.nonzero(W[:, c] > 0.01)[0]:
+            vg.add([int(i)], float(W[i, c]), "REPLACE")
+
+
+def build_nail(finger, bones, falloff, side, fname, M, coll):
     """A fingernail: a thin, evenly curved shell over the back of the last
     finger bone, sized from the finger's measured thickness, ending before the
     fingertip rounds off."""
@@ -520,8 +677,8 @@ def build_nail(finger, side, fname, M, coll):
     for poly in o.data.polygons:
         poly.use_smooth = True
     o["uv"] = "keep"
-    o["bones"] = finger["bones"]  # weighted exactly like the finger under it, so the two bend as one
-    o["falloff"] = finger["falloff"]
+    o["bones"] = bones  # weighted like the finger under it, so the two bend as one
+    o["falloff"] = falloff
     return o
 
 
@@ -551,28 +708,13 @@ def build_web(side, sx, palm_point, M, coll):
             u = i / nu * (1 - 0.34 * math.sin(math.pi * v) ** 0.8)  # the free edge curves back
             row.append((A(u) * (1 - v) + B(u) * v, i / nu))
         grid.append(row)
+    # the web's centre sheet; fuse_hand gives it its thickness (WEB_HALF), which
+    # also rounds its free edge
     bm = bmesh.new()
-    top, bot = [], []
-    for i in range(nu + 1):
-        trow, brow = [], []
-        for j in range(nv + 1):
-            p, uf = grid[i][j]
-            du = grid[min(i + 1, nu)][j][0] - grid[max(i - 1, 0)][j][0]
-            dv = grid[i][min(j + 1, nv)][0] - grid[i][max(j - 1, 0)][0]
-            nn = np.cross(du, dv)
-            nn /= np.linalg.norm(nn) + 1e-12
-            h = 0.0038 * (1 - 0.6 * uf ** 2)
-            trow.append(bm.verts.new(Vector(kit.g2b(*(p + nn * h)))))
-            brow.append(bm.verts.new(Vector(kit.g2b(*(p - nn * h)))))
-        top.append(trow)
-        bot.append(brow)
+    vv = [[bm.verts.new(Vector(kit.g2b(*grid[i][j][0]))) for j in range(nv + 1)] for i in range(nu + 1)]
     for i in range(nu):
         for j in range(nv):
-            bm.faces.new((top[i][j], top[i][j + 1], top[i + 1][j + 1], top[i + 1][j]))
-            bm.faces.new((bot[i][j], bot[i + 1][j], bot[i + 1][j + 1], bot[i][j + 1]))
-    for j in range(nv):  # round the free edge shut
-        bm.faces.new((top[nu][j], top[nu][j + 1], bot[nu][j + 1], bot[nu][j]))
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+            bm.faces.new((vv[i][j], vv[i][j + 1], vv[i + 1][j + 1], vv[i + 1][j]))
     o = kit.mesh_obj(f"diver_web_{side}", bm, M["skin"], coll, (0, 0, 0), (0, 0, 0))
     for poly in o.data.polygons:
         poly.use_smooth = True
@@ -662,47 +804,241 @@ def build_boots(M, coll):
     return parts
 
 
+# ---------- the body ----------
+# The body is built like the hands: anatomical masses (bones' cores, muscles,
+# fat) as distance fields, blended with smooth unions, rebuilt as one surface
+# by marching cubes, reduced to BODY_TRIS and weighted region by region.
+
+BODY_STEP = 0.0045  # metres per voxel
+BODY_TRIS = 12000
+
+
+def _sd_round_cone(p, a, b, ra, rb):
+    ab = b - a
+    t = np.clip(((p - a) @ ab) / (ab @ ab), 0.0, 1.0)
+    return np.linalg.norm(p - (a + t[:, None] * ab), axis=1) - (ra + (rb - ra) * t)
+
+
+def _sd_ellipsoid(p, c, frame, radii):
+    q = (p - c) @ frame.T  # into the ellipsoid's axes
+    r = np.asarray(radii)
+    k0 = np.linalg.norm(q / r, axis=1)
+    k1 = np.linalg.norm(q / (r * r), axis=1)
+    return k0 * (k0 - 1.0) / np.maximum(k1, 1e-9)
+
+
+def _limb_frame(a, b, sx):
+    """Axes of a limb segment: along it, outward from the body, to the front."""
+    u = (b - a) / np.linalg.norm(b - a)
+    f = np.array((0.0, 0.0, 1.0)) - u * u[2]
+    f /= np.linalg.norm(f)
+    o = np.cross(f, u)
+    if o[0] * sx < 0:
+        o = -o
+    return np.stack([u, o, f])
+
+
+AXES = np.eye(3)  # world-aligned: (x across, y up, z front)
+RIBS = (np.array((0.0, 1.31, 0.0)), AXES, (0.138, 0.14, 0.1))  # the upper ribcage, widest at the armpits: pecs and lats lie over it
+
+
+def body_regions():
+    """{region: (bones, [primitive, ...][, weighting segments])}; a primitive is (kind, args, k):
+    kind "e" an ellipsoid (centre, frame, radii along the frame's axes),
+    "c" a round cone (a, b, ra, rb), "s" a layer over an ellipsoid (the
+    ellipsoid, the layer's thickness, the ellipsoid outlining it: a muscle
+    sheet that follows the ribs); k is the fillet it blends in with."""
+    P = lambda *v: np.array(v, float)
+    torso = [
+        ("e", (P(0, 0.945, -0.005), AXES, (0.13, 0.09, 0.09)), 0.0),  # pelvis, the basin
+        ("e", (P(0, 0.96, -0.078), AXES, (0.045, 0.06, 0.016)), 0.02),  # the sacrum, flat at the base of the spine
+        ("e", (P(0, 0.93, 0.05), AXES, (0.085, 0.06, 0.03)), 0.05),  # the lower belly, down to the pubic bone
+        ("e", (P(0, 1.06, 0.0), AXES, (0.133, 0.12, 0.076)), 0.06),  # the waist: one long curve from the ribs out over the hips
+        ("e", RIBS, 0.03),  # upper ribcage
+        ("e", (P(0, 1.17, 0.0), AXES, (0.128, 0.11, 0.088)), 0.04),  # the lower ribs, tapering to the waist
+        ("e", (P(0, 1.405, -0.014), AXES, (0.15, 0.058, 0.085)), 0.035),  # shoulder girdle: collarbones to shoulder blades
+        ("s", (RIBS, 0.006, (P(0, 1.31, -0.1), AXES, (0.085, 0.15, 0.05))), 0.0),  # middle and lower trapezius: the diamond between the blades
+        ("e", (P(0, 1.1, 0.05), AXES, (0.06, 0.14, 0.03)), 0.02),  # the abdominal wall, flat and firm
+        ("c", (P(0, 1.41, -0.016), P(0, 1.635, 0.0), 0.06, 0.053), 0.025),  # neck
+        ("e", (P(0, 0.87, 0.026), AXES, (0.055, 0.045, 0.045)), 0.025),  # groin
+    ]
+    for sx in (1, -1):
+        torso += [
+            ("s", (RIBS, 0.012, (P(sx * 0.075, 1.37, 0.1), AXES, (0.095, 0.07, 0.09))), 0.0),  # pectoral: a plate over the ribs
+            ("s", (RIBS, 0.009, (P(sx * 0.11, 1.27, -0.07), AXES, (0.08, 0.15, 0.09))), 0.0),  # latissimus over the ribs
+            ("c", (P(sx * 0.048, 1.478, -0.033), P(sx * 0.17, 1.428, -0.03), 0.026, 0.016), 0.045),  # upper trapezius, sloping from the neck down to the shoulder's point
+            ("c", (P(sx * 0.115, 1.415, -0.07), P(sx * 0.19, 1.405, -0.045), 0.026, 0.03), 0.04),  # the back of the shoulder: blade into rear deltoid
+            ("e", (P(sx * 0.03, 1.13, -0.066), AXES, (0.032, 0.19, 0.021)), 0.025),  # the long muscles beside the spine, mid-back to pelvis
+            ("s", (RIBS, 0.01, (P(sx * 0.072, 1.36, -0.1), AXES, (0.05, 0.072, 0.05))), 0.0),  # the shoulder blade, a plate on the upper back
+            ("c", (P(sx * 0.035, 1.395, -0.098), P(sx * 0.145, 1.44, -0.07), 0.006, 0.005), 0.016),  # its spine, the ridge out to the shoulder
+            ("c", (P(sx * 0.1, 1.31, -0.075), P(sx * 0.165, 1.385, -0.045), 0.014, 0.017), 0.035),  # teres major: the back of the armpit, into the arm
+            ("e", (P(sx * 0.066, 0.895, -0.05), AXES, (0.07, 0.08, 0.05)), 0.02),  # gluteus maximus
+            ("e", (P(sx * 0.106, 0.95, -0.025), AXES, (0.036, 0.05, 0.05)), 0.05),  # gluteus medius, the upper outer hip
+            ("e", (P(sx * 0.088, 0.99, 0.06), AXES, (0.012, 0.012, 0.01)), 0.03),  # the hip bone's front point
+            ("e", (P(sx * 0.03, 0.985, -0.083), AXES, (0.009, 0.009, 0.006)), -0.006),  # a dimple of the lower back
+        ]
+    torso.append(("c", (P(0, 1.43, -0.104), P(0, 0.99, -0.088), 0.005, 0.004), -0.022))  # the furrow down the spine
+    regions = {"torso": (["Hips", "Spine", "Chest", "UpperChest", "Neck", "Head", "LeftShoulder", "RightShoulder",
+                          "LeftUpperLeg", "RightUpperLeg"], torso)}
+    for side, sx in (("Left", 1), ("Right", -1)):
+        S, E, W = (np.array(BONES[f"{side}UpperArm"][0], float), np.array(BONES[f"{side}LowerArm"][0], float),
+                   np.array(BONES[f"{side}LowerArm"][1], float))
+        ua, fa = _limb_frame(S, E, sx), _limb_frame(E, W, sx)
+        Lu, Lf = np.linalg.norm(E - S), np.linalg.norm(W - E)
+        u, o, f = ua
+        v, o2, f2 = fa
+        arm = [
+            ("c", (S + u * 0.03, E, 0.034, 0.031), 0.0),  # the upper arm's core, its head tucked under the shoulder's point
+            ("e", (S + u * 0.082 + o * 0.012 - f * 0.004, ua, (0.072, 0.046, 0.056)), 0.026),  # deltoid: rounds over the shoulder's point, no higher than it
+            ("e", (S + u * Lu * 0.56 + f * 0.017, ua, (0.088, 0.033, 0.033)), 0.012),  # biceps
+            ("e", (S + u * Lu * 0.44 - f * 0.021, ua, (0.1, 0.036, 0.034)), 0.012),  # triceps
+            ("e", (E - f * 0.012, ua, (0.03, 0.032, 0.03)), 0.012),  # the elbow's point
+            ("c", (E, W, 0.032, 0.021), 0.012),  # the forearm's core
+            ("e", (E + v * Lf * 0.3 + o2 * 0.006, fa, (0.088, 0.04, 0.035)), 0.016),  # forearm muscles, thick below the elbow
+            ("e", (W - v * 0.022, fa, (0.034, 0.028, 0.02)), 0.01),  # the wrist, flat and wide
+        ]
+        # the shoulder's cap goes with the upper arm, not the collarbone: weigh the
+        # collarbone by its inner part only, and the upper arm from above its joint
+        segs = {f"{side}Shoulder": (P(sx * 0.03, 1.43, -0.01), P(sx * 0.1, 1.44, -0.014)),
+                f"{side}UpperArm": (S + np.array((-sx * 0.04, 0.03, 0.0)), E)}
+        regions[f"arm_{side}"] = ([f"{side}Shoulder", f"{side}UpperArm", f"{side}LowerArm", f"{side}Hand", "UpperChest"], arm, segs)
+        H, K, A = (np.array(BONES[f"{side}UpperLeg"][0], float), np.array(BONES[f"{side}LowerLeg"][0], float),
+                   np.array(BONES[f"{side}LowerLeg"][1], float))
+        th, sh = _limb_frame(H, K, sx), _limb_frame(K, A, sx)
+        Lt, Ls = np.linalg.norm(K - H), np.linalg.norm(A - K)
+        u, o, f = th
+        v, o2, f2 = sh
+        leg = [
+            ("c", (H + u * 0.05, K, 0.066, 0.047), 0.0),  # the thigh's core, its top tucked into the pelvis
+            ("e", (H + o * 0.044 + u * 0.07, th, (0.035, 0.026, 0.033)), 0.025),  # the greater trochanter: the hip's width
+            ("e", (H + u * Lt * 0.22 + f * 0.04 + o * 0.018, th, (0.09, 0.03, 0.026)), 0.016),  # the hip flexors, front of the hip into the thigh
+            ("e", (H + u * Lt * 0.48 + f * 0.024, th, (0.21, 0.062, 0.06)), 0.018),  # quadriceps
+            ("e", (H + u * Lt * 0.84 + f * 0.018 - o * 0.028, th, (0.066, 0.04, 0.04)), 0.014),  # the teardrop above the knee
+            ("e", (H + u * Lt * 0.45 + o * 0.026, th, (0.18, 0.046, 0.054)), 0.016),  # the outer thigh
+            ("e", (H + u * Lt * 0.5 - f * 0.03, th, (0.19, 0.054, 0.05)), 0.016),  # hamstrings
+            ("e", (H + u * Lt * 0.27 - o * 0.03, th, (0.13, 0.044, 0.054)), 0.018),  # the inner thigh
+            ("e", (K, AXES, (0.047, 0.047, 0.046)), 0.016),  # the knee
+            ("e", (K + f * 0.042, sh, (0.03, 0.025, 0.012)), 0.01),  # the kneecap
+            ("c", (K, A, 0.043, 0.027), 0.012),  # the shin's core
+            ("e", (K + v * Ls * 0.24 - f2 * 0.034 - o2 * 0.012, sh, (0.11, 0.035, 0.035)), 0.012),  # calf, inner head
+            ("e", (K + v * Ls * 0.21 - f2 * 0.032 + o2 * 0.013, sh, (0.1, 0.032, 0.032)), 0.012),  # calf, outer head
+            ("e", (K + v * Ls * 0.5 - f2 * 0.018, sh, (0.15, 0.038, 0.034)), 0.016),  # the deep calf muscle under them
+            ("e", (K + v * Ls * 0.3 + f2 * 0.02 + o2 * 0.012, sh, (0.12, 0.021, 0.019)), 0.01),  # the shin muscle
+            ("e", (P(sx * 0.11, 0.2, -0.006), AXES, (0.047, 0.06, 0.05)), 0.02),  # trousers bunched into the boot
+        ]
+        regions[f"leg_{side}"] = (["Hips", f"{side}UpperLeg", f"{side}LowerLeg", f"{side}Foot"], leg)
+    return regions
+
+
+REGION_JOIN = {"arm": 0.04, "leg": 0.034}  # fillets where the limbs meet the torso
+
+
+def _region_field(p, prims):
+    d = None
+    for kind, args, k in prims:  # k > 0 blends in, 0 is a hard union, k < 0 carves a dimple with fillet |k|
+        if kind == "e":
+            di = _sd_ellipsoid(p, *args)
+        elif kind == "c":
+            di = _sd_round_cone(p, *args)
+        else:
+            base, thick, outline = args  # thickest inside the outline, fading out over its last 3 cm
+            fade = np.clip(-_sd_ellipsoid(p, *outline) / 0.03, 0.0, 1.0)
+            di = _sd_ellipsoid(p, *base) - thick * fade * fade * (3 - 2 * fade)
+        if d is None:
+            d = di
+        elif k < 0:
+            d = -_smin(-d, di, -k)  # smooth subtraction
+        else:
+            d = _smin(d, di, k) if k > 0 else np.minimum(d, di)
+    return d
+
+
+def body_field(p, regions, parts=False):
+    """The body's distance field at game-space points (and each region's)."""
+    fields = {r: _region_field(p, reg[1]).astype(np.float32) for r, reg in regions.items()}
+    t = fields["torso"]
+    out = None
+    for r, d in fields.items():
+        if r == "torso":
+            continue
+        j = _smin(t, d, REGION_JOIN[r.split("_")[0]])
+        out = j if out is None else np.minimum(out, j)  # the limbs never blend into each other
+    return (out, fields) if parts else out
+
+
 def build_body(M, coll):
+    """The body from neck to ankles (the head, hands and boots are their own
+    pieces): anatomical masses fused into one skin, in the fitted base layer."""
+    from skimage.measure import marching_cubes
+    regions = body_regions()
+    h = BODY_STEP
+    lo, hi = np.array((-0.53, 0.06, -0.19)), np.array((0.53, 1.66, 0.19))
+    axes = [np.arange(lo[i], hi[i] + h, h) for i in range(3)]
+    gx, gy, gz = np.meshgrid(*axes, indexing="ij")
+    pts = np.stack([gx.ravel(), gy.ravel(), gz.ravel()], 1).astype(np.float32)
+    sdf = np.concatenate([body_field(pts[i:i + 400000], regions) for i in range(0, len(pts), 400000)])
+    verts, faces, _, _ = marching_cubes(sdf.reshape(gx.shape), level=0.0, spacing=(h, h, h))
+    verts += lo
     bm = bmesh.new()
-    idx = {}
-    for name, p, _ in NODES:
-        idx[name] = bm.verts.new(kit.g2b(*p))
-    for a, b in EDGES:
-        bm.edges.new((idx[a], idx[b]))
-    me = bpy.data.meshes.new("char_diver_base")
-    bm.to_mesh(me)
-    bm.free()
-    o = bpy.data.objects.new("char_diver_base", me)
-    coll.objects.link(o)
-    sk = o.modifiers.new("Skin", "SKIN")
-    sk.use_smooth_shade = True
-    sk.branch_smoothing = 0.6
-    rad = {name: r for name, _, r in NODES}
-    for v, (name, _, _) in zip(me.skin_vertices[0].data, NODES):
-        across, depth = rad[name]
-        v.radius = (across, depth)  # Blender x = across, y = front-back (game z)
-    me.skin_vertices[0].data[0].use_root = True
-    sub = o.modifiers.new("Subsurf", "SUBSURF")
-    sub.levels = sub.render_levels = 2
-    bpy.context.view_layer.objects.active = o
-    dg = bpy.context.evaluated_depsgraph_get()
-    me2 = bpy.data.meshes.new_from_object(o.evaluated_get(dg), depsgraph=dg)
-    o.modifiers.clear()
-    o.data = me2
-    for m in ("cloth", "skin", "boots"):
+    bv = [bm.verts.new(Vector(kit.g2b(*v))) for v in verts]
+    for f in faces:
+        try:
+            bm.faces.new((bv[f[0]], bv[f[1]], bv[f[2]]))
+        except ValueError:
+            pass
+    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=h * 0.05)
+    for _ in range(3):
+        bmesh.ops.smooth_laplacian_vert(bm, verts=bm.verts[:], lambda_factor=0.5, lambda_border=0.0,
+                                        use_x=True, use_y=True, use_z=True, preserve_volume=True)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    o = kit.mesh_obj("char_diver_base", bm, M["cloth"], coll, (0, 0, 0), (0, 0, 0))
+    dec = o.modifiers.new("Decimate", "DECIMATE")
+    dec.ratio = min(1.0, BODY_TRIS / max(1, len(faces)))
+    o["uv"] = "box"
+    kit.finalize(o)
+    for m in ("skin", "boots"):
         o.data.materials.append(M[m])
+    # cut the surface exactly where the shirt ends, under the middle of the
+    # collar and of each cuff, so the skin's edge is a clean line hidden by the band
+    cuts = [(np.array(COLLAR[0]), np.array((0.0, 1.0, 0.0)), 0.11)]
+    for sx in (1, -1):
+        centre = np.array(CUFF[0]) * (sx, 1, 1)
+        axis = (np.array(CUFF[2]) - np.array(CUFF[1])) * (sx, 1, 1)
+        cuts.append((centre, axis / np.linalg.norm(axis), 0.07))
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    for centre, nrm, reach in cuts:
+        cb, nb = Vector(kit.g2b(*centre)), Vector(kit.g2b(*nrm))
+        near = [f for f in bm.faces if (f.calc_center_median() - cb).length < reach]
+        geom = list({e for f in near for e in f.edges}) + near + list({v for f in near for v in f.verts})
+        bmesh.ops.bisect_plane(bm, geom=geom, plane_co=cb, plane_no=nb)
+    bm.to_mesh(o.data)
+    bm.free()
     # skin above the collar and past the wrists; boots below the boot tops; the rest is the base layer
     for poly in o.data.polygons:
         c = poly.center  # Blender coords
-        gx, gy = abs(c.x), c.z
-        if gy > 1.505 or (gx > 0.455 and gy < 1.05):  # skin starts on the neck, above the collar, and at the wrists
-            poly.material_index = 1
-        elif gy < 0.17:  # inside the boot
-            poly.material_index = 2
-        else:
-            poly.material_index = 0
+        gp = np.array((c.x, c.z, -c.y))
+        skin = gp[1] > COLLAR[0][1] and np.hypot(gp[0], gp[2] - COLLAR[0][2]) < 0.09
+        for centre, nrm, reach in cuts[1:]:
+            skin |= (np.linalg.norm(gp - centre) < reach) and (gp - centre) @ nrm > 0
+        poly.material_index = 1 if skin else (2 if gp[1] < 0.17 else 0)
         poly.use_smooth = True
-    o["uv"] = "box"
+    # weights: each region's bones, blended by how near each region's surface is
+    vs = np.array([tuple(v.co) for v in o.data.vertices])
+    g = np.stack([vs[:, 0], vs[:, 2], -vs[:, 1]], 1)
+    _, fields = body_field(g, regions, parts=True)
+    names = list(regions)
+    dist = np.stack([np.maximum(fields[r], 0.0) for r in names], 1)
+    blend = np.exp(-(dist - dist.min(1, keepdims=True)) / 0.012)
+    blend /= blend.sum(1, keepdims=True)
+    total = {}
+    for j, r in enumerate(names):
+        allowed = regions[r][0]
+        w = bone_weights(g, allowed, 0.035, regions[r][2] if len(regions[r]) > 2 else None)
+        for c, n in enumerate(allowed):
+            total[n] = total.get(n, 0) + blend[:, j] * w[:, c]
+    write_weights(o, total, relax=4)
+    o["weighted"] = True
     return o
 
 
@@ -748,14 +1084,11 @@ def skin_uv(o, skin):
                 uvs[li].uv = SKIN_UV
 
 
-def part_weights(o, allowed, falloff):
-    """Weights from the distance to each allowed bone's segment, sharpened, at
-    most three influences. The body keeps each limb to its own side and the
-    trunk's bones off the arms; a hand or boot only knows its own bones."""
-    vs = np.array([tuple(o.matrix_world @ v.co) for v in o.data.vertices])
-    g = np.stack([vs[:, 0], vs[:, 2], -vs[:, 1]], 1)  # Blender -> game
-    d = np.zeros((len(vs), len(allowed)))
-    segs = ast.literal_eval(o["segs"]) if o.get("segs") else {}  # bone -> (head, tail) used for weighting instead
+def bone_weights(g, allowed, falloff, segs=None):
+    """Weights (points x allowed bones) from the distance of game-space points
+    to each bone's segment, sharpened, at most three influences."""
+    segs = segs or {}
+    d = np.zeros((len(g), len(allowed)))
     for j, n in enumerate(allowed):
         h, t = segs.get(n, BONES[n][:2])
         d[:, j] = seg_dist(g, np.array(h, float), np.array(t, float))
@@ -772,7 +1105,17 @@ def part_weights(o, allowed, falloff):
     mask = np.zeros_like(w, bool)
     np.put_along_axis(mask, best, True, 1)
     w = np.where(mask, w, 0)
-    w /= w.sum(1, keepdims=True)
+    return w / w.sum(1, keepdims=True)
+
+
+def part_weights(o, allowed, falloff):
+    """Vertex groups from bone_weights. The body keeps each limb to its own
+    side and the trunk's bones off the arms; a hand or boot only knows its
+    own bones."""
+    vs = np.array([tuple(o.matrix_world @ v.co) for v in o.data.vertices])
+    g = np.stack([vs[:, 0], vs[:, 2], -vs[:, 1]], 1)  # Blender -> game
+    segs = ast.literal_eval(o["segs"]) if o.get("segs") else {}  # bone -> (head, tail) used for weighting instead
+    w = bone_weights(g, allowed, falloff, segs)
     for j, n in enumerate(allowed):
         vg = o.vertex_groups.get(n) or o.vertex_groups.new(name=n)
         for i in np.nonzero(w[:, j] > 0.01)[0]:
@@ -812,16 +1155,27 @@ def key_pose(rig, frame, pose, hips_loc=(0, 0, 0)):
     hb.keyframe_insert("location", frame=frame)
 
 
-def arms_down(pose, swing=0.0, bend=12.0, shrug=0.0):
-    """Arms hanging from the A-pose; the left arm swings forward by `swing`
-    degrees and the right arm back. The elbow folds by `bend`, more as the
-    arm comes forward; the shoulder rolls with the arm and lifts by `shrug`."""
+ARM_HANG = 27.0 - ARM_DROP  # degrees the arms come down from the rig's pose: hanging close to the body, just clear of the hips
+HAND_RELAX = ((10.0, 14.0, 8.0), (4.0, 10.0, 8.0))  # fingers (first, middle, last joint), thumb: a relaxed hand
+
+
+def arms_down(pose, swing=0.0, bend=14.0, shrug=-2.0):
+    """Arms hanging naturally from the A-pose: close to the body, the elbows
+    soft, palms to the thighs, shoulders relaxed down (`shrug`), the hands
+    loosely curled. The left arm swings forward by `swing` degrees and the
+    right arm back; the elbow folds by `bend`, more as the arm comes forward,
+    and the shoulder rolls with the arm."""
     for side, sx in (("Left", 1), ("Right", -1)):
         s = swing * (1 if side == "Left" else -1)
         pose[f"{side}Shoulder"] = (shrug, 0, -0.22 * s)
-        pose[f"{side}UpperArm"] = (s, 0, -sx * 22)
+        pose[f"{side}UpperArm"] = (s + 3.0, 0, -sx * ARM_HANG)  # a little forward of straight down, as arms hang
         pose[f"{side}LowerArm"] = (bend + max(0.0, s) * 0.7, 0, 0)
         pose[f"{side}Hand"] = (-0.15 * s, 0, 0)  # the wrist trails the swing
+        for f, *_ in FINGERS:
+            for nm, a in zip(("Proximal", "Intermediate", "Distal"), HAND_RELAX[0]):
+                pose[f"{side}{f}{nm}"] = (a, 0, 0)
+        for nm, a in zip(("Metacarpal", "Proximal", "Distal"), HAND_RELAX[1]):
+            pose[f"{side}Thumb{nm}"] = (a, 0, 0)
     return pose
 
 
@@ -871,9 +1225,10 @@ def build_actions(rig):
         pose = arms_down({}, swing=1.5 * math.sin(ph))
         pose["Chest"] = (-1.5 * math.sin(ph), 0, 0)
         pose["Spine"] = (LEAN * 2, 0, 1.2 * math.sin(ph))
-        pose["LeftUpperLeg"] = (0, 0, 1.5 * math.sin(ph))
-        pose["RightUpperLeg"] = (0, 0, 1.5 * math.sin(ph))
-        key_pose(rig, f, pose, (0.006 * math.sin(ph), -0.004 * (1 + math.sin(ph * 2)) / 2, 0))
+        for side in ("Left", "Right"):
+            legs(pose, side, 4, 7)  # knees soft, never locked
+            pose[f"{side}UpperLeg"] = (4, 0, 1.5 * math.sin(ph))
+        key_pose(rig, f, pose, (0.006 * math.sin(ph), -0.002 - 0.004 * (1 + math.sin(ph * 2)) / 2, 0))
     acts.append(act)
     acts.append(cycle(rig, "walk", 32, stride=24, knee=30, arm=18, bob=0.025, lean=4, elbow=18, ankle=12, yaw=7, drop=4, sway=0.022, twist=10))
     acts.append(cycle(rig, "run", 20, stride=38, knee=62, arm=40, bob=0.05, lean=12, elbow=85, ankle=18, yaw=10, drop=5, sway=0.012, twist=16))
@@ -960,6 +1315,9 @@ def main():
     boots = build_boots(M, coll)
     trunk_bones = [n for n in BONES if n not in FINGER_BONES]
     for o in (body, head, *bands, *hands, *boots):
+        if o.get("weighted"):  # the fused hands come finalized and weighted
+            skin_uv(o, M["skin"])
+            continue
         kit.finalize(o)
         skin_uv(o, M["skin"])
         if o.get("bones"):
@@ -978,11 +1336,18 @@ def main():
     tris = sum(len(p.vertices) - 2 for p in body.data.polygons)
     print(f"diver: vertices {len(body.data.vertices)}  triangles {tris}  materials {len(body.data.materials)}  bones {len(BONES)}  actions {[a.name for a in acts]}")
     if "--render" in sys.argv:
+        hw = hand_frame(1)[0]  # the left wrist, for the hand close-ups
         views = (((2.4, 1.4, 3.4), (0, 0.95, 0)), ((-2.6, 1.5, -3.0), (0, 0.95, 0)), ((0.6, 1.65, 1.1), (0, 1.55, 0)),
-                 ((0.85, 1.05, 0.45), (0.5, 0.95, 0.02)), ((0.55, 0.32, 0.65), (0.1, 0.06, 0.06)),
-                 ((0.2, 1.0, 0.85), (0.47, 0.95, 0.03)))  # + a hand from the side, the boots, a hand from the front
+                 (tuple(hw + (0.38, 0.02, 0.44)), tuple(hw + (0.02, -0.08, 0.01))), ((0.55, 0.32, 0.65), (0.1, 0.06, 0.06)),
+                 (tuple(hw + (-0.26, -0.03, 0.84)), tuple(hw + (0.0, -0.08, 0.02))),  # + a hand from the side, the boots, a hand from the front
+                 ((0, 1.0, 3.6), (0, 0.92, 0)), ((0, 1.0, -3.6), (0, 0.92, 0)),  # front, back
+                 ((3.6, 1.0, 0), (0, 0.92, 0)), ((-3.6, 1.0, 0), (0, 0.92, 0)))  # left side, right side
         for k, (cam, look) in enumerate(views):
+            if k == 6:  # front, back and sides: as the Diver stands in the game (idle), not the A-pose it is rigged in
+                rig.animation_data.action = acts[0]
+                bpy.context.scene.frame_set(0)
             studio(cam, look, os.path.join(kit.WORK, f"preview_diver_{k}.png"))
+        rig.animation_data.action = None
     if "--sheets" in sys.argv:
         only = (arg("--only") or "").split(",")
         for act in acts:
