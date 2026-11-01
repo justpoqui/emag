@@ -54,12 +54,83 @@ for side, sx in (("Left", 1), ("Right", -1)):
         f"{side}Shoulder": ((sx * 0.03, 1.43, -0.01), (sx * 0.17, 1.45, -0.02), "UpperChest"),
         f"{side}UpperArm": ((sx * 0.17, 1.45, -0.02), (sx * 0.33, 1.22, -0.02), f"{side}Shoulder"),
         f"{side}LowerArm": ((sx * 0.33, 1.22, -0.02), (sx * 0.47, 1.02, 0.01), f"{side}UpperArm"),
-        f"{side}Hand": ((sx * 0.47, 1.02, 0.01), (sx * 0.53, 0.92, 0.02), f"{side}LowerArm"),
+        f"{side}Hand": ((sx * 0.465, 1.03, 0.01), (sx * 0.505, 0.955, 0.016), f"{side}LowerArm"),
         f"{side}UpperLeg": ((sx * 0.095, 0.95, 0), (sx * 0.105, 0.52, 0.01), "Hips"),
         f"{side}LowerLeg": ((sx * 0.105, 0.52, 0.01), (sx * 0.11, 0.1, -0.01), f"{side}UpperLeg"),
-        f"{side}Foot": ((sx * 0.11, 0.1, -0.01), (sx * 0.11, 0.035, 0.11), f"{side}LowerLeg"),
-        f"{side}Toes": ((sx * 0.11, 0.035, 0.11), (sx * 0.11, 0.03, 0.18), f"{side}Foot"),
+        f"{side}Foot": ((sx * 0.11, 0.1, -0.01), (sx * 0.11, 0.03, 0.125), f"{side}LowerLeg"),
+        f"{side}Toes": ((sx * 0.11, 0.03, 0.125), (sx * 0.11, 0.025, 0.2), f"{side}Foot"),
     })
+
+
+# ---------- the hands ----------
+# Each hand hangs from the wrist down the forearm's line, palm to the thigh, thumb forward.
+# Its frame: d along the hand, e across the knuckles (forward), n out of the palm (inwards).
+
+def hand_frame(sx):
+    w = np.array((sx * 0.465, 1.03, 0.01))
+    d = np.array((sx * 0.065, -0.11, 0.01))
+    d /= np.linalg.norm(d)
+    n = np.array((-sx, 0.0, 0.0))
+    n -= d * (n @ d)
+    n /= np.linalg.norm(n)
+    e = -np.cross(d, n) * sx  # forward (+z) for both hands: the thumb and index lead
+    e /= np.linalg.norm(e)
+    return w, d, e, n
+
+
+# (name, offset across the knuckles, segment lengths, radius at the base)
+FINGERS = (("Index", 0.028, (0.042, 0.026, 0.021), 0.0092), ("Middle", 0.0095, (0.046, 0.029, 0.022), 0.0095),
+           ("Ring", -0.009, (0.043, 0.027, 0.021), 0.009), ("Little", -0.026, (0.034, 0.02, 0.018), 0.0078))
+FINGER_REST_CURL = (14.0, 22.0, 16.0)  # degrees each joint bends towards the palm at rest: a relaxed hand
+
+
+def finger_chains(sx):
+    """Joint positions (game space) of each finger and the thumb, curled a little."""
+    w, d, e, n = hand_frame(sx)
+    chains = {}
+    for name, off, segs, r in FINGERS:
+        knuckle = w + d * (0.088 - 0.004 * abs(off) / 0.028) + e * off
+        pts, dirn = [knuckle], d + e * (off * 0.6)
+        dirn /= np.linalg.norm(dirn)
+        for k, ln in enumerate(segs):
+            a = math.radians(FINGER_REST_CURL[k])
+            dirn = dirn * math.cos(a) + n * math.sin(a)
+            dirn /= np.linalg.norm(dirn)
+            pts.append(pts[-1] + dirn * ln)
+        chains[name] = (pts, r)
+    base = w + d * 0.022 + e * 0.026 + n * 0.01
+    dirn = d * 0.85 + e * 0.3 + n * 0.42  # hangs along the index finger, a little forward, not splayed
+    dirn /= np.linalg.norm(dirn)
+    pts = [base]
+    for k, ln in enumerate((0.042, 0.032, 0.027)):
+        a = math.radians((6, 14, 12)[k])
+        dirn = dirn * math.cos(a) + n * math.sin(a)
+        dirn /= np.linalg.norm(dirn)
+        pts.append(pts[-1] + dirn * ln)
+    chains["Thumb"] = (pts, 0.0115)
+    return chains
+
+
+FINGER_BONES = []
+FINGER_CURL_TO = {}  # bone -> game-space direction the finger curls towards (out of the palm)
+for side, sx in (("Left", 1), ("Right", -1)):
+    _, palm_d, palm_e, palm_n = hand_frame(sx)
+
+    def thumb_dir(th, ph):  # th: 0 out of the palm, 90 towards the little finger; ph: tilt along the hand
+        t = palm_n * math.cos(math.radians(th)) - palm_e * math.sin(math.radians(th)) + palm_d * math.sin(math.radians(ph))
+        return t / np.linalg.norm(t)
+    # Solved so that closing the hand (+x on each thumb bone; about 30/50/70 degrees)
+    # lays the thumb tip across the middle bones of the index and middle fingers, a fist.
+    thumb_to = {"Metacarpal": thumb_dir(-75, -30), "Proximal": thumb_dir(135, -30), "Distal": thumb_dir(135, -30)}
+    for fname, (pts, _) in finger_chains(sx).items():
+        names = ("Metacarpal", "Proximal", "Distal") if fname == "Thumb" else ("Proximal", "Intermediate", "Distal")
+        parent = f"{side}Hand"
+        for k, nm in enumerate(names):
+            bn = f"{side}{fname}{nm}"
+            BONES[bn] = (tuple(pts[k]), tuple(pts[k + 1]), parent)
+            FINGER_BONES.append(bn)
+            FINGER_CURL_TO[bn] = tuple(thumb_to[nm] if fname == "Thumb" else palm_n)
+            parent = bn
 
 
 def arg(name, default=None):
@@ -87,25 +158,17 @@ for side, sx in (("l", 1), ("r", -1)):
         (f"bicep_{side}", (sx * 0.255, 1.33, -0.02), (0.054, 0.056)),
         (f"elbow_{side}", (sx * 0.33, 1.22, -0.02), (0.044, 0.044)),
         (f"forearm_{side}", (sx * 0.39, 1.13, -0.005), (0.046, 0.042)),
-        (f"wrist_{side}", (sx * 0.465, 1.03, 0.01), (0.031, 0.023)),
-        (f"palm_{side}", (sx * 0.505, 0.96, 0.015), (0.042, 0.019)),
-        (f"fingers_{side}", (sx * 0.535, 0.895, 0.02), (0.036, 0.015)),
-        (f"thumb_{side}", (sx * 0.49, 0.965, 0.052), (0.014, 0.014)),
+        (f"wrist_{side}", (sx * 0.47, 1.025, 0.011), (0.028, 0.021)),
         (f"hip_{side}", (sx * 0.1, 0.9, 0.0), (0.098, 0.1)),
         (f"thigh_{side}", (sx * 0.104, 0.72, 0.008), (0.085, 0.088)),
         (f"knee_{side}", (sx * 0.106, 0.52, 0.012), (0.058, 0.062)),
         (f"calf_{side}", (sx * 0.108, 0.37, -0.012), (0.062, 0.066)),
-        (f"ankle_{side}", (sx * 0.11, 0.13, -0.008), (0.056, 0.06)),  # boot top
-        (f"heel_{side}", (sx * 0.11, 0.05, -0.04), (0.052, 0.05)),
-        (f"ball_{side}", (sx * 0.11, 0.045, 0.09), (0.056, 0.042)),
-        (f"toe_{side}", (sx * 0.11, 0.045, 0.16), (0.048, 0.038)),
+        (f"ankle_{side}", (sx * 0.11, 0.12, -0.006), (0.045, 0.048)),  # inside the boot shaft
     ]
     EDGES += [("collar", f"shoulder_{side}"), (f"shoulder_{side}", f"bicep_{side}"), (f"bicep_{side}", f"elbow_{side}"),
               (f"elbow_{side}", f"forearm_{side}"), (f"forearm_{side}", f"wrist_{side}"),
-              (f"wrist_{side}", f"palm_{side}"), (f"palm_{side}", f"fingers_{side}"), (f"palm_{side}", f"thumb_{side}"),
               ("pelvis", f"hip_{side}"), (f"hip_{side}", f"thigh_{side}"), (f"thigh_{side}", f"knee_{side}"),
-              (f"knee_{side}", f"calf_{side}"), (f"calf_{side}", f"ankle_{side}"), (f"ankle_{side}", f"heel_{side}"),
-              (f"heel_{side}", f"ball_{side}"), (f"ball_{side}", f"toe_{side}")]
+              (f"knee_{side}", f"calf_{side}"), (f"calf_{side}", f"ankle_{side}")]
 
 
 def materials():
@@ -113,7 +176,7 @@ def materials():
     return {
         "cloth": kit.pbr("mat_diver_base_cloth_01", "canvas", tint=(0.5, 0.48, 0.42)),  # a faded, dusty base layer
         "skin": kit.pbr("mat_diver_skin_01", None, tint=(0.2, 0.12, 0.08), rough=0.55),  # linear values: a weathered mid skin tone
-        "boots": kit.pbr("mat_diver_boots_01", "canvas", tint=(0.22, 0.18, 0.15)),
+        "boots": kit.pbr("mat_diver_boots_01", None, tint=(0.035, 0.024, 0.016), rough=0.62),  # worn dark leather (linear values)
     }
 
 
@@ -168,8 +231,160 @@ def trims(M, coll):
     band("diver_collar", M["cloth"], (0, 1.5, -0.002), 0.064, 0.024, (0, 1.42, -0.01), (0, 1.58, 0.005))
     for sx in (-1, 1):
         band(f"diver_cuff{sx}", M["cloth"], (sx * 0.455, 1.045, 0.008), 0.035, 0.026, (sx * 0.39, 1.13, -0.005), (sx * 0.47, 1.02, 0.01))
-        band(f"diver_boot_top{sx}", M["boots"], (sx * 0.11, 0.14, -0.008), 0.064, 0.03, (sx * 0.11, 0.0, -0.008), (sx * 0.11, 0.3, -0.008), thick=0.008)
+        band(f"diver_boot_top{sx}", M["boots"], (sx * 0.11, 0.203, -0.004), 0.058, 0.018, (sx * 0.11, 0.0, -0.004), (sx * 0.11, 0.3, -0.004), thick=0.008)
     return out
+
+
+def skin_chain(name, mat, coll, pts, radii, levels=1):
+    """A smooth tube through game-space points with a radius at each: a skin
+    modifier on a simple chain (no branches), subdivided."""
+    bm = bmesh.new()
+    vs = [bm.verts.new(kit.g2b(*p)) for p in pts]
+    for a, b in zip(vs, vs[1:]):
+        bm.edges.new((a, b))
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    me.materials.append(mat)
+    o = bpy.data.objects.new(name, me)
+    coll.objects.link(o)
+    sk = o.modifiers.new("Skin", "SKIN")
+    sk.use_smooth_shade = True
+    for v, r in zip(me.skin_vertices[0].data, radii):
+        v.radius = (r, r)
+    me.skin_vertices[0].data[0].use_root = True
+    sub = o.modifiers.new("Subsurf", "SUBSURF")
+    sub.levels = sub.render_levels = levels
+    o["uv"] = "box"
+    return o
+
+
+def build_hands(M, coll):
+    """Both hands: a palm shaped from a rounded block, four fingers and a thumb,
+    each its own tube so it bends cleanly with its own bones."""
+    parts = []
+    for side, sx in (("Left", 1), ("Right", -1)):
+        w, d, e, n = hand_frame(sx)
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=1.0)
+        bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=2, use_grid_fill=True)
+        for v in bm.verts:  # local: u across the knuckles, t along the hand (0 wrist, 1 knuckles), z out of the palm
+            u, t, z = v.co.x * 2, v.co.y + 0.5, v.co.z * 2
+            width = 0.064 + 0.018 * t  # wider at the knuckles
+            thick = 0.036 - 0.012 * t  # thicker at the heel of the hand
+            lx, ly, lz = u * width / 2, t * 0.094, z * thick / 2
+            lz *= 0.4 + 0.6 * max(0.0, 1 - abs(u) ** 4) ** 0.4  # rounded edges, neither a block nor a blade
+            if z < 0:  # the back of the hand arches over the bones
+                lz -= 0.004 * (1 - u * u)
+            if z > 0:  # the palm side: a pad at the thumb's root, the middle a little hollow
+                lz += 0.006 * max(0.0, u) * (1 - t) - 0.003 * (1 - abs(u)) * math.sin(math.pi * t)
+            p = w - d * 0.008 + e * lx + d * ly + n * lz
+            v.co = Vector(kit.g2b(*p))
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])  # the frame is mirrored per side
+        palm = kit.mesh_obj(f"diver_palm_{side}", bm, M["skin"], coll, (0, 0, 0), (0, 0, 0))
+        sub = palm.modifiers.new("Subsurf", "SUBSURF")
+        sub.levels = sub.render_levels = 2
+        for poly in palm.data.polygons:
+            poly.use_smooth = True
+        palm["uv"] = "box"
+        palm["bones"] = ",".join([f"{side}Hand", f"{side}LowerArm"] + [f"{side}{f}Proximal" for f, *_ in FINGERS] + [f"{side}ThumbMetacarpal"])
+        palm["falloff"] = 0.018
+        parts.append(palm)
+        for fname, (pts, r) in finger_chains(sx).items():
+            start = pts[0] - (pts[1] - pts[0]) / np.linalg.norm(pts[1] - pts[0]) * 0.012  # rooted inside the palm
+            # Each joint swells into a knuckle and each segment narrows between
+            # them, so the finger reads as three bones, not one tube.
+            knuckle = (1.2, 1.13, 1.07, 0.88)  # at the base knuckle, the two middle joints, the tip
+            waist = (0.86, 0.82, 0.8)  # mid-segment
+            chain, radii = [start, pts[0]], [r * 1.05, r * knuckle[0]]
+            for k in range(3):
+                a, b = pts[k], pts[k + 1]
+                chain += [a + (b - a) * 0.5, b]
+                radii += [r * waist[k] * (1 - 0.07 * k), r * knuckle[k + 1] * (1 - 0.07 * k)]
+            o = skin_chain(f"diver_{side}{fname}", M["skin"], coll, chain, radii)
+            names = ("Metacarpal", "Proximal", "Distal") if fname == "Thumb" else ("Proximal", "Intermediate", "Distal")
+            o["bones"] = ",".join([f"{side}Hand"] + [f"{side}{fname}{nm}" for nm in names])
+            o["falloff"] = 0.009
+            parts.append(o)
+    return parts
+
+
+def superellipse(cx, cz_, w, bottom, top, n_pts=16, p_low=3.2, p_high=2.2):
+    """A boot cross-section in the x-y plane at depth cz_: flat-bottomed,
+    rounded on top."""
+    out = []
+    for k in range(n_pts):
+        a = k / n_pts * 2 * math.pi
+        c, s_ = math.cos(a), math.sin(a)
+        p = p_low if s_ < 0 else p_high
+        x = w / 2 * math.copysign(abs(c) ** (2 / p), c)
+        y = (bottom + top) / 2 + (top - bottom) / 2 * math.copysign(abs(s_) ** (2 / p), s_)
+        out.append((cx + x, y, cz_))
+    return out
+
+
+def build_boots(M, coll):
+    """Work boots: a last-shaped upper lofted heel to toe, a flat sole with a
+    heel block, laces over the instep and an ankle shaft the trousers tuck
+    into (art bible 5.1)."""
+    parts = []
+    B = M["boots"]
+    # (t heel to toe, width, top, toe spring): the heel rises into the ankle shaft, the instep
+    # slopes down to the toe box; one closed piece, so there is no joint between foot and shaft
+    profile = ((0.0, 0.09, 0.2, 0.0), (0.1, 0.104, 0.205, 0.0), (0.22, 0.108, 0.205, 0.0), (0.32, 0.104, 0.185, 0.0),
+               (0.4, 0.1, 0.14, 0.0), (0.5, 0.1, 0.105, 0.0), (0.62, 0.102, 0.08, 0.0), (0.74, 0.102, 0.066, 0.001),
+               (0.85, 0.096, 0.058, 0.004), (0.94, 0.08, 0.052, 0.009), (1.0, 0.05, 0.044, 0.015))
+    z0, z1, sole = -0.07, 0.205, 0.013
+    for side, sx in (("Left", 1), ("Right", -1)):
+        cx = sx * 0.11
+        bm = bmesh.new()
+        rings = []
+        for t, wd, top, spring in profile:
+            z = z0 + (z1 - z0) * t
+            rings.append([bm.verts.new(kit.g2b(*p)) for p in superellipse(cx, z, wd, sole + spring, top + spring)])
+        for a, b in zip(rings, rings[1:]):
+            for j in range(16):
+                bm.faces.new((a[j], a[(j + 1) % 16], b[(j + 1) % 16], b[j]))
+        bm.faces.new(list(reversed(rings[0])))
+        bm.faces.new(rings[-1])
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+        upper = kit.mesh_obj(f"diver_boot_{side}", bm, B, coll, (0, 0, 0), (0, 0, 0))
+        sub = upper.modifiers.new("Subsurf", "SUBSURF")
+        sub.levels = sub.render_levels = 1
+        for poly in upper.data.polygons:
+            poly.use_smooth = True
+        upper["uv"] = "box"
+        parts.append(upper)
+        # the sole: the footprint, extruded, with a heel block under the back
+        foot = [(cx + wd / 2 * 1.04, z0 + (z1 - z0) * t) for t, wd, _, _ in profile]
+        foot += [(cx - wd / 2 * 1.04, z0 + (z1 - z0) * t) for t, wd, _, _ in reversed(profile)]
+        bm = bmesh.new()
+        vs = [bm.verts.new(kit.g2b(x, 0.0, z)) for x, z in foot]
+        face = bm.faces.new(vs)
+        ext = bmesh.ops.extrude_face_region(bm, geom=[face])
+        moved = [g for g in ext["geom"] if isinstance(g, bmesh.types.BMVert)]
+        bmesh.ops.translate(bm, vec=kit.g2b(0, sole + 0.002, 0), verts=moved)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+        so = kit.mesh_obj(f"diver_sole_{side}", bm, B, coll, (0, 0, 0), (0, 0, 0))
+        kit.bevel(so, 0.003, 2, weighted=False)
+        so["uv"] = "box"
+        parts.append(so)
+        parts.append(kit.box(f"diver_heel_{side}", B, coll, (cx, -0.004 + 0.012, z0 + 0.04), (0.066, 0.024, 0.06), bev=0.004))
+        # laces across the instep, lying on its slope, and the tongue's edge beside them
+        ts = [q[0] for q in profile]
+        tops = [q[2] + q[3] for q in profile]
+        for k in range(5):
+            t = 0.36 + k * 0.06
+            z = z0 + (z1 - z0) * t
+            top = float(np.interp(t, ts, tops))
+            dt = 0.01
+            slope = math.atan2(float(np.interp(t + dt, ts, tops)) - float(np.interp(t - dt, ts, tops)), (z1 - z0) * 2 * dt)
+            # the box is tipped about game x to lie on the instep (Blender Euler x is the same axis)
+            parts.append(kit.box(f"diver_lace_{side}{k}", B, coll, (cx, top - 0.004, z), (0.05, 0.006, 0.006), rot=(slope, 0, 0), bev=0.0015))
+        for o in parts[-8:]:
+            o["bones"] = f"{side}Foot,{side}Toes,{side}LowerLeg"
+            o["falloff"] = 0.045
+    return parts
 
 
 def build_body(M, coll):
@@ -205,9 +420,9 @@ def build_body(M, coll):
     for poly in o.data.polygons:
         c = poly.center  # Blender coords
         gx, gy = abs(c.x), c.z
-        if gy > 1.505 or (gx > 0.458 and gy < 1.06):  # skin starts on the neck, above the collar
+        if gy > 1.505 or (gx > 0.455 and gy < 1.05):  # skin starts on the neck, above the collar, and at the wrists
             poly.material_index = 1
-        elif gy < 0.14:
+        elif gy < 0.17:  # inside the boot
             poly.material_index = 2
         else:
             poly.material_index = 0
@@ -235,6 +450,8 @@ def build_armature(coll):
             ad.edit_bones[name].use_connect = (ad.edit_bones[parent].tail - ad.edit_bones[name].head).length < 1e-4
     for b in ad.edit_bones:  # every bone's local x across the body, so "bend forward" is a rotation about x
         b.align_roll(Vector((0, -1, 0)) if abs((b.tail - b.head).normalized().z) > 0.7 else Vector((0, 0, 1)))
+    for name, to in FINGER_CURL_TO.items():  # fingers and thumb: +x curls them into the palm (a grip)
+        ad.edit_bones[name].align_roll(Vector(kit.g2b(*to)))
     bpy.ops.object.mode_set(mode="OBJECT")
     return rig
 
@@ -245,14 +462,14 @@ def seg_dist(p, a, b):
     return np.linalg.norm(p - (a + np.outer(t, ab)), axis=1)
 
 
-def skin_weights(body, rig):
-    """Weights from the distance to each bone's segment, sharpened, with each
-    limb kept to its own side and spine bones to the trunk."""
-    vs = np.array([tuple(v.co) for v in body.data.vertices])
+def part_weights(o, allowed, falloff):
+    """Weights from the distance to each allowed bone's segment, sharpened, at
+    most three influences. The body keeps each limb to its own side and the
+    trunk's bones off the arms; a hand or boot only knows its own bones."""
+    vs = np.array([tuple(o.matrix_world @ v.co) for v in o.data.vertices])
     g = np.stack([vs[:, 0], vs[:, 2], -vs[:, 1]], 1)  # Blender -> game
-    names = list(BONES)
-    d = np.zeros((len(vs), len(names)))
-    for j, n in enumerate(names):
+    d = np.zeros((len(vs), len(allowed)))
+    for j, n in enumerate(allowed):
         h, t, _ = BONES[n]
         d[:, j] = seg_dist(g, np.array(h, float), np.array(t, float))
         if n.startswith("Left"):
@@ -263,16 +480,19 @@ def skin_weights(body, rig):
             d[:, j] *= 1.6  # the clavicle only moves a little skin
         if n in ("Hips", "Spine", "Chest", "UpperChest", "Neck", "Head"):
             d[np.abs(g[:, 0]) > 0.2, j] = 9.0  # the trunk doesn't own the arms
-    w = np.exp(-(d / 0.035) ** 2 * 0.5) + 1e-9
-    best = np.argsort(d, 1)[:, :3]  # at most three influences
+    w = np.exp(-(d / falloff) ** 2 * 0.5) + 1e-9
+    best = np.argsort(d, 1)[:, :3]
     mask = np.zeros_like(w, bool)
     np.put_along_axis(mask, best, True, 1)
     w = np.where(mask, w, 0)
     w /= w.sum(1, keepdims=True)
-    for j, n in enumerate(names):
-        vg = body.vertex_groups.new(name=n)
+    for j, n in enumerate(allowed):
+        vg = o.vertex_groups.get(n) or o.vertex_groups.new(name=n)
         for i in np.nonzero(w[:, j] > 0.01)[0]:
             vg.add([int(i)], float(w[i, j]), "REPLACE")
+
+
+def bind(body, rig):
     mod = body.modifiers.new("Armature", "ARMATURE")
     mod.object = rig
     body.parent = rig
@@ -449,21 +669,31 @@ def main():
     body = build_body(M, coll)
     head = build_head(M, coll)
     bands = trims(M, coll)
-    for o in (body, head, *bands):
+    hands = build_hands(M, coll)
+    boots = build_boots(M, coll)
+    trunk_bones = [n for n in BONES if n not in FINGER_BONES]
+    for o in (body, head, *bands, *hands, *boots):
         kit.finalize(o)
+        if o.get("bones"):
+            part_weights(o, o["bones"].split(","), o["falloff"])
+        else:
+            part_weights(o, [n for n in trunk_bones if "Toes" not in n], 0.035)
     bpy.ops.object.select_all(action="DESELECT")
-    for o in (head, *bands):
+    for o in (head, *bands, *hands, *boots):
         o.select_set(True)
     body.select_set(True)
     bpy.context.view_layer.objects.active = body
     bpy.ops.object.join()
     rig = build_armature(coll)
-    skin_weights(body, rig)
+    bind(body, rig)
     acts = build_actions(rig)
     tris = sum(len(p.vertices) - 2 for p in body.data.polygons)
     print(f"diver: vertices {len(body.data.vertices)}  triangles {tris}  materials {len(body.data.materials)}  bones {len(BONES)}  actions {[a.name for a in acts]}")
     if "--render" in sys.argv:
-        for k, (cam, look) in enumerate((((2.4, 1.4, 3.4), (0, 0.95, 0)), ((-2.6, 1.5, -3.0), (0, 0.95, 0)), ((0.6, 1.65, 1.1), (0, 1.55, 0)))):
+        views = (((2.4, 1.4, 3.4), (0, 0.95, 0)), ((-2.6, 1.5, -3.0), (0, 0.95, 0)), ((0.6, 1.65, 1.1), (0, 1.55, 0)),
+                 ((0.85, 1.05, 0.45), (0.5, 0.95, 0.02)), ((0.55, 0.32, 0.65), (0.1, 0.06, 0.06)),
+                 ((0.2, 1.0, 0.85), (0.47, 0.95, 0.03)))  # + a hand from the side, the boots, a hand from the front
+        for k, (cam, look) in enumerate(views):
             studio(cam, look, os.path.join(kit.WORK, f"preview_diver_{k}.png"))
     if "--sheets" in sys.argv:
         only = (arg("--only") or "").split(",")
