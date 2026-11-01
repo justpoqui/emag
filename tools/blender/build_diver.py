@@ -21,6 +21,7 @@ Run with the Blender Python module (bpy):
 --export writes godot/models/characters/char_diver_base.glb.
 """
 
+import ast
 import math
 import os
 import sys
@@ -122,9 +123,17 @@ for side, sx in (("Left", 1), ("Right", -1)):
     # Solved so that closing the hand (+x on each thumb bone; about 30/50/70 degrees)
     # lays the thumb tip across the middle bones of the index and middle fingers, a fist.
     thumb_to = {"Metacarpal": thumb_dir(-75, -30), "Proximal": thumb_dir(135, -30), "Distal": thumb_dir(135, -30)}
+    w_, _, _, _ = hand_frame(sx)
     for fname, (pts, _) in finger_chains(sx).items():
         names = ("Metacarpal", "Proximal", "Distal") if fname == "Thumb" else ("Proximal", "Intermediate", "Distal")
         parent = f"{side}Hand"
+        if fname != "Thumb":  # the palm's long bones: wrist to knuckle, so the palm can cup
+            off = dict((f[0], f[1]) for f in FINGERS)[fname]
+            bn = f"{side}{fname}Metacarpal"
+            BONES[bn] = (tuple(w_ + palm_d * 0.022 + palm_e * off * 0.5), tuple(pts[0]), parent)
+            FINGER_BONES.append(bn)
+            FINGER_CURL_TO[bn] = tuple(palm_n)
+            parent = bn
         for k, nm in enumerate(names):
             bn = f"{side}{fname}{nm}"
             BONES[bn] = (tuple(pts[k]), tuple(pts[k + 1]), parent)
@@ -265,30 +274,68 @@ def build_hands(M, coll):
     parts = []
     for side, sx in (("Left", 1), ("Right", -1)):
         w, d, e, n = hand_frame(sx)
+
+        def palm_point(u, t, z, cap):
+            """Offset from the wrist of a palm surface point. u across the knuckles
+            (-1 little finger, +1 index), t along the hand (0 wrist, 1 knuckles),
+            z out of the palm (+1 palm side, -1 back); cap narrows the knuckle dome."""
+            tc = min(1.0, max(0.0, t))
+            width = 0.06 + 0.022 * min(1.0, tc / 0.6) ** 0.8  # a narrow wrist, widening to the knuckles
+            thick = 0.031 + 0.006 * math.sin(math.pi * min(1.0, tc / 0.6)) - 0.008 * max(0.0, tc - 0.4) / 0.6
+            lx, lz = u * width / 2 * cap, z * thick / 2 * cap
+            back, front = max(0.0, -z), max(0.0, z)
+            if t > 0:
+                lz -= 0.003 * (1 - u * u) * back * cap  # the back arches over the bones
+                for _, off, _, _ in FINGERS:  # each metacarpal: a knuckle dome and a tendon fanning to the wrist
+                    uk = off / 0.041
+                    lz -= 0.0042 * math.exp(-((u - uk) / 0.14) ** 2 - ((t - 0.97) / 0.08) ** 2) * back
+                    ut = uk * (0.4 + 0.6 * tc)
+                    lz -= 0.0007 * math.exp(-((u - ut) / 0.12) ** 2) * math.sin(math.pi * min(1.0, max(0.0, (t - 0.15) / 0.75))) * back
+                # the palm side: the thumb's pad, the heel pad opposite, the hollow, the heart line
+                lz += (0.0055 * max(0.0, u) ** 1.5 * (1 - tc) + 0.003 * max(0.0, -u) * (1 - tc) ** 0.5
+                       - 0.0025 * (1 - u * u) * math.sin(math.pi * tc)
+                       - 0.0007 * math.exp(-((t - 0.72 + 0.12 * u) / 0.035) ** 2)) * front
+            lz -= 0.0022 * math.exp(-((u + 0.8) / 0.25) ** 2 - ((t - 0.02) / 0.08) ** 2) * back  # the ulna's knob, little-finger side
+            lz += -0.001 * math.exp(-(t / 0.03) ** 2) * front  # the wrist crease
+            return e * lx + d * (t * 0.094 - 0.008) + n * lz
+
         bm = bmesh.new()
-        bmesh.ops.create_cube(bm, size=1.0)
-        bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=2, use_grid_fill=True)
-        for v in bm.verts:  # local: u across the knuckles, t along the hand (0 wrist, 1 knuckles), z out of the palm
-            u, t, z = v.co.x * 2, v.co.y + 0.5, v.co.z * 2
-            width = 0.064 + 0.018 * t  # wider at the knuckles
-            thick = 0.036 - 0.012 * t  # thicker at the heel of the hand
-            lx, ly, lz = u * width / 2, t * 0.094, z * thick / 2
-            lz *= 0.4 + 0.6 * max(0.0, 1 - abs(u) ** 4) ** 0.4  # rounded edges, neither a block nor a blade
-            if z < 0:  # the back of the hand arches over the bones
-                lz -= 0.004 * (1 - u * u)
-            if z > 0:  # the palm side: a pad at the thumb's root, the middle a little hollow
-                lz += 0.006 * max(0.0, u) * (1 - t) - 0.003 * (1 - abs(u)) * math.sin(math.pi * t)
-            p = w - d * 0.008 + e * lx + d * ly + n * lz
-            v.co = Vector(kit.g2b(*p))
+        ring_n = 36
+        # along the hand: from inside the cuff, through the palm, then a dome over the knuckles
+        stations = [(t, 1.0) for t in np.linspace(-0.2, 0.9, 16)]
+        stations += [(0.9 + 0.15 * math.sin(math.radians(a)), math.cos(math.radians(a)) ** 0.6) for a in (15, 30, 45, 60, 72, 84)]
+        rings = []
+        for t, cap in stations:
+            ring = []
+            for k in range(ring_n):
+                th = k / ring_n * 2 * math.pi
+                c_, s_ = math.cos(th), math.sin(th)
+                u = math.copysign(abs(c_) ** 0.8, c_)  # a rounded oblong, flatter on the faces
+                z = math.copysign(abs(s_) ** 0.85, s_)
+                ring.append(palm_point(u, t, z, cap))
+            if t < 0:  # inside the cuff it narrows into the forearm
+                ring = [q * (1 + 0.12 * t) for q in ring]
+            rings.append([bm.verts.new(Vector(kit.g2b(*(w + q)))) for q in ring])
+        for r0, r1 in zip(rings, rings[1:]):
+            for k in range(ring_n):
+                bm.faces.new((r0[k], r0[(k + 1) % ring_n], r1[(k + 1) % ring_n], r1[k]))
+        for ring, t in ((rings[0], stations[0][0]), (rings[-1], None)):
+            c = sum((v.co for v in ring), Vector()) / ring_n
+            if t is None:  # the very end of the dome
+                c = c + Vector(kit.g2b(*(d * 0.004)))
+            cv = bm.verts.new(c)
+            for k in range(ring_n):
+                bm.faces.new((ring[k], ring[(k + 1) % ring_n], cv))
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])  # the frame is mirrored per side
         palm = kit.mesh_obj(f"diver_palm_{side}", bm, M["skin"], coll, (0, 0, 0), (0, 0, 0))
-        sub = palm.modifiers.new("Subsurf", "SUBSURF")
-        sub.levels = sub.render_levels = 2
         for poly in palm.data.polygons:
             poly.use_smooth = True
         palm["uv"] = "box"
-        palm["bones"] = ",".join([f"{side}Hand", f"{side}LowerArm"] + [f"{side}{f}Proximal" for f, *_ in FINGERS] + [f"{side}ThumbMetacarpal"])
-        palm["falloff"] = 0.018
+        palm["bones"] = ",".join([f"{side}Hand", f"{side}LowerArm"] + [f"{side}{f}{b}" for f, *_ in FINGERS for b in ("Metacarpal", "Proximal")]
+                                 + [f"{side}ThumbMetacarpal"])
+        palm["falloff"] = 0.016
+        # the wrist end of the palm follows the hand bone; the rest, the metacarpals
+        palm["segs"] = repr({f"{side}Hand": ([float(c) for c in w - d * 0.03], [float(c) for c in w + d * 0.012])})
         parts.append(palm)
         for fname, (pts, r) in finger_chains(sx).items():
             start = pts[0] - (pts[1] - pts[0]) / np.linalg.norm(pts[1] - pts[0]) * 0.012  # rooted inside the palm
@@ -303,7 +350,8 @@ def build_hands(M, coll):
                 radii += [r * waist[k] * (1 - 0.07 * k), r * knuckle[k + 1] * (1 - 0.07 * k)]
             o = skin_chain(f"diver_{side}{fname}", M["skin"], coll, chain, radii)
             names = ("Metacarpal", "Proximal", "Distal") if fname == "Thumb" else ("Proximal", "Intermediate", "Distal")
-            o["bones"] = ",".join([f"{side}Hand"] + [f"{side}{fname}{nm}" for nm in names])
+            root = f"{side}Hand" if fname == "Thumb" else f"{side}{fname}Metacarpal"
+            o["bones"] = ",".join([root] + [f"{side}{fname}{nm}" for nm in names])
             o["falloff"] = 0.009
             parts.append(o)
     return parts
@@ -469,8 +517,9 @@ def part_weights(o, allowed, falloff):
     vs = np.array([tuple(o.matrix_world @ v.co) for v in o.data.vertices])
     g = np.stack([vs[:, 0], vs[:, 2], -vs[:, 1]], 1)  # Blender -> game
     d = np.zeros((len(vs), len(allowed)))
+    segs = ast.literal_eval(o["segs"]) if o.get("segs") else {}  # bone -> (head, tail) used for weighting instead
     for j, n in enumerate(allowed):
-        h, t, _ = BONES[n]
+        h, t = segs.get(n, BONES[n][:2])
         d[:, j] = seg_dist(g, np.array(h, float), np.array(t, float))
         if n.startswith("Left"):
             d[g[:, 0] < -0.02, j] = 9.0
