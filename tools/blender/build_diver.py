@@ -112,17 +112,77 @@ def finger_chains(sx):
     return chains
 
 
+# A fist. The fingers close by FINGER_FIST degrees (+x) and the palm cups by
+# PALM_CUP; the thumb then lies over the backs of the index and middle fingers'
+# middle bones, its pad pressing down, its tip at the middle finger. Each thumb
+# bone's hinge is solved so that closing it by THUMB_FIST degrees puts it there;
+# half of each is a loose grip.
+FINGER_FIST = (90.0, 108.0, 72.0)  # proximal, intermediate, distal
+PALM_CUP = {"Index": 0.0, "Middle": 3.0, "Ring": 8.0, "Little": 14.0}  # metacarpals in a fist
+THUMB_FIST_AT = ((0.058, 0.048, 0.018), (0.068, 0.042, 0.048), (0.064, 0.014, 0.053))  # knuckle, middle joint, tip
+
+
+def _rot(axis, ang):
+    x, y, z = axis
+    c, s_ = math.cos(ang), math.sin(ang)
+    C = 1 - c
+    return np.array([[c + x * x * C, x * y * C - z * s_, x * z * C + y * s_],
+                     [y * x * C + z * s_, c + y * y * C, y * z * C - x * s_],
+                     [z * x * C - y * s_, z * y * C + x * s_, c + z * z * C]])
+
+
+def fist_finger(sx, fname):
+    """Joint positions of a finger closed by FINGER_FIST, and the direction its
+    back faces at the middle bone."""
+    w, d, e, n = hand_frame(sx)
+    rest = [np.array(p) for p in finger_chains(sx)[fname][0]]
+    parent, pos, out = np.eye(3), [rest[0]], None
+    for k in range(3):
+        y = rest[k + 1] - rest[k]
+        ln = np.linalg.norm(y)
+        y /= ln
+        z = n - y * (n @ y)
+        z /= np.linalg.norm(z)
+        parent = parent @ _rot(np.cross(y, z), math.radians(FINGER_FIST[k]))
+        pos.append(pos[-1] + parent @ y * ln)
+        if k == 1:
+            out = parent @ -z  # the back of the middle bone
+    return pos, out
+
+
+def solve_thumb(sx):
+    """Per thumb bone: the direction its +x rotation curls it towards, and the
+    angle (degrees) that takes it to its place in the fist."""
+    w, d, e, n = hand_frame(sx)
+    rest = [np.array(p) for p in finger_chains(sx)["Thumb"][0]]
+    # In a fist the thumb's first bone runs up the side of the palm, its middle
+    # bone stands beside the index finger's first bone (no gap for the web to
+    # show), and its tip folds across onto the middle finger. Hand-frame
+    # (d, e, n) from the wrist, checked against fist_finger's joint positions.
+    mcp, ip, tip = (w + d * a + e * b + n * c for a, b, c in THUMB_FIST_AT)
+    goal = [rest[0], mcp, ip, tip]
+    parent = np.eye(3)
+    tos, angles = [], []
+    for k in range(3):
+        y = rest[k + 1] - rest[k]
+        y /= np.linalg.norm(y)
+        g = goal[k + 1] - goal[k]
+        g = parent.T @ (g / np.linalg.norm(g))  # the goal in this bone's rest frame
+        axis = np.cross(y, g)
+        axis /= np.linalg.norm(axis)
+        ang = math.acos(max(-1.0, min(1.0, float(y @ g))))
+        tos.append(np.cross(axis, y))  # +x (the axis) turns y towards this
+        angles.append(math.degrees(ang))
+        parent = parent @ _rot(axis, ang)
+    return tos, tuple(round(a, 1) for a in angles)
+
+
 FINGER_BONES = []
 FINGER_CURL_TO = {}  # bone -> game-space direction the finger curls towards (out of the palm)
 for side, sx in (("Left", 1), ("Right", -1)):
     _, palm_d, palm_e, palm_n = hand_frame(sx)
-
-    def thumb_dir(th, ph):  # th: 0 out of the palm, 90 towards the little finger; ph: tilt along the hand
-        t = palm_n * math.cos(math.radians(th)) - palm_e * math.sin(math.radians(th)) + palm_d * math.sin(math.radians(ph))
-        return t / np.linalg.norm(t)
-    # Solved so that closing the hand (+x on each thumb bone; about 30/50/70 degrees)
-    # lays the thumb tip across the middle bones of the index and middle fingers, a fist.
-    thumb_to = {"Metacarpal": thumb_dir(-75, -30), "Proximal": thumb_dir(135, -30), "Distal": thumb_dir(135, -30)}
+    _tos, THUMB_FIST = solve_thumb(sx)
+    thumb_to = dict(zip(("Metacarpal", "Proximal", "Distal"), _tos))
     w_, _, _, _ = hand_frame(sx)
     for fname, (pts, _) in finger_chains(sx).items():
         names = ("Metacarpal", "Proximal", "Distal") if fname == "Thumb" else ("Proximal", "Intermediate", "Distal")
@@ -348,6 +408,8 @@ def build_hands(M, coll):
                 a, b = pts[k], pts[k + 1]
                 chain += [a + (b - a) * 0.5, b]
                 radii += [r * waist[k] * (1 - 0.07 * k), r * knuckle[k + 1] * (1 - 0.07 * k)]
+            if fname == "Thumb":  # its first bone is wrapped in the thumb's muscle, a mound joining it to the palm
+                radii = [0.017, 0.0175, 0.0155, 0.0128, 0.0112, 0.0118, 0.0106, 0.0094]
             o = skin_chain(f"diver_{side}{fname}", M["skin"], coll, chain, radii)
             names = ("Metacarpal", "Proximal", "Distal") if fname == "Thumb" else ("Proximal", "Intermediate", "Distal")
             root = f"{side}Hand" if fname == "Thumb" else f"{side}{fname}Metacarpal"
