@@ -33,6 +33,8 @@ import bpy  # noqa: E402  (first: it makes bmesh and mathutils importable)
 import bmesh  # noqa: E402
 import numpy as np  # noqa: E402
 from mathutils import Euler, Matrix, Quaternion, Vector  # noqa: E402
+from mathutils.bvhtree import BVHTree  # noqa: E402
+from PIL import Image  # noqa: E402
 
 import build_quarters as kit  # noqa: E402
 
@@ -100,7 +102,7 @@ def finger_chains(sx):
             pts.append(pts[-1] + dirn * ln)
         chains[name] = (pts, r)
     base = w + d * 0.022 + e * 0.026 + n * 0.01
-    dirn = d * 0.85 + e * 0.3 + n * 0.42  # hangs along the index finger, a little forward, not splayed
+    dirn = d * 0.88 + e * 0.2 + n * 0.3  # hangs along the index finger, a little forward, not splayed
     dirn /= np.linalg.norm(dirn)
     pts = [base]
     for k, ln in enumerate((0.042, 0.032, 0.027)):
@@ -240,11 +242,34 @@ for side, sx in (("l", 1), ("r", -1)):
               (f"knee_{side}", f"calf_{side}"), (f"calf_{side}", f"ankle_{side}")]
 
 
+SKIN_TEX = os.path.join(ROOT, "godot", "textures", "characters")
+SKIN_UV = (0.25, 0.5)  # every skin face samples the plain skin half of the skin texture
+NAIL_U = (0.55, 0.95)  # nails use the right half, base (v 0) to free edge (v 1)
+
+
+def make_skin_texture():
+    """The skin's texture: plain weathered skin on the left half; on the right
+    the nail, one even colour, paler and pinker than the skin and glossier, so
+    each nail reads clearly against the finger."""
+    os.makedirs(SKIN_TEX, exist_ok=True)
+    W, H = 64, 64
+    alb = Image.new("RGB", (W, H), (124, 97, 80))  # sRGB of the old linear tint (0.2, 0.12, 0.08)
+    orm = Image.new("RGB", (W, H), (255, 140, 0))  # roughness 0.55
+    for y in range(H):
+        for x in range(W // 2, W):
+            alb.putpixel((x, y), (196, 158, 148))  # the nail
+            orm.putpixel((x, y), (255, 70, 0))  # roughness 0.27: nails shine where skin doesn't
+    alb.save(os.path.join(SKIN_TEX, "diver_skin_albedo.png"))
+    orm.save(os.path.join(SKIN_TEX, "diver_skin_orm.png"))
+    Image.new("RGB", (W, H), (128, 128, 255)).save(os.path.join(SKIN_TEX, "diver_skin_normal.png"))
+
+
 def materials():
     """Three materials (art bible 8.4): the base clothes, the skin, the boots."""
+    make_skin_texture()
     return {
         "cloth": kit.pbr("mat_diver_base_cloth_01", "canvas", tint=(0.5, 0.48, 0.42)),  # a faded, dusty base layer
-        "skin": kit.pbr("mat_diver_skin_01", None, tint=(0.2, 0.12, 0.08), rough=0.55),  # linear values: a weathered mid skin tone
+        "skin": kit.pbr("mat_diver_skin_01", os.path.relpath(os.path.join(SKIN_TEX, "diver_skin"), kit.TEX)),  # skin and nails
         "boots": kit.pbr("mat_diver_boots_01", None, tint=(0.035, 0.024, 0.016), rough=0.62),  # worn dark leather (linear values)
     }
 
@@ -416,7 +441,147 @@ def build_hands(M, coll):
             o["bones"] = ",".join([root] + [f"{side}{fname}{nm}" for nm in names])
             o["falloff"] = 0.009
             parts.append(o)
+            parts.append(build_nail(o, side, fname, M, coll))
+        parts.append(build_web(side, sx, palm_point, M, coll))
     return parts
+
+
+def build_nail(finger, side, fname, M, coll):
+    """A fingernail: a thin, evenly curved shell over the back of the last
+    finger bone, sized from the finger's measured thickness, ending before the
+    fingertip rounds off."""
+    bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get()
+    bvh = BVHTree.FromObject(finger, dg)
+    distal = f"{side}{fname}Distal"
+    a_, b_ = (np.array(p) for p in BONES[distal][:2])
+    ln = np.linalg.norm(b_ - a_)
+    y = (b_ - a_) / ln
+    curl = np.array(FINGER_CURL_TO[distal])
+    back = -(curl - y * (curl @ y))  # the back of the finger: away from the way it curls
+    back /= np.linalg.norm(back)
+    side_ = np.cross(y, back)
+    big = 1.25 if fname == "Thumb" else 1.0
+    cols, rows = 9, 8
+    # the finger's surface under every point of the nail, measured from the
+    # bone's axis, then smoothed (an even curved shell, not a copy of the
+    # finger's facets) but never let below the surface
+    grid = []
+    for i in range(rows):
+        row = []
+        for j in range(cols):
+            a = j / (cols - 1) * 2 - 1
+            s0 = 0.3 + 0.12 * (1 - math.sqrt(max(0.0, 1 - a * a)))  # the cuticle's curve
+            s1 = 0.9 - 0.08 * a * a  # the rounded free edge, short of the fingertip's curve
+            sv = i / (rows - 1)
+            s_ = s0 + (s1 - s0) * sv
+            ang = math.radians(50 * big) * a
+            dirn = back * math.cos(ang) + side_ * math.sin(ang)
+            origin = a_ + y * ln * s_
+            hit = bvh.ray_cast(Vector(kit.g2b(*origin)), Vector(kit.g2b(*dirn)))
+            row.append((a, sv, origin, dirn, hit[3] if hit[0] is not None else 0.007))
+        grid.append(row)
+    raw = np.array([[c[4] for c in row] for row in grid])
+    pad = np.pad(raw, 1, mode="edge")
+    smooth = sum(pad[1 + di:1 + di + rows, 1 + dj:1 + dj + cols] for di in (-1, 0, 1) for dj in (-1, 0, 1)) / 9
+    surf = np.maximum(smooth, raw)
+    bm = bmesh.new()
+    uvl = bm.loops.layers.uv.new()
+    outer, inner, uv = [], [], []
+    for i in range(rows):
+        orow, irow, uvrow = [], [], []
+        for j in range(cols):
+            a, sv, origin, dirn, _ = grid[i][j]
+            rr = float(surf[i, j])
+            lift = 0.00045 * (1 - 0.5 * abs(a)) * (1 - 0.5 * (1 - sv) ** 4)  # thinnest at the sides and under the cuticle
+            orow.append(bm.verts.new(Vector(kit.g2b(*(origin + dirn * (rr + 0.0003 + lift))))))
+            irow.append(bm.verts.new(Vector(kit.g2b(*(origin + dirn * (rr - 0.0006))))))
+            uvrow.append((NAIL_U[0] + (NAIL_U[1] - NAIL_U[0]) * (a + 1) / 2, sv))
+        outer.append(orow)
+        inner.append(irow)
+        uv.append(uvrow)
+
+    def face(vs, uvs):
+        f = bm.faces.new(vs)
+        for lp, t in zip(f.loops, uvs):
+            lp[uvl].uv = t
+    for i in range(rows - 1):
+        for j in range(cols - 1):
+            q = ((i, j), (i, j + 1), (i + 1, j + 1), (i + 1, j))
+            face([outer[r][c] for r, c in q], [uv[r][c] for r, c in q])
+            face([inner[r][c] for r, c in reversed(q)], [uv[r][c] for r, c in reversed(q)])
+    ring = [(0, j) for j in range(cols)] + [(i, cols - 1) for i in range(1, rows)]
+    ring += [(rows - 1, j) for j in range(cols - 2, -1, -1)] + [(i, 0) for i in range(rows - 2, 0, -1)]
+    for k in range(len(ring)):
+        (r0, c0), (r1, c1) = ring[k], ring[(k + 1) % len(ring)]
+        face([outer[r0][c0], outer[r1][c1], inner[r1][c1], inner[r0][c0]], [uv[r0][c0], uv[r1][c1], uv[r1][c1], uv[r0][c0]])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    o = kit.mesh_obj(f"diver_nail_{side}{fname}", bm, M["skin"], coll, (0, 0, 0), (0, 0, 0))
+    for poly in o.data.polygons:
+        poly.use_smooth = True
+    o["uv"] = "keep"
+    o["bones"] = finger["bones"]  # weighted exactly like the finger under it, so the two bend as one
+    o["falloff"] = finger["falloff"]
+    return o
+
+
+def build_web(side, sx, palm_point, M, coll):
+    """The web of skin between the thumb and the index finger: a fleshy sheet
+    from the thumb's first bones to the side of the palm, its free edge curving
+    back towards the wrist. It stretches between the thumb's bones and the
+    index finger's, so the gap fills as the thumb swings out or tucks in."""
+    w, d, e, n = hand_frame(sx)
+    thumb = [np.array(p) for p in finger_chains(sx)["Thumb"][0]]
+    line_a = [thumb[0], thumb[1], thumb[1] + (thumb[2] - thumb[1]) * 0.4]  # along the thumb
+
+    def A(u):
+        x = u * 2
+        k = min(1, int(x))
+        return line_a[k] + (line_a[k + 1] - line_a[k]) * (x - k)
+
+    def B(u):  # along the index side of the palm, wrist to knuckle
+        return w + palm_point(0.8, 0.1 + 0.8 * u, 0.0, 1.0)
+
+    nu, nv = 12, 10
+    grid = []
+    for i in range(nu + 1):
+        row = []
+        for j in range(nv + 1):
+            v = j / nv
+            u = i / nu * (1 - 0.34 * math.sin(math.pi * v) ** 0.8)  # the free edge curves back
+            row.append((A(u) * (1 - v) + B(u) * v, i / nu))
+        grid.append(row)
+    bm = bmesh.new()
+    top, bot = [], []
+    for i in range(nu + 1):
+        trow, brow = [], []
+        for j in range(nv + 1):
+            p, uf = grid[i][j]
+            du = grid[min(i + 1, nu)][j][0] - grid[max(i - 1, 0)][j][0]
+            dv = grid[i][min(j + 1, nv)][0] - grid[i][max(j - 1, 0)][0]
+            nn = np.cross(du, dv)
+            nn /= np.linalg.norm(nn) + 1e-12
+            h = 0.0038 * (1 - 0.6 * uf ** 2)
+            trow.append(bm.verts.new(Vector(kit.g2b(*(p + nn * h)))))
+            brow.append(bm.verts.new(Vector(kit.g2b(*(p - nn * h)))))
+        top.append(trow)
+        bot.append(brow)
+    for i in range(nu):
+        for j in range(nv):
+            bm.faces.new((top[i][j], top[i][j + 1], top[i + 1][j + 1], top[i + 1][j]))
+            bm.faces.new((bot[i][j], bot[i + 1][j], bot[i + 1][j + 1], bot[i][j + 1]))
+    for j in range(nv):  # round the free edge shut
+        bm.faces.new((top[nu][j], top[nu][j + 1], bot[nu][j + 1], bot[nu][j]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    o = kit.mesh_obj(f"diver_web_{side}", bm, M["skin"], coll, (0, 0, 0), (0, 0, 0))
+    for poly in o.data.polygons:
+        poly.use_smooth = True
+    o["uv"] = "box"
+    # the palm side follows the index finger's metacarpal (it barely moves), never
+    # its first finger bone, which swings 90 degrees into a fist and would tear the web
+    o["bones"] = ",".join(f"{side}{b}" for b in ("Hand", "ThumbMetacarpal", "ThumbProximal", "IndexMetacarpal"))
+    o["falloff"] = 0.014
+    return o
 
 
 def superellipse(cx, cz_, w, bottom, top, n_pts=16, p_low=3.2, p_high=2.2):
@@ -570,6 +735,17 @@ def seg_dist(p, a, b):
     ab = b - a
     t = np.clip(((p - a) @ ab) / max(ab @ ab, 1e-9), 0, 1)
     return np.linalg.norm(p - (a + np.outer(t, ab)), axis=1)
+
+
+def skin_uv(o, skin):
+    """Point every skin face (not the nails) at the plain skin of the skin texture."""
+    if o.get("uv") == "keep" or not o.data.uv_layers:
+        return
+    uvs = o.data.uv_layers.active.data
+    for poly in o.data.polygons:
+        if o.data.materials[poly.material_index] == skin:
+            for li in poly.loop_indices:
+                uvs[li].uv = SKIN_UV
 
 
 def part_weights(o, allowed, falloff):
@@ -785,6 +961,7 @@ def main():
     trunk_bones = [n for n in BONES if n not in FINGER_BONES]
     for o in (body, head, *bands, *hands, *boots):
         kit.finalize(o)
+        skin_uv(o, M["skin"])
         if o.get("bones"):
             part_weights(o, o["bones"].split(","), o["falloff"])
         else:
