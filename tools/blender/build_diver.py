@@ -238,28 +238,65 @@ def arg(name, default=None):
 # The joint graph the skin modifier wraps: (name, position, (radius across, radius front-back)), and edges.
 SKIN_TEX = os.path.join(ROOT, "godot", "textures", "characters")
 SKIN_UV = (0.25, 0.5)  # every skin face samples the plain skin half of the skin texture
-NAIL_U = (0.55, 0.95)  # nails use the right half, base (v 0) to free edge (v 1)
+NAIL_U = (0.55, 0.95)  # nails: the top-right quarter, base to free edge up it
+HAIR_UV = (0.08, 0.08)  # hair and brows: a dark patch in the skin half's bottom-left corner
+IRIS_R = 0.25  # on the eye's own 0..1 square: an eyeball of 12 mm, an iris of 6; pupil 0.085
+IRIS = (104, 80, 52)  # a hazel brown
+
+
+def eye_uv(u, v):
+    """An eyeball's own 0..1 coordinates (front pole at the centre) on the skin texture: the bottom-right quarter."""
+    return 0.5 + 0.5 * u, 0.5 * v
+
+
+def nail_uv(u, v):
+    return u, 0.5 + 0.5 * v
+
+
+def _eye_pixel(u, v):
+    """Colour and roughness of the eye at its own coordinates: sclera, the
+    iris with its fibres and dark rim, the pupil."""
+    r, a = math.hypot(u - 0.5, v - 0.5), math.atan2(v - 0.5, u - 0.5)
+    if r < 0.085:
+        return (12, 10, 10), 40
+    if r < IRIS_R:
+        t = (r - 0.085) / (IRIS_R - 0.085)
+        shade = (0.85 + 0.15 * math.sin(a * 37) * math.sin(a * 11 + 1.3)) * (0.75 + 0.35 * t) * (0.55 if t > 0.9 else 1.0)
+        return tuple(int(min(255, ch * shade)) for ch in IRIS), 40
+    edge = min(1.0, max(0.0, (r - IRIS_R) / 0.3))
+    return tuple(int(ch * (1 - 0.12 * edge)) for ch in (226, 219, 204)), 40
 
 
 def make_skin_texture():
-    """The skin's texture: plain weathered skin on the left half; on the right
-    the nail, one even colour, paler and pinker than the skin and glossier, so
-    each nail reads clearly against the finger."""
+    """The skin's texture, shared by the face, hands and eyes: plain weathered
+    skin on the left half; the nail (paler, pinker, glossier) top right; the
+    eye bottom right."""
     os.makedirs(SKIN_TEX, exist_ok=True)
-    W, H = 64, 64
-    alb = Image.new("RGB", (W, H), (124, 97, 80))  # sRGB of the old linear tint (0.2, 0.12, 0.08)
-    orm = Image.new("RGB", (W, H), (255, 140, 0))  # roughness 0.55
-    for y in range(H):
-        for x in range(W // 2, W):
-            alb.putpixel((x, y), (196, 158, 148))  # the nail
-            orm.putpixel((x, y), (255, 70, 0))  # roughness 0.27: nails shine where skin doesn't
+    N = 128
+    alb = Image.new("RGB", (N, N), (124, 97, 80))  # sRGB of the old linear tint (0.2, 0.12, 0.08)
+    orm = Image.new("RGB", (N, N), (255, 140, 0))  # roughness 0.55
+    h = N // 2
+    for y in range(N - N // 4, N):  # the hair: short, dark brown, matte
+        for x in range(N // 4):
+            alb.putpixel((x, y), (46, 34, 26))
+            orm.putpixel((x, y), (255, 190, 0))
+    for y in range(N):
+        for x in range(h, N):
+            if y < h:  # the top-right quarter (Blender v runs up the image)
+                alb.putpixel((x, y), (196, 158, 148))  # the nail
+                orm.putpixel((x, y), (255, 70, 0))  # roughness 0.27: nails shine where skin doesn't
+            else:
+                c, r = _eye_pixel((x - h + 0.5) / h, 1 - (y - h + 0.5) / h)
+                alb.putpixel((x, y), c)
+                orm.putpixel((x, y), (255, r, 0))  # wet
     alb.save(os.path.join(SKIN_TEX, "diver_skin_albedo.png"))
     orm.save(os.path.join(SKIN_TEX, "diver_skin_orm.png"))
-    Image.new("RGB", (W, H), (128, 128, 255)).save(os.path.join(SKIN_TEX, "diver_skin_normal.png"))
+    Image.new("RGB", (N, N), (128, 128, 255)).save(os.path.join(SKIN_TEX, "diver_skin_normal.png"))
 
 
 def materials():
-    """Three materials (art bible 8.4): the base clothes, the skin, the boots."""
+    """Three materials (art bible 8.4): the base clothes, the skin (with the
+    nails and eyes), the boots."""
     make_skin_texture()
     return {
         "cloth": kit.pbr("mat_diver_base_cloth_01", "canvas", tint=(0.5, 0.48, 0.42)),  # a faded, dusty base layer
@@ -268,45 +305,330 @@ def materials():
     }
 
 
+NECK_TOP_OF_BODY = 1.55  # the body's neck stops here, inside the collar; the head carries the neck above
+HEAD_FROM = 1.535  # the head's mesh starts here, also inside the collar
+
+
+def neck_prims():
+    """The neck, shared by the body (up to the collar) and the head (from the
+    collar up, where it blends into the jaw and skull): a core leaning
+    forward from the shoulders, the Adam's apple, and the two muscles from
+    under the ears to the top of the breastbone."""
+    P = lambda *v: np.array(v, float)
+    prims = [
+        ("c", (P(0, 1.42, -0.024), P(0, 1.635, 0.004), 0.058, 0.05), 0.025),
+        ("e", (P(0, 1.553, 0.046), AXES, (0.008, 0.011, 0.007)), 0.01),
+    ]
+    for sx in (1, -1):
+        prims += [
+            ("c", (P(sx * 0.04, 1.6, -0.012), P(sx * 0.013, 1.458, 0.046), 0.011, 0.009), 0.022),  # front: ear to breastbone
+            ("c", (P(sx * 0.022, 1.64, -0.05), P(sx * 0.075, 1.47, -0.05), 0.012, 0.022), 0.03),  # back: the trapezius from the skull, flaring to the shoulders
+        ]
+    return prims
+
+
+# ---------- the head ----------
+# The head and neck are the MakeHuman base mesh's (CC0; see data/README.md),
+# shaped as a young adult man, scaled to the Diver and set on his neck. The
+# eyeballs, brows and hair are their own meshes on hooks (empties on the Head
+# bone), as are the places a character creator will swap ears, nose and lips.
+HEAD_DATA = os.path.join(HERE, "data", "mh_head_male.npz")
+HEAD_TRIS = 5000
+EYE_R = 0.0118
+MH_SCALE = 1.80 / 17.304  # MakeHuman's decimetres to metres, for a 1.80 m man
+MH_FLOOR = -8.187  # the soles of MakeHuman's feet
+_HEAD = {}
+
+
+def _mh_to_game(v):
+    return np.stack([v[:, 0] * MH_SCALE, (v[:, 1] - MH_FLOOR) * MH_SCALE, v[:, 2] * MH_SCALE], 1)
+
+
+def _neck_axis_z(y):
+    """Where the body's neck (neck_prims' core) is front to back at height y."""
+    return -0.024 + (y - 1.42) / 0.215 * 0.028
+
+
+def head_data():
+    """The head's vertices (game space), quads and eye centres, its neck slid
+    front to back to sit centred on the body's."""
+    if not _HEAD:
+        d = np.load(HEAD_DATA)
+        v, eyes = _mh_to_game(d["verts"].astype(float)), _mh_to_game(d["eyes"].astype(float))
+        band = v[(np.abs(v[:, 1] - 1.545) < 0.004) & (np.abs(v[:, 0]) < 0.08)]
+        dz = _neck_axis_z(1.545) - (band[:, 2].min() + band[:, 2].max()) / 2
+        v[:, 2] += dz
+        eyes[:, 2] += dz
+        _HEAD.update(verts=v, faces=d["faces"], eyes=eyes)
+    return _HEAD["verts"], _HEAD["faces"], _HEAD["eyes"]
+
+
+def face_hooks():
+    """{hook: (position, the way its part faces)}, found on the head: the eyes'
+    centres, the ears' widest points, the nose's tip, the upper lip, the
+    brows' arches and the crown."""
+    v, _, eyes = head_data()
+    ey = eyes[0][1]
+    mid = v[np.abs(v[:, 0]) < 0.006]
+    nose = mid[(mid[:, 1] > ey - 0.07) & (mid[:, 1] < ey - 0.01)]
+    tip = nose[np.argmax(nose[:, 2])]
+    lips = mid[(mid[:, 1] > tip[1] - 0.05) & (mid[:, 1] < tip[1] - 0.02)]
+    mouth = lips[np.argmax(lips[:, 2])]
+    side = v[np.abs(v[:, 1] - ey) < 0.025]
+    hooks = {"nose": (tip, (0, 0, 1)), "mouth": (mouth, (0, 0, 1)),
+             "ear_L": (side[np.argmax(side[:, 0])], (1, 0, 0)), "ear_R": (side[np.argmin(side[:, 0])], (-1, 0, 0)),
+             "hair": (v[np.argmax(v[:, 1])], (0, 1, 0))}
+    for name, e in (("L", eyes[0]), ("R", eyes[1])):
+        hooks[f"eye_{name}"] = (e, (0, 0, 1))
+        arch = v[(np.abs(v[:, 0] - e[0]) < 0.005) & (v[:, 1] > e[1] + 0.012) & (v[:, 1] < e[1] + 0.03)]
+        hooks[f"brow_{name}"] = (arch[np.argmax(arch[:, 2])], (0, 0, 1))
+    return {k: (tuple(float(c) for c in p), f) for k, (p, f) in hooks.items()}
+
+
+def _vertex_normals(v, faces):
+    n = np.zeros_like(v)
+    for f in faces:
+        fn = np.cross(v[f[1]] - v[f[0]], v[f[2]] - v[f[0]]) + np.cross(v[f[2]] - v[f[0]], v[f[3]] - v[f[0]])
+        n[f] += fn
+    return n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+
+
 def build_head(M, coll):
-    """The head: a skull shaped from a sphere, the jaw tapering to the chin,
-    a brow, eye sockets, a nose and ears pushed out of it. Neutral and
-    tired-looking at most (art bible 5.1: mostly seen from behind)."""
+    """The head and neck, from the collar up, weighted to the head, neck and
+    upper chest."""
+    v, faces, _ = head_data()
+    keep = [f for f in faces if v[f, 1].min() >= HEAD_FROM]
     bm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm, u_segments=40, v_segments=28, radius=1.0)
-    cx, cy, cz = 0.0, 1.675, 0.005
-    for v in bm.verts:
-        x, z_up, y_back = v.co.x, v.co.z, -v.co.y  # unit sphere: x across, z up, -y = game +z (the face)
-        gx, gy, gz = x * 0.08, z_up * 0.112, y_back * 0.1
-        if z_up < 0:  # the jaw narrows and comes forward to the chin
-            t = min(1.0, -z_up)
-            gx *= 1 - 0.32 * t ** 1.5
-            gz = gz * (1 - 0.15 * t) + 0.012 * t
-        if gz < 0:  # the back of the skull rounds out
-            gz *= 1.08
-        def bump(px, py, pz, r, amt):
-            d2 = ((gx - px) ** 2 + (gy - py) ** 2 + (gz - pz) ** 2) / (r * r)
-            return amt * math.exp(-d2)
-        front = max(0.0, y_back)
-        gz += bump(0, -0.015, 0.1, 0.018, 0.022) * front  # the nose
-        gz += bump(0, 0.03, 0.095, 0.035, 0.008) * front  # the brow
-        gz += bump(0, -0.085, 0.085, 0.025, 0.008) * front  # the chin
-        for sx in (-1, 1):
-            gz -= bump(sx * 0.032, 0.008, 0.09, 0.018, 0.012) * front  # eye sockets
-            gx += sx * bump(sx * 0.08, -0.005, -0.005, 0.022, 0.016)  # ears
-        v.co = Vector(kit.g2b(cx + gx, cy + gy, cz + gz))
+    bv = [bm.verts.new(Vector(kit.g2b(*p))) for p in v]
+    for f in keep:
+        try:
+            bm.faces.new([bv[i] for i in f])
+        except ValueError:
+            pass
+    bmesh.ops.delete(bm, geom=[x for x in bm.verts if not x.link_faces], context="VERTS")
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
     o = kit.mesh_obj("char_diver_head", bm, M["skin"], coll, (0, 0, 0), (0, 0, 0))
+    dec = o.modifiers.new("Decimate", "DECIMATE")
+    dec.ratio = min(1.0, HEAD_TRIS / max(1, 2 * len(keep)))
+    o["uv"] = "box"
+    kit.finalize(o)
+    skin_uv(o, M["skin"])
     for poly in o.data.polygons:
         poly.use_smooth = True
-    o["uv"] = "box"
+    vs = np.array([tuple(x.co) for x in o.data.vertices])
+    g = np.stack([vs[:, 0], vs[:, 2], -vs[:, 1]], 1)
+    bones = ["UpperChest", "Neck", "Head"]
+    w = bone_weights(g, bones, 0.035)
+    write_weights(o, {n: w[:, i] for i, n in enumerate(bones)}, relax=2)
+    o["weighted"] = True
     return o
 
 
-COLLAR = ((0.0, 1.502, -0.01), (0.0, 1.42, -0.02), (0.0, 1.58, 0.0))  # centre, and the axis it runs along
+def _head_bvh():
+    """The full-detail head as a BVH tree (game space, Blender axes), to lay
+    hair and brows onto."""
+    if "bvh" not in _HEAD:
+        v, faces, _ = head_data()
+        bm = bmesh.new()
+        bv = [bm.verts.new(Vector(kit.g2b(*p))) for p in v]
+        for f in faces:
+            try:
+                bm.faces.new([bv[i] for i in f])
+            except ValueError:
+                pass
+        _HEAD["bvh"] = BVHTree.FromBMesh(bm)
+    return _HEAD["bvh"]
+
+
+def _onto_head(centre, d, lift):
+    """Where a ray from inside the head (centre) along d meets its surface, lifted by `lift`."""
+    hit = _head_bvh().ray_cast(Vector(kit.g2b(*centre)), Vector(kit.g2b(*d)))
+    if hit[0] is None:
+        return None
+    return np.array((hit[0].x, hit[0].z, -hit[0].y)) + np.asarray(d) * lift
+
+
+def _layer(name, grid, thick, M, coll, uv, wrap=False):
+    """A smooth layer from a grid of surface points (rows x cols, None for
+    misses), given thickness inward, sampling `uv` of the skin texture; with
+    wrap, the last column joins the first (a cap all the way round)."""
+    bm = bmesh.new()
+    uvl = bm.loops.layers.uv.verify()
+    outer = [[bm.verts.new(Vector(kit.g2b(*p))) if p is not None else None for p in row] for row in grid]
+    cols = len(grid[0])
+    for i in range(len(grid) - 1):
+        for j in range(cols if wrap else cols - 1):
+            k = (j + 1) % cols
+            q = [outer[i][j], outer[i][k], outer[i + 1][k], outer[i + 1][j]]
+            if all(q):
+                f = bm.faces.new(q)
+                for lp in f.loops:
+                    lp[uvl].uv = uv
+    bmesh.ops.delete(bm, geom=[x for x in bm.verts if not x.link_faces], context="VERTS")
+    bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=-thick)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    o = kit.mesh_obj(name, bm, M["skin"], coll, (0, 0, 0), (0, 0, 0))
+    o["uv"] = "keep"
+    for poly in o.data.polygons:
+        poly.use_smooth = True
+    return o
+
+
+def build_face_parts(M, coll):
+    """{hook: placeholder}: the eyeballs, the brows and a close-cropped hair
+    cap, until the character creator's own parts replace them. Hair and brows
+    are fine grids laid onto the head, so their edges are smooth curves."""
+    v, faces, eyes = head_data()
+    ey, ez = eyes[0][1], eyes[0][2]
+    parts = {}
+    for name, sx, c in (("eye_L", 1, eyes[0]), ("eye_R", -1, eyes[1])):
+        ebm = bmesh.new()
+        bmesh.ops.create_uvsphere(ebm, u_segments=18, v_segments=12, radius=EYE_R)
+        uvl = ebm.loops.layers.uv.new()
+        for f in ebm.faces:  # looking down +z (Blender -y): the iris at the front pole
+            for lp in f.loops:
+                co = lp.vert.co
+                lp[uvl].uv = eye_uv(0.5 + 0.5 * co.x / EYE_R, 0.5 + 0.5 * co.z / EYE_R) if co.y < 0 else eye_uv(0.02, 0.02)
+        eo = kit.mesh_obj(f"part_{name}", ebm, M["skin"], coll, kit.g2b(*c), (0, 0, 0))
+        for poly in eo.data.polygons:
+            poly.use_smooth = True
+        eo["uv"] = "keep"
+        kit.finalize(eo)
+        parts[name] = eo
+    centre = np.array((0.0, ey + 0.01, ez - 0.085))  # inside the head, level with the ears
+    # the brows: an arch over each eye, thick at the inner end, tapering out
+    for name, e in (("brow_L", eyes[0]), ("brow_R", eyes[1])):
+        sx = 1 if e[0] > 0 else -1
+        rows = []
+        for i in range(5):
+            row = []
+            for j in range(13):
+                t = j / 12  # 0 at the inner end, 1 at the outer
+                x = e[0] + sx * (-0.017 + 0.042 * t)
+                half = 0.0042 * (1 - 0.55 * t)
+                y = e[1] + 0.017 + 0.007 * math.sin(math.pi * min(1.0, t * 1.25)) + (i / 4 * 2 - 1) * half
+                d = np.array((x, y, e[2] + 0.06)) - centre
+                row.append(_onto_head(centre, d / np.linalg.norm(d), 0.0015))
+            rows.append(row)
+        parts[name] = _layer(f"part_{name}", rows, 0.0012, M, coll, HAIR_UV)
+
+    # the hair: from the hairline (high over the forehead, arching over the ears, low at the nape) up to the crown
+    def hairline(a):  # height above the eyes at azimuth a (0 = front, +/-pi = back)
+        ca = abs(math.atan2(math.sin(a), math.cos(a)))
+        keys = ((0.0, 0.062), (0.75, 0.05), (1.4, 0.036), (1.7, 0.024), (2.0, -0.035), (2.35, -0.058), (math.pi, -0.062))
+        for (a0, h0), (a1, h1) in zip(keys, keys[1:]):
+            if ca <= a1:
+                f = (ca - a0) / (a1 - a0)
+                f = f * f * (3 - 2 * f)
+                return h0 + (h1 - h0) * f
+        return keys[-1][1]
+    cols, rows = 48, 10
+    grid = []
+    for i in range(rows + 1):
+        row = []
+        for j in range(cols):
+            a = -math.pi + 2 * math.pi * j / cols
+            t = i / rows
+            lo = math.atan2(ey + hairline(a) - centre[1], 0.09)  # elevation of the hairline, roughly
+            el = lo + (math.pi / 2 - 0.02 - lo) * t
+            d = np.array((math.sin(a) * math.cos(el), math.sin(el), math.cos(a) * math.cos(el)))
+            row.append(_onto_head(centre, d, 0.0035))
+        grid.append(row)
+    parts["hair"] = _layer("part_hair", grid, 0.0025, M, coll, HAIR_UV, wrap=True)
+    return parts
+
+
+def hook_parts(parts, rig, coll):
+    """An empty on the Head bone for each hook, its placeholder parented to it."""
+    hooks = []
+    for name, (pos, face) in face_hooks().items():
+        e = bpy.data.objects.new(f"hook_{name}", None)
+        e.empty_display_type = "SINGLE_ARROW"
+        e.empty_display_size = 0.02
+        coll.objects.link(e)
+        fwd = Vector(kit.g2b(*face))
+        m = fwd.to_track_quat("Y", "Z" if abs(face[1]) < 0.9 else "X").to_matrix().to_4x4()  # Blender +Y (glTF/Godot -Z, forward) the way the part faces
+        m.translation = Vector(kit.g2b(*pos))
+        e.parent = rig
+        e.parent_type = "BONE"
+        e.parent_bone = "Head"
+        e.matrix_world = m
+        part = parts.get(name)
+        if part is not None:
+            mw = part.matrix_world.copy()
+            part.parent = e
+            part.matrix_world = mw
+        hooks.append(e)
+    return hooks
+
+
+COLLAR = ((0.0, 1.543, -0.006), (0.0, 1.45, -0.016), (0.0, 1.62, 0.002))  # centre, and the axis it runs along
 CUFF = tuple(arm_pt(p, 1) for p in ((0.455, 1.045, 0.008), (0.39, 1.13, -0.005), (0.47, 1.02, 0.01)))  # the left cuff; the right mirrors it
 
 
-def trims(M, coll):
+def _surface_radius(field, y, angles, centre=(0.0, -0.012), r_max=0.12):
+    """How far the surface `field` describes lies from the neck's axis at
+    height y, in each direction (angles about the axis, 0 = front)."""
+    out = []
+    for a in angles:
+        d = np.array((math.sin(a), 0.0, math.cos(a)))
+        o = np.array((centre[0], y, centre[1]))
+        lo, hi = 0.0, r_max
+        for _ in range(30):  # bisect on the field's sign: inside below lo, outside above hi
+            mid = (lo + hi) / 2
+            if field((o + d * mid)[None])[0] < 0:
+                lo = mid
+            else:
+                hi = mid
+        out.append(lo)
+    return np.array(out)
+
+
+def fitted_collar(M, coll, head):
+    """The ribbed collar, shaped round the neck where it sits (wider at the
+    back where the trapezius flares): rings measured from the body's surface
+    below and the head's above, a few millimetres proud of the skin."""
+    regions = body_regions()
+    body = lambda p: body_field(p, regions)
+    bpy.context.view_layer.update()
+    bvh = BVHTree.FromObject(head, bpy.context.evaluated_depsgraph_get())
+
+    def head_radius(y):
+        out = []
+        for a in angles:  # from the neck's axis out to the head mesh's neck
+            hit = bvh.ray_cast(Vector(kit.g2b(0.0, y, c[2])), Vector(kit.g2b(math.sin(a), 0.0, math.cos(a))))
+            out.append(hit[3] if hit[0] is not None else 0.0)
+        return np.array(out)
+    angles = np.linspace(0, 2 * math.pi, 96, endpoint=False)
+    c, half = COLLAR[0], 0.014
+    r = np.maximum(_surface_radius(body, c[1] - half, angles, (0.0, c[2])), head_radius(c[1] + half))
+    r = np.maximum(r, np.roll(r, 1) * 0.5 + np.roll(r, -1) * 0.5)  # smooth out any notch
+    bm = bmesh.new()
+    rings = []
+    for y, grow in ((c[1] - half, 0.005), (c[1] - half * 0.3, 0.008), (c[1] + half * 0.3, 0.008), (c[1] + half, 0.004)):
+        for depth in (grow, -0.002):  # outside face, inside face
+            rings.append([bm.verts.new(Vector(kit.g2b(math.sin(a) * (ri + depth), y, c[2] + math.cos(a) * (ri + depth))))
+                          for a, ri in zip(angles, r)])
+    outer, inner = rings[0::2], rings[1::2]
+    n = len(angles)
+    for ring_a, ring_b in zip(outer, outer[1:]):
+        for k in range(n):
+            bm.faces.new((ring_a[k], ring_a[(k + 1) % n], ring_b[(k + 1) % n], ring_b[k]))
+    for ring_a, ring_b in zip(inner, inner[1:]):
+        for k in range(n):
+            bm.faces.new((ring_b[k], ring_b[(k + 1) % n], ring_a[(k + 1) % n], ring_a[k]))
+    for o_ring, i_ring in ((outer[0], inner[0]), (inner[-1], outer[-1])):  # close the bottom and top edges
+        for k in range(n):
+            bm.faces.new((i_ring[k], i_ring[(k + 1) % n], o_ring[(k + 1) % n], o_ring[k]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    o = kit.mesh_obj("diver_collar", bm, M["cloth"], coll, (0, 0, 0), (0, 0, 0))
+    o["uv"] = "box"
+    for poly in o.data.polygons:
+        poly.use_smooth = True
+    return o
+
+
+def trims(M, coll, head):
     """A ribbed collar, cuffs and boot tops: clean edges where the shirt meets
     the skin and the trousers meet the boots."""
     out = []
@@ -320,7 +642,7 @@ def trims(M, coll):
         for poly in o.data.polygons:
             poly.use_smooth = True
         out.append(o)
-    band("diver_collar", M["cloth"], COLLAR[0], 0.069, 0.026, COLLAR[1], COLLAR[2])
+    out.append(fitted_collar(M, coll, head))
     for sx in (-1, 1):
         mirror = lambda p: (sx * p[0], p[1], p[2])
         band(f"diver_cuff{sx}", M["cloth"], mirror(CUFF[0]), 0.035, 0.026, mirror(CUFF[1]), mirror(CUFF[2]))
@@ -653,7 +975,7 @@ def build_nail(finger, bones, falloff, side, fname, M, coll):
             lift = 0.00045 * (1 - 0.5 * abs(a)) * (1 - 0.5 * (1 - sv) ** 4)  # thinnest at the sides and under the cuticle
             orow.append(bm.verts.new(Vector(kit.g2b(*(origin + dirn * (rr + 0.0003 + lift))))))
             irow.append(bm.verts.new(Vector(kit.g2b(*(origin + dirn * (rr - 0.0006))))))
-            uvrow.append((NAIL_U[0] + (NAIL_U[1] - NAIL_U[0]) * (a + 1) / 2, sv))
+            uvrow.append(nail_uv(NAIL_U[0] + (NAIL_U[1] - NAIL_U[0]) * (a + 1) / 2, sv))
         outer.append(orow)
         inner.append(irow)
         uv.append(uvrow)
@@ -810,7 +1132,7 @@ def build_boots(M, coll):
 # by marching cubes, reduced to BODY_TRIS and weighted region by region.
 
 BODY_STEP = 0.0045  # metres per voxel
-BODY_TRIS = 12000
+BODY_TRIS = 11000
 
 
 def _sd_round_cone(p, a, b, ra, rb):
@@ -842,6 +1164,42 @@ AXES = np.eye(3)  # world-aligned: (x across, y up, z front)
 RIBS = (np.array((0.0, 1.31, 0.0)), AXES, (0.138, 0.14, 0.1))  # the upper ribcage, widest at the armpits: pecs and lats lie over it
 
 
+# The body's build, measured against the MakeHuman base mesh (an average young
+# man at 1.80 m, the source of the head): the torso's width and depth and the
+# limbs' girth, as factors on the shapes below.
+BUILD = {"torso_width": 1.12, "torso_depth": 1.06, "limbs": 1.12}
+
+
+def _build(prims, width, depth, limb=False):
+    """Scales shapes about the body's centre line (the torso: x by width, z by
+    depth) or about their own axes (a limb: its girth, not its length)."""
+    out = []
+    for kind, args, k in prims:
+        if limb:
+            if kind == "e":
+                c, f, r = args
+                args = (c, f, (r[0], r[1] * width, r[2] * depth))
+            elif kind == "c":
+                a, b, ra, rb = args
+                args = (a, b, ra * width, rb * width)
+        else:
+            S = np.array((width, 1.0, depth))
+            if kind == "e":
+                c, f, r = args
+                rs = np.abs(f) @ S  # each of the shape's axes, scaled by how much it lies across or front to back
+                args = (c * S, f, tuple(np.asarray(r) * rs))
+            elif kind == "c":
+                a, b, ra, rb = args
+                g = (width + depth) / 2
+                args = (a * S, b * S, ra * g, rb * g)
+            elif kind == "s":
+                (bc, bf, br), thick, (oc, of, orr) = args
+                args = ((bc * S, bf, tuple(np.asarray(br) * (np.abs(bf) @ S))), thick,
+                        (oc * S, of, tuple(np.asarray(orr) * (np.abs(of) @ S))))
+        out.append((kind, args, k))
+    return out
+
+
 def body_regions():
     """{region: (bones, [primitive, ...][, weighting segments])}; a primitive is (kind, args, k):
     kind "e" an ellipsoid (centre, frame, radii along the frame's axes),
@@ -856,20 +1214,20 @@ def body_regions():
         ("e", (P(0, 1.06, 0.0), AXES, (0.133, 0.12, 0.076)), 0.06),  # the waist: one long curve from the ribs out over the hips
         ("e", RIBS, 0.03),  # upper ribcage
         ("e", (P(0, 1.17, 0.0), AXES, (0.128, 0.11, 0.088)), 0.04),  # the lower ribs, tapering to the waist
-        ("e", (P(0, 1.405, -0.014), AXES, (0.15, 0.058, 0.085)), 0.035),  # shoulder girdle: collarbones to shoulder blades
+        ("e", (P(0, 1.418, -0.014), AXES, (0.15, 0.064, 0.085)), 0.035),  # shoulder girdle: collarbones to shoulder blades
         ("s", (RIBS, 0.006, (P(0, 1.31, -0.1), AXES, (0.085, 0.15, 0.05))), 0.0),  # middle and lower trapezius: the diamond between the blades
         ("e", (P(0, 1.1, 0.05), AXES, (0.06, 0.14, 0.03)), 0.02),  # the abdominal wall, flat and firm
-        ("c", (P(0, 1.41, -0.016), P(0, 1.635, 0.0), 0.06, 0.053), 0.025),  # neck
         ("e", (P(0, 0.87, 0.026), AXES, (0.055, 0.045, 0.045)), 0.025),  # groin
     ]
     for sx in (1, -1):
         torso += [
             ("s", (RIBS, 0.012, (P(sx * 0.075, 1.37, 0.1), AXES, (0.095, 0.07, 0.09))), 0.0),  # pectoral: a plate over the ribs
             ("s", (RIBS, 0.009, (P(sx * 0.11, 1.27, -0.07), AXES, (0.08, 0.15, 0.09))), 0.0),  # latissimus over the ribs
-            ("c", (P(sx * 0.048, 1.478, -0.033), P(sx * 0.17, 1.428, -0.03), 0.026, 0.016), 0.045),  # upper trapezius, sloping from the neck down to the shoulder's point
+            ("c", (P(sx * 0.045, 1.5, -0.03), P(sx * 0.17, 1.44, -0.03), 0.03, 0.017), 0.045),  # upper trapezius, climbing the neck, sloping down to the shoulder's point
             ("c", (P(sx * 0.115, 1.415, -0.07), P(sx * 0.19, 1.405, -0.045), 0.026, 0.03), 0.04),  # the back of the shoulder: blade into rear deltoid
             ("e", (P(sx * 0.03, 1.13, -0.066), AXES, (0.032, 0.19, 0.021)), 0.025),  # the long muscles beside the spine, mid-back to pelvis
-            ("s", (RIBS, 0.01, (P(sx * 0.072, 1.36, -0.1), AXES, (0.05, 0.072, 0.05))), 0.0),  # the shoulder blade, a plate on the upper back
+            ("s", (RIBS, 0.012, (P(sx * 0.075, 1.355, -0.1), AXES, (0.05, 0.075, 0.05))), 0.0),  # the shoulder blade, a plate on the upper back
+            ("c", (P(sx * 0.04, 1.41, -0.098), P(sx * 0.052, 1.3, -0.1), 0.0045, 0.0045), 0.016),  # its inner edge
             ("c", (P(sx * 0.035, 1.395, -0.098), P(sx * 0.145, 1.44, -0.07), 0.006, 0.005), 0.016),  # its spine, the ridge out to the shoulder
             ("c", (P(sx * 0.1, 1.31, -0.075), P(sx * 0.165, 1.385, -0.045), 0.014, 0.017), 0.035),  # teres major: the back of the armpit, into the arm
             ("e", (P(sx * 0.066, 0.895, -0.05), AXES, (0.07, 0.08, 0.05)), 0.02),  # gluteus maximus
@@ -878,6 +1236,7 @@ def body_regions():
             ("e", (P(sx * 0.03, 0.985, -0.083), AXES, (0.009, 0.009, 0.006)), -0.006),  # a dimple of the lower back
         ]
     torso.append(("c", (P(0, 1.43, -0.104), P(0, 0.99, -0.088), 0.005, 0.004), -0.022))  # the furrow down the spine
+    torso = _build(torso, BUILD["torso_width"], BUILD["torso_depth"]) + neck_prims()  # the neck matches the head's; not rebuilt
     regions = {"torso": (["Hips", "Spine", "Chest", "UpperChest", "Neck", "Head", "LeftShoulder", "RightShoulder",
                           "LeftUpperLeg", "RightUpperLeg"], torso)}
     for side, sx in (("Left", 1), ("Right", -1)):
@@ -901,6 +1260,7 @@ def body_regions():
         # collarbone by its inner part only, and the upper arm from above its joint
         segs = {f"{side}Shoulder": (P(sx * 0.03, 1.43, -0.01), P(sx * 0.1, 1.44, -0.014)),
                 f"{side}UpperArm": (S + np.array((-sx * 0.04, 0.03, 0.0)), E)}
+        arm = _build(arm, BUILD["limbs"], BUILD["limbs"], limb=True)
         regions[f"arm_{side}"] = ([f"{side}Shoulder", f"{side}UpperArm", f"{side}LowerArm", f"{side}Hand", "UpperChest"], arm, segs)
         H, K, A = (np.array(BONES[f"{side}UpperLeg"][0], float), np.array(BONES[f"{side}LowerLeg"][0], float),
                    np.array(BONES[f"{side}LowerLeg"][1], float))
@@ -926,6 +1286,7 @@ def body_regions():
             ("e", (K + v * Ls * 0.3 + f2 * 0.02 + o2 * 0.012, sh, (0.12, 0.021, 0.019)), 0.01),  # the shin muscle
             ("e", (P(sx * 0.11, 0.2, -0.006), AXES, (0.047, 0.06, 0.05)), 0.02),  # trousers bunched into the boot
         ]
+        leg = _build(leg[:-1], BUILD["limbs"], BUILD["limbs"], limb=True) + leg[-1:]  # (the boot-top bunching stays as it is)
         regions[f"leg_{side}"] = (["Hips", f"{side}UpperLeg", f"{side}LowerLeg", f"{side}Foot"], leg)
     return regions
 
@@ -940,6 +1301,10 @@ def _region_field(p, prims):
             di = _sd_ellipsoid(p, *args)
         elif kind == "c":
             di = _sd_round_cone(p, *args)
+        elif kind == "l":  # an eyelid: a thin shell round the eyeball, open where the eye shows
+            c, r, t, opening = args
+            di = np.maximum(np.abs(np.linalg.norm(p - c, axis=1) - r) - t, -_sd_ellipsoid(p, *opening))
+            di = np.maximum(di, c[2] - 0.004 - p[:, 2])  # only over the front of the eyeball
         else:
             base, thick, outline = args  # thickest inside the outline, fading out over its last 3 cm
             fade = np.clip(-_sd_ellipsoid(p, *outline) / 0.03, 0.0, 1.0)
@@ -956,6 +1321,7 @@ def _region_field(p, prims):
 def body_field(p, regions, parts=False):
     """The body's distance field at game-space points (and each region's)."""
     fields = {r: _region_field(p, reg[1]).astype(np.float32) for r, reg in regions.items()}
+    fields["torso"] = np.maximum(fields["torso"], p[:, 1] - NECK_TOP_OF_BODY)  # the neck ends under the collar
     t = fields["torso"]
     out = None
     for r, d in fields.items():
@@ -1310,7 +1676,8 @@ def main():
     bpy.context.scene.collection.children.link(coll)
     body = build_body(M, coll)
     head = build_head(M, coll)
-    bands = trims(M, coll)
+    face_parts = build_face_parts(M, coll)
+    bands = trims(M, coll, head)
     hands = build_hands(M, coll)
     boots = build_boots(M, coll)
     trunk_bones = [n for n in BONES if n not in FINGER_BONES]
@@ -1325,16 +1692,21 @@ def main():
         else:
             part_weights(o, [n for n in trunk_bones if "Toes" not in n], 0.035)
     bpy.ops.object.select_all(action="DESELECT")
-    for o in (head, *bands, *hands, *boots):
+    for o in (*bands, *hands, *boots):
         o.select_set(True)
     body.select_set(True)
     bpy.context.view_layer.objects.active = body
     bpy.ops.object.join()
     rig = build_armature(coll)
     bind(body, rig)
+    bind(head, rig)  # the head stays its own mesh: the face shell
+    hooks = hook_parts(face_parts, rig, coll)  # the eyes, ears, nose and lips ride on the Head bone
     acts = build_actions(rig)
-    tris = sum(len(p.vertices) - 2 for p in body.data.polygons)
-    print(f"diver: vertices {len(body.data.vertices)}  triangles {tris}  materials {len(body.data.materials)}  bones {len(BONES)}  actions {[a.name for a in acts]}")
+    meshes = (body, head, *face_parts.values())
+    tris = sum(len(p.vertices) - 2 for o in meshes for p in o.data.polygons)
+    mats = {m.name for o in meshes for m in o.data.materials}
+    print(f"diver: vertices {sum(len(o.data.vertices) for o in meshes)}  triangles {tris}  materials {len(mats)}  "
+          f"bones {len(BONES)}  hooks {len(hooks)}  actions {[a.name for a in acts]}")
     if "--render" in sys.argv:
         hw = hand_frame(1)[0]  # the left wrist, for the hand close-ups
         views = (((2.4, 1.4, 3.4), (0, 0.95, 0)), ((-2.6, 1.5, -3.0), (0, 0.95, 0)), ((0.6, 1.65, 1.1), (0, 1.55, 0)),
@@ -1356,13 +1728,15 @@ def main():
     if "--export" in sys.argv:
         os.makedirs(CMODELS, exist_ok=True)
         bpy.ops.object.select_all(action="DESELECT")
-        body.select_set(True)
+        for o in (body, head, *face_parts.values(), *hooks):
+            o.select_set(True)
         rig.select_set(True)
         bpy.context.view_layer.objects.active = rig
         bpy.ops.export_scene.gltf(
             filepath=os.path.join(CMODELS, "char_diver_base.glb"), export_format="GLB", use_selection=True,
             export_yup=True, export_apply=False, export_skins=True, export_animations=True,
             export_animation_mode="NLA_TRACKS", export_tangents=True, export_materials="EXPORT", export_image_format="AUTO",
+            export_morph=True, export_morph_normal=True,
         )
 
 
