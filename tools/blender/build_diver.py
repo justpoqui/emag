@@ -59,11 +59,38 @@ def arm_vec(v, sx):
     return (x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a), z)
 
 
+# Arm segment lengths, as fractions of the Diver's 1.80 m (Drillis & Contini's
+# human proportions: upper arm 0.186, forearm 0.146, hand 0.108): the
+# landmarks below were drawn shorter, and are stretched to these.
+UPPER_ARM, FOREARM = 0.186 * 1.80, 0.146 * 1.80
+_ARM0 = ((0.17, 1.45, -0.02), (0.33, 1.22, -0.02), (0.47, 1.02, 0.01))  # shoulder, elbow, wrist as drawn (left)
+
+
+def _arm_length(p, sx):
+    """A landmark drawn on the short arm, moved onto the arm at its human
+    lengths: along the upper arm or forearm it stretches with its segment;
+    past the wrist (the hand, the cuff's far edge) it moves with the wrist."""
+    S, E, W = (np.array((sx * a[0], a[1], a[2])) for a in _ARM0)
+    p = np.array(p, float)
+    u_up, u_fore = (E - S) / np.linalg.norm(E - S), (W - E) / np.linalg.norm(W - E)
+    E2 = S + u_up * UPPER_ARM
+    W2 = E2 + u_fore * FOREARM
+    t = (p - E) @ u_fore
+    if t <= 0:  # the upper arm
+        along = (p - S) @ u_up
+        return S + (p - S) + u_up * along * (UPPER_ARM / np.linalg.norm(E - S) - 1)
+    if t <= np.linalg.norm(W - E):  # the forearm
+        return E2 + (p - E) + u_fore * t * (FOREARM / np.linalg.norm(W - E) - 1)
+    return p + (W2 - W)  # the hand, carried by the wrist
+
+
 def arm_pt(p, sx):
-    """An arm landmark given for the 35-degree A-pose, turned down by ARM_DROP."""
+    """An arm landmark given for the 35-degree A-pose: set to human arm
+    lengths, then turned down by ARM_DROP."""
+    p = _arm_length(p, sx)
     j = (sx * SHOULDER_JOINT[0], SHOULDER_JOINT[1], SHOULDER_JOINT[2])
     x, y, z = arm_vec((p[0] - j[0], p[1] - j[1], p[2] - j[2]), sx)
-    return (j[0] + x, j[1] + y, j[2] + z)
+    return (float(j[0] + x), float(j[1] + y), float(j[2] + z))
 
 
 BONES = {
@@ -110,21 +137,26 @@ FINGER_FAN = 1.4  # how far the fingers fan apart: enough that neighbours never 
 FINGER_REST_CURL = (14.0, 22.0, 16.0)  # degrees each joint bends towards the palm at rest: a relaxed hand
 
 
+HAND_LENGTH = 1.1  # the hand as drawn, to a human 0.108 of the height (wrist to fingertip)
+HAND_WIDTH = 1.04
+
+
 def finger_chains(sx):
     """Joint positions (game space) of each finger and the thumb, curled a little."""
     w, d, e, n = hand_frame(sx)
     chains = {}
     for name, off, segs, r in FINGERS:
-        knuckle = w + d * (0.088 - 0.004 * abs(off) / 0.028) + e * off
+        off, r = off * HAND_WIDTH, r * HAND_WIDTH
+        knuckle = w + d * (0.088 - 0.004 * abs(off) / 0.028) * HAND_LENGTH + e * off
         pts, dirn = [knuckle], d + e * (off * FINGER_FAN)
         dirn /= np.linalg.norm(dirn)
         for k, ln in enumerate(segs):
             a = math.radians(FINGER_REST_CURL[k])
             dirn = dirn * math.cos(a) + n * math.sin(a)
             dirn /= np.linalg.norm(dirn)
-            pts.append(pts[-1] + dirn * ln)
+            pts.append(pts[-1] + dirn * ln * HAND_LENGTH)
         chains[name] = (pts, r)
-    base = w + d * 0.022 + e * 0.026 + n * 0.01
+    base = w + d * 0.022 * HAND_LENGTH + e * 0.026 * HAND_WIDTH + n * 0.01
     dirn = d * 0.88 + e * 0.2 + n * 0.3  # hangs along the index finger, a little forward, not splayed
     dirn /= np.linalg.norm(dirn)
     pts = [base]
@@ -132,8 +164,8 @@ def finger_chains(sx):
         a = math.radians((6, 14, 12)[k])
         dirn = dirn * math.cos(a) + n * math.sin(a)
         dirn /= np.linalg.norm(dirn)
-        pts.append(pts[-1] + dirn * ln)
-    chains["Thumb"] = (pts, 0.0115)
+        pts.append(pts[-1] + dirn * ln * HAND_LENGTH)
+    chains["Thumb"] = (pts, 0.0115 * HAND_WIDTH)
     return chains
 
 
@@ -184,7 +216,7 @@ def solve_thumb(sx):
     # bone stands beside the index finger's first bone (no gap for the web to
     # show), and its tip folds across onto the middle finger. Hand-frame
     # (d, e, n) from the wrist, checked against fist_finger's joint positions.
-    mcp, ip, tip = (w + d * a + e * b + n * c for a, b, c in THUMB_FIST_AT)
+    mcp, ip, tip = (w + d * a * HAND_LENGTH + e * b * HAND_WIDTH + n * c * HAND_LENGTH for a, b, c in THUMB_FIST_AT)
     goal = [rest[0], mcp, ip, tip]
     parent = np.eye(3)
     tos, angles = [], []
@@ -215,7 +247,7 @@ for side, sx in (("Left", 1), ("Right", -1)):
         if fname != "Thumb":  # the palm's long bones: wrist to knuckle, so the palm can cup
             off = dict((f[0], f[1]) for f in FINGERS)[fname]
             bn = f"{side}{fname}Metacarpal"
-            BONES[bn] = (tuple(w_ + palm_d * 0.022 + palm_e * off * 0.5), tuple(pts[0]), parent)
+            BONES[bn] = (tuple(w_ + palm_d * 0.022 * HAND_LENGTH + palm_e * off * HAND_WIDTH * 0.5), tuple(pts[0]), parent)
             FINGER_BONES.append(bn)
             FINGER_CURL_TO[bn] = tuple(palm_n)
             parent = bn
@@ -686,14 +718,14 @@ def build_hands(M, coll):
             (-1 little finger, +1 index), t along the hand (0 wrist, 1 knuckles),
             z out of the palm (+1 palm side, -1 back); cap narrows the knuckle dome."""
             tc = min(1.0, max(0.0, t))
-            width = 0.06 + 0.022 * min(1.0, tc / 0.6) ** 0.8  # a narrow wrist, widening to the knuckles
+            width = (0.06 + 0.022 * min(1.0, tc / 0.6) ** 0.8) * HAND_WIDTH  # a narrow wrist, widening to the knuckles
             thick = 0.031 + 0.006 * math.sin(math.pi * min(1.0, tc / 0.6)) - 0.008 * max(0.0, tc - 0.4) / 0.6
             lx, lz = u * width / 2 * cap, z * thick / 2 * cap
             back, front = max(0.0, -z), max(0.0, z)
             if t > 0:
                 lz -= 0.003 * (1 - u * u) * back * cap  # the back arches over the bones
                 for _, off, _, _ in FINGERS:  # each metacarpal: a knuckle dome and a tendon fanning to the wrist
-                    uk = off / 0.041
+                    uk = off / 0.041  # (offset and half-width both scale by HAND_WIDTH)
                     lz -= 0.0042 * math.exp(-((u - uk) / 0.14) ** 2 - ((t - 0.97) / 0.08) ** 2) * back
                     ut = uk * (0.4 + 0.6 * tc)
                     lz -= 0.0007 * math.exp(-((u - ut) / 0.12) ** 2) * math.sin(math.pi * min(1.0, max(0.0, (t - 0.15) / 0.75))) * back
@@ -703,7 +735,7 @@ def build_hands(M, coll):
                        - 0.0007 * math.exp(-((t - 0.72 + 0.12 * u) / 0.035) ** 2)) * front
             lz -= 0.0022 * math.exp(-((u + 0.8) / 0.25) ** 2 - ((t - 0.02) / 0.08) ** 2) * back  # the ulna's knob, little-finger side
             lz += -0.001 * math.exp(-(t / 0.03) ** 2) * front  # the wrist crease
-            return e * lx + d * (t * 0.094 - 0.008) + n * lz
+            return e * lx + d * (t * 0.094 - 0.008) * HAND_LENGTH + n * lz
 
         bm = bmesh.new()
         ring_n = 36
@@ -755,7 +787,7 @@ def build_hands(M, coll):
                 chain += [a + (b - a) * 0.5, b]
                 radii += [r * waist[k] * (1 - 0.07 * k), r * knuckle[k + 1] * (1 - 0.07 * k)]
             if fname == "Thumb":  # its first bone is wrapped in the thumb's muscle, a mound joining it to the palm
-                radii = [0.017, 0.0175, 0.0155, 0.0128, 0.0112, 0.0118, 0.0106, 0.0094]
+                radii = [x * HAND_WIDTH for x in (0.017, 0.0175, 0.0155, 0.0128, 0.0112, 0.0118, 0.0106, 0.0094)]
             o = skin_chain(f"diver_{side}{fname}", M["skin"], coll, chain, radii, levels=3)  # fine: only the fused hand keeps its shape
             names = ("Metacarpal", "Proximal", "Distal") if fname == "Thumb" else ("Proximal", "Intermediate", "Distal")
             root = f"{side}Hand" if fname == "Thumb" else f"{side}{fname}Metacarpal"
@@ -1603,14 +1635,14 @@ def build_actions(rig):
     rig.animation_data.action = act
     for f in range(0, 61, 15):
         ph = f / 60 * 2 * math.pi
-        pose = arms_down({}, swing=2 * math.sin(ph), bend=30)
+        pose = arms_down({}, swing=2 * math.sin(ph), bend=58)  # elbows bent so the hands ride clear of the thighs
         for side in ("Left", "Right"):
             legs(pose, side, 62, 100)
         pose["Spine"] = (LEAN * (24 + 1.5 * math.sin(ph)), 0, 0)
         pose["Neck"] = (-LEAN * 18, 0, 0)
         key_pose(rig, f, pose, (0, -0.318, 0.0))  # as far as the bent legs (thigh 62, knee 100) bring the hips down
     acts.append(act)
-    acts.append(cycle(rig, "crouch_walk", 36, stride=20, knee=22, arm=10, bob=0.015, lean=18, crouch=48, elbow=40, ankle=8, yaw=5, drop=3, sway=0.03, twist=7))
+    acts.append(cycle(rig, "crouch_walk", 36, stride=20, knee=22, arm=10, bob=0.015, lean=18, crouch=48, elbow=62, ankle=8, yaw=5, drop=3, sway=0.03, twist=7))
     # jump: crouch, launch, tuck, reach for the ground
     act = bpy.data.actions.new("jump")
     rig.animation_data.action = act
